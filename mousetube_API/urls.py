@@ -1,4 +1,11 @@
 """
+Created by Nicolas Torquet at 15/11/2023
+torquetn@igbmc.fr
+Copyright: CNRS - INSERM - UNISTRA - ICS - IGBMC
+CNRS - Mouse Clinical Institute
+PHENOMIN, CNRS UMR7104, INSERM U964, Université de Strasbourg
+Code under GPL v3.0 licence
+
 URL configuration for mousetube_API project.
 
 The `urlpatterns` list routes URLs to views. For more information please see:
@@ -15,8 +22,16 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 from django.contrib import admin
-from django.urls import path
+from django.urls import path, include
+from rest_framework.routers import DefaultRouter
+from .views import *
+
+router = DefaultRouter()
+router.register('species', SpeciesViewSet, basename='species')
+router.register('software', SoftwareViewSet, basename='software')
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    path('api/', include(router.urls)),
 ]
+

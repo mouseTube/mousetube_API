@@ -1,0 +1,205 @@
+'''
+Created by Nicolas Torquet at 27/10/2023
+torquetn@igbmc.fr
+Copyright: CNRS - INSERM - UNISTRA - ICS - IGBMC
+CNRS - Mouse Clinical Institute
+PHENOMIN, CNRS UMR7104, INSERM U964, Université de Strasbourg
+Code under GPL v3.0 licence
+'''
+from django.db import models
+from django.conf import settings
+from django.contrib.auth.models import User
+from django.core.exceptions import ValidationError
+
+def get_display(key, list):
+    d = dict(list)
+    if key in d:
+        return d[key]
+    return None
+
+
+
+class UserProfile(models.Model):
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, related_name='user_profile', on_delete=models.SET_NULL)
+    description = models.TextField(blank=True,null=True)
+    phone = models.CharField(max_length=255, blank=True, null=True)
+    institution = models.CharField(max_length=255, blank=True, null=True)
+    address = models.CharField(max_length=255,blank=True, null=True)
+    country = models.CharField(max_length=255, blank=True, null=True)
+    date_joined = models.DateTimeField(auto_now_add=True)
+    updated_on = models.DateTimeField(auto_now=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    modified_at = models.DateTimeField(auto_now=True)
+    created_by = models.ForeignKey(User, null=True, related_name='userprofile_created_by',
+                                   on_delete=models.SET_NULL)  # who entered the info in the database
+
+    def __str__(self):
+        return self.user.username
+
+
+class Contact(models.Model):
+    firstname = models.CharField(max_length=255, blank=True, null=True)
+    lastname = models.CharField(max_length=255, blank=True, null=True)
+    email = models.EmailField(max_length=255, blank=True, null=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    modified_at = models.DateTimeField(auto_now=True)
+    created_by = models.ForeignKey(User, null=True, related_name='contact_created_by',
+                                   on_delete=models.SET_NULL)  # who entered the info in the database
+
+    def __str__(self):
+        return self.firstname+" "+self.lastname
+
+    class Meta:
+        verbose_name = 'Contact'
+        verbose_name_plural = 'Contacts'
+
+
+class Reference(models.Model):
+    name_reference = models.CharField(max_length=255)
+    url = models.URLField(max_length=255, blank=True, null=True)
+    doi = models.CharField(max_length=255, blank=True, null=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    modified_at = models.DateTimeField(auto_now=True)
+    created_by = models.ForeignKey(User, null=True, related_name='reference_created_by',
+                                   on_delete=models.SET_NULL)  # who entered the info in the database
+
+    def __str__(self):
+        return self.name_reference
+
+    class Meta:
+        verbose_name = 'Reference'
+        verbose_name_plural = 'References'
+
+
+class Species(models.Model):
+    name_species = models.CharField(max_length=255, unique=True)
+
+    def __str__(self):
+        return self.name_species
+
+    class Meta:
+        verbose_name = 'Species'
+        verbose_name_plural = 'Species'
+
+
+class Strain(models.Model):
+    name_strain = models.CharField(max_length=255, unique=True)
+    background = models.CharField(max_length=255)
+    biblio_strain = models.TextField(default='')
+    created_at = models.DateTimeField(auto_now_add=True)
+    modified_at = models.DateTimeField(auto_now=True)
+    created_by = models.ForeignKey(User, null=True, related_name='strain_created_by', on_delete=models.SET_NULL) #who entered the info in the database
+    references = models.ManyToManyField(Reference, blank=True)
+    def __str__(self):
+        return self.name_strain
+
+    class Meta:
+        verbose_name = 'Strain'
+        verbose_name_plural = 'Strains'
+
+
+
+class Protocol(models.Model):
+    name_protocol = models.CharField(max_length=255, unique=True)
+    protocol_description = models.TextField(default='')
+    created_at = models.DateTimeField(auto_now_add=True)
+    modified_at = models.DateTimeField(auto_now=True)
+    created_by = models.ForeignKey(User, null=True, related_name='protocol_created_by', on_delete=models.SET_NULL) #who entered the info in the database
+    references = models.ManyToManyField(Reference, blank=True)
+
+    def __str__(self):
+        return self.name_protocol
+
+    class Meta:
+        verbose_name = 'Protocol'
+        verbose_name_plural = 'Protocols'
+
+
+class Experiment(models.Model):
+    name_experiment = models.CharField(max_length=255, unique=True)
+    subjects_age = models.CharField(max_length=255, default='', blank=True)
+    date_experiment = models.DateTimeField(default='')
+    temperature = models.CharField(max_length=255, default='', blank=True)
+    light_cycle = models.CharField(max_length=255, default='', blank=True)
+    microphone = models.CharField(max_length=255, default='', blank=True)
+    acquisition_hardware = models.CharField(max_length=255, default='', blank=True)
+    acquisition_software = models.CharField(max_length=255, default='', blank=True)
+    laboratory = models.CharField(max_length=255, default='', blank=True)
+    notes_experiment = models.TextField(default='', blank=True)
+    protocol = models.ForeignKey(Protocol, null=True, on_delete=models.SET_NULL, blank=True)
+    references = models.ManyToManyField(Reference, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    modified_at = models.DateTimeField(auto_now=True)
+    created_by = models.ForeignKey(User, null=True, related_name='experiment_created_by', on_delete=models.SET_NULL) #who entered the info in the database
+
+    def __str__(self):
+        return self.name_experiment
+
+    class Meta:
+        verbose_name = 'Experiment'
+        verbose_name_plural = 'Experiments'
+
+
+
+class Animal(models.Model):
+    animal_name = models.CharField(max_length=255)
+    species = models.ForeignKey(Species, null=True, on_delete=models.SET_NULL, blank=True)
+    strain = models.ForeignKey(Strain, null=True, on_delete=models.SET_NULL, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    modified_at = models.DateTimeField(auto_now=True)
+    created_by = models.ForeignKey(User, null=True, related_name='animal_created_by', on_delete=models.SET_NULL) #who entered the info in the database
+
+    def __str__(self):
+        return self.animal_name
+
+    class Meta:
+        verbose_name = 'Animal'
+        verbose_name_plural = 'Animals'
+
+
+class File(models.Model):
+    file_name = models.CharField(max_length=255)
+    # temporary = models.CharField(max_length=10)
+    experiment = models.ForeignKey(Experiment, null=True, on_delete=models.SET_NULL, blank=True)
+    file_number = models.IntegerField(null=True, blank=True)
+    link_file = models.CharField(max_length=255)
+    doi_file = models.CharField(max_length=255, null=True, blank=True)
+    # sqlite = models.FileField(upload_to='uploaded/')
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    modified_at = models.DateTimeField(auto_now=True)
+    created_by = models.ForeignKey(User, null=True, related_name='file_created_by', on_delete=models.SET_NULL) #who entered the info in the database
+
+    def __str__(self):
+        return self.file_name
+
+    class Meta:
+        verbose_name = 'File'
+        verbose_name_plural = 'Files'
+
+
+
+
+class Software(models.Model):
+    software_name = models.CharField(max_length=255)
+    maded_by = models.TextField(default='', blank=True)
+    description = models.TextField(default='', blank=True)
+    technical_requirements = models.TextField(default='', blank=True)
+    references_and_tutorials = models.ManyToManyField(Reference, blank=True)
+    contacts = models.ManyToManyField(Contact, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    modified_at = models.DateTimeField(auto_now=True)
+    created_by = models.ForeignKey(User, null=True, related_name='software_created_by', on_delete=models.SET_NULL) #who entered the info in the database
+
+    def __str__(self):
+        return self.software_name
+
+    class Meta:
+        verbose_name = 'Software'
+        verbose_name_plural = 'Softwares'

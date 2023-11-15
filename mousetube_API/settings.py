@@ -26,8 +26,17 @@ SECRET_KEY = 'django-insecure-43&yhl=ej#q1ve7pjm@uz@=yc&e*2_6gkps7_!_ah9$x2nguai
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['*']
 
+CORS_ALLOWED_ORIGIN = [
+    'http://localhost:8080',
+    'http://127.0.0.1:8080',
+    'http://127.0.0.1:8000',
+    'http://192.168.0.39:8080',
+]
+
+
+CORS_ORIGIN_ALLOW_ALL = True
 
 # Application definition
 
@@ -42,6 +51,7 @@ INSTALLED_APPS = [
     'rest_framework',
     'rest_framework.authtoken',
     'corsheaders',
+    'djoser',
     'django_celery_results',
     'celery_progress',
 ]
@@ -84,8 +94,15 @@ WSGI_APPLICATION = 'mousetube_API.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        # 'ENGINE': 'django.db.backends.sqlite3',
+        # 'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': 'django.db.backends.mysql',
+        'NAME': 'mousetube',
+        'USER': 'mousetube_webapp',
+        'PASSWORD': 'giVe@cce552d@t@Base',
+        'HOST': '127.0.0.1',
+        'PORT': '3307',
+        'OPTIONS': {'ssl': True},
     }
 }
 
