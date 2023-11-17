@@ -11,6 +11,7 @@ from rest_framework.views import APIView
 from rest_framework import viewsets
 from .models import *
 from .serializers import *
+from django.http import JsonResponse
 
 
 class SoftwareViewSet(viewsets.ModelViewSet):
@@ -25,3 +26,9 @@ class SpeciesViewSet(viewsets.ModelViewSet):
 class ProtocolTypeViewSet(viewsets.ModelViewSet):
     queryset = ProtocolType.objects.all()
     serializer_class = ProtocolTypeSerializer
+
+
+class FileViewSet(viewsets.ModelViewSet):
+    queryset = File.objects.all()
+    serializer_class = FileSerializer
+

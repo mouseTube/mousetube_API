@@ -29,6 +29,7 @@ from .views import *
 router = DefaultRouter()
 router.register('species', SpeciesViewSet, basename='species')
 router.register('protocol_type', ProtocolTypeViewSet, basename='protocol_type')
+router.register('file', FileViewSet, basename='file')
 router.register('software', SoftwareViewSet, basename='software')
 
 urlpatterns = [

@@ -34,6 +34,11 @@ class ProtocolTypeSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 
+class FileSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = File
+        fields = '__all__'
+
 class SoftwareSerializer(serializers.ModelSerializer):
     references_and_tutorials = ReferenceSerializer(read_only=True, many=True)
     contacts = ContactSerializer(read_only=True, many=True)
