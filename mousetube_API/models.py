@@ -101,9 +101,20 @@ class Strain(models.Model):
         verbose_name_plural = 'Strains'
 
 
+class ProtocolType(models.Model):
+    name_protocol_type = models.CharField(max_length=255, unique=True)
+
+    def __str__(self):
+        return self.name_protocol_type
+
+    class Meta:
+        verbose_name = 'Protocol type'
+        verbose_name_plural = 'Protocol types'
+
 
 class Protocol(models.Model):
-    name_protocol = models.CharField(max_length=255, unique=True)
+    name_protocol = models.CharField(max_length=255)
+    protocol_type = models.ForeignKey(ProtocolType, null=True, related_name='protocol_protocol_type', on_delete=models.SET_NULL)
     protocol_description = models.TextField(default='')
     created_at = models.DateTimeField(auto_now_add=True)
     modified_at = models.DateTimeField(auto_now=True)

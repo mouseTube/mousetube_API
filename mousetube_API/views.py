@@ -22,3 +22,6 @@ class SpeciesViewSet(viewsets.ModelViewSet):
     serializer_class = SpeciesSerializer
 
 
+class ProtocolTypeViewSet(viewsets.ModelViewSet):
+    queryset = ProtocolType.objects.all()
+    serializer_class = ProtocolTypeSerializer
