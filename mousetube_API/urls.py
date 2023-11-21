@@ -27,13 +27,19 @@ from rest_framework.routers import DefaultRouter
 from .views import *
 
 router = DefaultRouter()
+router.register('reference', ReferenceViewSet, basename='reference')
+router.register('contact', ContactViewSet, basename='contact')
 router.register('species', SpeciesViewSet, basename='species')
+router.register('strain', StrainViewSet, basename='strain')
 router.register('protocol_type', ProtocolTypeViewSet, basename='protocol_type')
+router.register('protocol', ProtocolViewSet, basename='protocol')
+router.register('experiment', ExperimentViewSet, basename='experiment')
 router.register('file', FileViewSet, basename='file')
-router.register('software', SoftwareViewSet, basename='software')
+# router.register('software', SoftwareViewSet, basename='software')
 
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/', include(router.urls)),
+    path('api/software/', SoftwareAPIView.as_view()),
 ]
 

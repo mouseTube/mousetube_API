@@ -58,6 +58,7 @@ class Contact(models.Model):
 
 class Reference(models.Model):
     name_reference = models.CharField(max_length=255)
+    description = models.TextField(blank=True, null=True)
     url = models.URLField(max_length=255, blank=True, null=True)
     doi = models.CharField(max_length=255, blank=True, null=True)
 
@@ -76,6 +77,10 @@ class Reference(models.Model):
 
 class Species(models.Model):
     name_species = models.CharField(max_length=255, unique=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    modified_at = models.DateTimeField(auto_now=True)
+    created_by = models.ForeignKey(User, null=True, related_name='species_created_by',
+                                   on_delete=models.SET_NULL)  # who entered the info in the database
 
     def __str__(self):
         return self.name_species
@@ -88,7 +93,7 @@ class Species(models.Model):
 class Strain(models.Model):
     name_strain = models.CharField(max_length=255, unique=True)
     background = models.CharField(max_length=255)
-    biblio_strain = models.TextField(default='')
+    biblio_strain = models.TextField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     modified_at = models.DateTimeField(auto_now=True)
     created_by = models.ForeignKey(User, null=True, related_name='strain_created_by', on_delete=models.SET_NULL) #who entered the info in the database
@@ -201,8 +206,8 @@ class Software(models.Model):
     maded_by = models.TextField(default='', blank=True)
     description = models.TextField(default='', blank=True)
     technical_requirements = models.TextField(default='', blank=True)
-    references_and_tutorials = models.ManyToManyField(Reference, blank=True)
-    contacts = models.ManyToManyField(Contact, blank=True)
+    references_and_tutorials = models.ManyToManyField(Reference, related_name='software', blank=True)
+    contacts = models.ManyToManyField(Contact, related_name='software_to_contact', blank=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
     modified_at = models.DateTimeField(auto_now=True)

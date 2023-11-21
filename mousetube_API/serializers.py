@@ -16,6 +16,12 @@ class ReferenceSerializer(serializers.ModelSerializer):
         model = Reference
         fields = '__all__'
 
+
+class UserProfileSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Contact
+        fields = '__all__'
+
 class ContactSerializer(serializers.ModelSerializer):
     class Meta:
         model = Contact
@@ -28,21 +34,44 @@ class SpeciesSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 
+class StrainSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Strain
+        fields = '__all__'
+
+
 class ProtocolTypeSerializer(serializers.ModelSerializer):
     class Meta:
         model = ProtocolType
         fields = '__all__'
 
 
+class ProtocolSerializer(serializers.ModelSerializer):
+    protocolType = ProtocolTypeSerializer(many=True, required=False)
+    class Meta:
+        model = Protocol
+        fields = '__all__'
+
+
+class ExperimentSerializer(serializers.ModelSerializer):
+    protocol = ProtocolSerializer(many=True, required=False)
+    class Meta:
+        model = Experiment
+        fields = '__all__'
+
+
 class FileSerializer(serializers.ModelSerializer):
+    experiment = ExperimentSerializer(many=True, required=False)
     class Meta:
         model = File
         fields = '__all__'
 
 class SoftwareSerializer(serializers.ModelSerializer):
-    references_and_tutorials = ReferenceSerializer(read_only=True, many=True)
-    contacts = ContactSerializer(read_only=True, many=True)
+    references_and_tutorials = ReferenceSerializer(many=True, required=False)
+    contacts = ContactSerializer(many=True, required=False)
 
     class Meta:
         model = Software
-        fields = '__all__'
+        fields = "__all__"
+        # extra_kwargs = {'references_and_tutorials': {'required': False},
+        #                 'contacts': {'required': False}}
