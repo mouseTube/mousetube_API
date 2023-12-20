@@ -15,6 +15,9 @@ from .serializers import *
 from django.http import JsonResponse
 
 
+class RepositoryViewSet(viewsets.ModelViewSet):
+    queryset = Repository.objects.all()
+    serializer_class = RepositorySerializer
 
 
 class ReferenceViewSet(viewsets.ModelViewSet):
@@ -26,6 +29,7 @@ class ContactViewSet(viewsets.ModelViewSet):
     queryset = Contact.objects.all()
     serializer_class = ContactSerializer
 
+
 class SoftwareViewSet(viewsets.ModelViewSet):
     queryset = Software.objects.all()
     serializer_class = SoftwareSerializer
@@ -33,9 +37,13 @@ class SoftwareViewSet(viewsets.ModelViewSet):
 
 class SoftwareAPIView(APIView):
     def get(self, *arg, **kwargs):
-        softwares = Software.objects.all()
-        serializer = SoftwareSerializer(softwares, many=True)
+        software = Software.objects.all()
+        serializer = SoftwareSerializer(software, many=True)
         return Response(serializer.data)
+
+class SoftwareViewSet(viewsets.ModelViewSet):
+    queryset = Software.objects.all()
+    serializer_class = SoftwareSerializer
 
 class SpeciesViewSet(viewsets.ModelViewSet):
     queryset = Species.objects.all()

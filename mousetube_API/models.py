@@ -10,6 +10,7 @@ from django.db import models
 from django.conf import settings
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
+from django_countries.fields import CountryField
 
 def get_display(key, list):
     d = dict(list)
@@ -25,7 +26,7 @@ class UserProfile(models.Model):
     phone = models.CharField(max_length=255, blank=True, null=True)
     institution = models.CharField(max_length=255, blank=True, null=True)
     address = models.CharField(max_length=255,blank=True, null=True)
-    country = models.CharField(max_length=255, blank=True, null=True)
+    country = CountryField( blank=True, null=True)
     date_joined = models.DateTimeField(auto_now_add=True)
     updated_on = models.DateTimeField(auto_now=True)
 
@@ -56,6 +57,26 @@ class Contact(models.Model):
         verbose_name_plural = 'Contacts'
 
 
+class Repository(models.Model):
+    name_repository = models.CharField(max_length=255)
+    description = models.TextField(blank=True,null=True)
+    logo = models.ImageField(blank=True,null=True)
+    area = CountryField(blank=True,null=True)
+    url = models.URLField(blank=True,null=True)
+    url_api = models.URLField(blank=True,null=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    modified_at = models.DateTimeField(auto_now=True)
+    created_by = models.ForeignKey(User, null=True, related_name='repository_created_by',
+                                   on_delete=models.SET_NULL)  # who entered the info in the database
+
+    def __str__(self):
+        return self.name_repository
+
+    class Meta:
+        verbose_name = 'Repository'
+        verbose_name_plural = 'Repositories'
+
 class Reference(models.Model):
     name_reference = models.CharField(max_length=255)
     description = models.TextField(blank=True, null=True)
@@ -75,6 +96,58 @@ class Reference(models.Model):
         verbose_name_plural = 'References'
 
 
+class Software(models.Model):
+    CHOICES_SOFTWARE = (
+        ("acquisition", "acquisition"),
+        ("analysis", "analysis")
+    )
+
+    software_name = models.CharField(max_length=255)
+    software_type = models.CharField(max_length=255, null=True, default="acquisition", choices=CHOICES_SOFTWARE)
+    maded_by = models.TextField(default='', blank=True)
+    description = models.TextField(default='', blank=True)
+    technical_requirements = models.TextField(default='', blank=True)
+    references_and_tutorials = models.ManyToManyField(Reference, related_name='software', blank=True)
+    contacts = models.ManyToManyField(Contact, related_name='software_to_contact', blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    modified_at = models.DateTimeField(auto_now=True)
+    created_by = models.ForeignKey(User, null=True, related_name='software_created_by', on_delete=models.SET_NULL) #who entered the info in the database
+
+    def __str__(self):
+        return self.software_name
+
+    class Meta:
+        verbose_name = 'Software'
+        verbose_name_plural = 'Software'
+
+
+class Hardware(models.Model):
+    CHOICES_HARDWARE = (
+        ("soundcard", "soundcard"),
+        ("microphone", "microphone"),
+        ("speaker", "speaker"),
+        ("amplifier", "amplifier")
+    )
+
+    hardware_name = models.CharField(max_length=255)
+    hardware_type = models.CharField(max_length=255, null=True, default="", choices=CHOICES_HARDWARE)
+    maded_by = models.TextField(default='', blank=True)
+    description = models.TextField(default='', blank=True)
+    reference = models.ManyToManyField(Reference, related_name='harware_reference', blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    modified_at = models.DateTimeField(auto_now=True)
+    created_by = models.ForeignKey(User, null=True, related_name='hardware_created_by', on_delete=models.SET_NULL) #who entered the info in the database
+    def __str__(self):
+        return self.hardware_name
+
+    class Meta:
+        verbose_name = 'Hardware'
+        verbose_name_plural = 'Hardware'
+
+
+
 class Species(models.Model):
     name_species = models.CharField(max_length=255, unique=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -92,12 +165,13 @@ class Species(models.Model):
 
 class Strain(models.Model):
     name_strain = models.CharField(max_length=255, unique=True)
+    species = models.ForeignKey(Species, null=True, related_name='strain_species', on_delete=models.SET_NULL)
     background = models.CharField(max_length=255)
     biblio_strain = models.TextField(blank=True, null=True)
+    references = models.ManyToManyField(Reference, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     modified_at = models.DateTimeField(auto_now=True)
     created_by = models.ForeignKey(User, null=True, related_name='strain_created_by', on_delete=models.SET_NULL) #who entered the info in the database
-    references = models.ManyToManyField(Reference, blank=True)
     def __str__(self):
         return self.name_strain
 
@@ -108,6 +182,7 @@ class Strain(models.Model):
 
 class ProtocolType(models.Model):
     name_protocol_type = models.CharField(max_length=255, unique=True)
+    protocol_type_description = models.TextField(default='')
 
     def __str__(self):
         return self.name_protocol_type
@@ -121,6 +196,7 @@ class Protocol(models.Model):
     name_protocol = models.CharField(max_length=255)
     protocol_type = models.ForeignKey(ProtocolType, null=True, related_name='protocol_protocol_type', on_delete=models.SET_NULL)
     protocol_description = models.TextField(default='')
+    protocol_metadata = models.JSONField(null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     modified_at = models.DateTimeField(auto_now=True)
     created_by = models.ForeignKey(User, null=True, related_name='protocol_created_by', on_delete=models.SET_NULL) #who entered the info in the database
@@ -140,12 +216,13 @@ class Experiment(models.Model):
     date_experiment = models.DateTimeField(default='')
     temperature = models.CharField(max_length=255, default='', blank=True)
     light_cycle = models.CharField(max_length=255, default='', blank=True)
-    microphone = models.CharField(max_length=255, default='', blank=True)
-    acquisition_hardware = models.CharField(max_length=255, default='', blank=True)
-    acquisition_software = models.CharField(max_length=255, default='', blank=True)
+    microphones = models.ManyToManyField(Hardware, related_name='experiment_microphones', blank=True)
+    acquisition_hardware = models.ManyToManyField(Hardware, related_name='acquisition_hardware', blank=True)
+    acquisition_software = models.ManyToManyField(Software, related_name='acquisition_software', blank=True)
     laboratory = models.CharField(max_length=255, default='', blank=True)
     notes_experiment = models.TextField(default='', blank=True)
     protocol = models.ForeignKey(Protocol, null=True, on_delete=models.SET_NULL, blank=True)
+    experiment_metadata = models.JSONField(null=True)
     references = models.ManyToManyField(Reference, blank=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
@@ -162,9 +239,12 @@ class Experiment(models.Model):
 
 
 class Animal(models.Model):
-    animal_name = models.CharField(max_length=255)
-    species = models.ForeignKey(Species, null=True, on_delete=models.SET_NULL, blank=True)
+    CHOICES_SEX = (
+        ("male", "male"),
+        ("female", "female"),
+    )
     strain = models.ForeignKey(Strain, null=True, on_delete=models.SET_NULL, blank=True)
+    sex = models.CharField(max_length=255, null=True, default="", choices=CHOICES_SEX)
 
     created_at = models.DateTimeField(auto_now_add=True)
     modified_at = models.DateTimeField(auto_now=True)
@@ -179,43 +259,44 @@ class Animal(models.Model):
 
 
 class File(models.Model):
-    file_name = models.CharField(max_length=255)
-    # temporary = models.CharField(max_length=10)
+    name_file = models.CharField(max_length=255)
     experiment = models.ForeignKey(Experiment, null=True, on_delete=models.SET_NULL, blank=True)
     file_number = models.IntegerField(null=True, blank=True)
+    animal_list = models.ManyToManyField(Animal, related_name='file_animal', blank=True)
     link_file = models.CharField(max_length=255)
     doi_file = models.CharField(max_length=255, null=True, blank=True)
-    # sqlite = models.FileField(upload_to='uploaded/')
+    file = models.FileField(upload_to='uploaded/', null=True, blank=True)
+    number_of_channels = models.PositiveSmallIntegerField(default=1, null=True, blank=True) # mono or stereo, or more channels
+    file_weight = models.CharField(max_length=255, null=True, blank=True)
+    spectrogram = models.ImageField(upload_to='spectrogram/', null=True, blank=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
     modified_at = models.DateTimeField(auto_now=True)
     created_by = models.ForeignKey(User, null=True, related_name='file_created_by', on_delete=models.SET_NULL) #who entered the info in the database
 
     def __str__(self):
-        return self.file_name
+        return self.name_file
 
     class Meta:
         verbose_name = 'File'
         verbose_name_plural = 'Files'
 
 
-
-
-class Software(models.Model):
-    software_name = models.CharField(max_length=255)
-    maded_by = models.TextField(default='', blank=True)
-    description = models.TextField(default='', blank=True)
-    technical_requirements = models.TextField(default='', blank=True)
-    references_and_tutorials = models.ManyToManyField(Reference, related_name='software', blank=True)
-    contacts = models.ManyToManyField(Contact, related_name='software_to_contact', blank=True)
+class Dataset(models.Model):
+    name_dataset = models.CharField(max_length=255)
+    list_files = models.ManyToManyField(File, related_name='file_in_dataset', blank=True)
+    link_dataset = models.CharField(max_length=255)
+    doi_dataset = models.CharField(max_length=255, null=True, blank=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
     modified_at = models.DateTimeField(auto_now=True)
-    created_by = models.ForeignKey(User, null=True, related_name='software_created_by', on_delete=models.SET_NULL) #who entered the info in the database
+    created_by = models.ForeignKey(User, null=True, related_name='dataset_created_by', on_delete=models.SET_NULL) #who entered the info in the database
 
     def __str__(self):
-        return self.software_name
+        return self.name_dataset
 
     class Meta:
-        verbose_name = 'Software'
-        verbose_name_plural = 'Softwares'
+        verbose_name = 'Dataset'
+        verbose_name_plural = 'Datasets'
+
+

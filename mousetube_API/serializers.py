@@ -11,6 +11,13 @@ from rest_framework import serializers
 from rest_framework.serializers import Serializer, FileField
 from .models import *
 
+
+class RepositorySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Repository
+        fields = '__all__'
+
+
 class ReferenceSerializer(serializers.ModelSerializer):
     class Meta:
         model = Reference

@@ -27,6 +27,7 @@ from rest_framework.routers import DefaultRouter
 from .views import *
 
 router = DefaultRouter()
+router.register('repository', RepositoryViewSet, basename='repository')
 router.register('reference', ReferenceViewSet, basename='reference')
 router.register('contact', ContactViewSet, basename='contact')
 router.register('species', SpeciesViewSet, basename='species')

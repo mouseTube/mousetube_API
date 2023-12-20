@@ -12,6 +12,13 @@ https://docs.djangoproject.com/en/4.2/ref/settings/
 
 from pathlib import Path
 import os
+from django_countries import countries
+
+# Add two custom countries to django_countries
+COUNTRIES_OVERRIDE = {
+    'EU': {'names': ['European Union'], 'alpha3': 'EUN', 'numeric': 998},
+    'GO': {'names': ['Global'], 'alpha3': 'GLO', 'numeric': 999},
+}
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent

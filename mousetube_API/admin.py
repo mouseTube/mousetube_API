@@ -13,6 +13,7 @@ from .models import *
 
 admin.site.register(UserProfile)
 admin.site.register(Contact)
+admin.site.register(Repository)
 admin.site.register(Reference)
 admin.site.register(Species)
 admin.site.register(Strain)
