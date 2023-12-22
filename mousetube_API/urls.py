@@ -28,6 +28,7 @@ from rest_framework.routers import DefaultRouter
 from .views import *
 
 router = DefaultRouter()
+# router.register('country', CountryViewSet, basename='country')
 router.register('repository', RepositoryViewSet, basename='repository')
 router.register('reference', ReferenceViewSet, basename='reference')
 router.register('contact', ContactViewSet, basename='contact')
@@ -43,6 +44,7 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/', include(router.urls)),
     path('api/software/', SoftwareAPIView.as_view()),
+    path('api/country/',  CountryAPIView.as_view(), name='country')
 ]
 
 if settings.DEBUG:

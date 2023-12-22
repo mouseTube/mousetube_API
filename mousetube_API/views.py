@@ -6,13 +6,19 @@ CNRS - Mouse Clinical Institute
 PHENOMIN, CNRS UMR7104, INSERM U964, Université de Strasbourg
 Code under GPL v3.0 licence
 '''
-
+from django_countries.fields import Country
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import viewsets
 from .models import *
 from .serializers import *
 from django.http import JsonResponse
+from django_countries import countries
+
+class CountryAPIView(APIView):
+    def get(self, *arg, **kwargs):
+        country = countries
+        return Response(country)
 
 
 class RepositoryViewSet(viewsets.ModelViewSet):

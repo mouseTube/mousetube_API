@@ -6,11 +6,17 @@ CNRS - Mouse Clinical Institute
 PHENOMIN, CNRS UMR7104, INSERM U964, Université de Strasbourg
 Code under GPL v3.0 licence
 '''
-
+from django_countries.fields import Country
 from rest_framework import serializers
 from rest_framework.serializers import Serializer, FileField
 from .models import *
+from django_countries.serializer_fields import CountryField
 
+
+# class CountrySerializer(serializers.Serializer):
+#     country = CountryField()
+#     class Meta:
+#         fields = '__all__'
 
 class RepositorySerializer(serializers.ModelSerializer):
     class Meta:

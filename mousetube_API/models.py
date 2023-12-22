@@ -50,7 +50,10 @@ class Contact(models.Model):
                                    on_delete=models.SET_NULL)  # who entered the info in the database
 
     def __str__(self):
-        return self.firstname+" "+self.lastname
+        if self.firstname and self.lastname:
+            return self.firstname+" "+self.lastname
+        else:
+            return self.email
 
     class Meta:
         verbose_name = 'Contact'
@@ -104,7 +107,7 @@ class Software(models.Model):
 
     software_name = models.CharField(max_length=255)
     software_type = models.CharField(max_length=255, null=True, default="acquisition", choices=CHOICES_SOFTWARE)
-    maded_by = models.TextField(default='', blank=True)
+    made_by = models.TextField(default='', blank=True)
     description = models.TextField(default='', blank=True)
     technical_requirements = models.TextField(default='', blank=True)
     references_and_tutorials = models.ManyToManyField(Reference, related_name='software', blank=True)
@@ -132,7 +135,7 @@ class Hardware(models.Model):
 
     hardware_name = models.CharField(max_length=255)
     hardware_type = models.CharField(max_length=255, null=True, default="", choices=CHOICES_HARDWARE)
-    maded_by = models.TextField(default='', blank=True)
+    made_by = models.TextField(default='', blank=True)
     description = models.TextField(default='', blank=True)
     reference = models.ManyToManyField(Reference, related_name='harware_reference', blank=True)
 
