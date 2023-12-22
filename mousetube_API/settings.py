@@ -178,5 +178,5 @@ CELERY_RESULT_BACKEND = 'django-db'
 CACHE_BACKEND = 'memcached://127.0.0.1:11211/'
 
 # To upload
-MEDIA_URL = '/media/uploaded/'
-MEDIA_ROOT = os.path.join(BASE_DIR, 'media/uploaded/')
+MEDIA_URL = '/media/'
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media/')
