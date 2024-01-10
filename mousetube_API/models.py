@@ -199,7 +199,7 @@ class Protocol(models.Model):
     name_protocol = models.CharField(max_length=255)
     protocol_type = models.ForeignKey(ProtocolType, null=True, related_name='protocol_protocol_type', on_delete=models.SET_NULL)
     protocol_description = models.TextField(default='')
-    protocol_metadata = models.JSONField(null=True)
+    protocol_metadata = models.JSONField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     modified_at = models.DateTimeField(auto_now=True)
     created_by = models.ForeignKey(User, null=True, related_name='protocol_created_by', on_delete=models.SET_NULL) #who entered the info in the database
@@ -216,7 +216,7 @@ class Protocol(models.Model):
 class Experiment(models.Model):
     name_experiment = models.CharField(max_length=255, unique=True)
     subjects_age = models.CharField(max_length=255, default='', blank=True)
-    date_experiment = models.DateTimeField(default='')
+    date_experiment = models.DateField(default='', blank=True)
     temperature = models.CharField(max_length=255, default='', blank=True)
     light_cycle = models.CharField(max_length=255, default='', blank=True)
     microphones = models.ManyToManyField(Hardware, related_name='experiment_microphones', blank=True)
@@ -225,7 +225,7 @@ class Experiment(models.Model):
     laboratory = models.CharField(max_length=255, default='', blank=True)
     notes_experiment = models.TextField(default='', blank=True)
     protocol = models.ForeignKey(Protocol, null=True, on_delete=models.SET_NULL, blank=True)
-    experiment_metadata = models.JSONField(null=True)
+    experiment_metadata = models.JSONField(null=True, blank=True)
     references = models.ManyToManyField(Reference, blank=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
