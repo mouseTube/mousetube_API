@@ -26,7 +26,8 @@ class UserProfile(models.Model):
     phone = models.CharField(max_length=255, blank=True, null=True)
     institution = models.CharField(max_length=255, blank=True, null=True)
     address = models.CharField(max_length=255,blank=True, null=True)
-    country = CountryField( blank=True, null=True)
+    country = CountryField(blank=True, null=True)
+    orcid = models.CharField(max_length=255, blank=True, null=True)
     date_joined = models.DateTimeField(auto_now_add=True)
     updated_on = models.DateTimeField(auto_now=True)
 
@@ -272,6 +273,7 @@ class File(models.Model):
     number_of_channels = models.PositiveSmallIntegerField(default=1, null=True, blank=True) # mono or stereo, or more channels
     file_weight = models.CharField(max_length=255, null=True, blank=True)
     spectrogram = models.ImageField(upload_to='spectrogram/', null=True, blank=True)
+    repository = models.ManyToManyField(Repository, related_name='file_repository', blank=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
     modified_at = models.DateTimeField(auto_now=True)

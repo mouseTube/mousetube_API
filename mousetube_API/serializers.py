@@ -7,6 +7,7 @@ PHENOMIN, CNRS UMR7104, INSERM U964, Université de Strasbourg
 Code under GPL v3.0 licence
 '''
 from django_countries.fields import Country
+from djoser.serializers import UserSerializer
 from rest_framework import serializers
 from rest_framework.serializers import Serializer, FileField
 from .models import *
@@ -30,9 +31,15 @@ class ReferenceSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 
-class UserProfileSerializer(serializers.ModelSerializer):
+class UserSerializer(serializers.ModelSerializer):
     class Meta:
-        model = Contact
+        model = User
+        fields = '__all__'
+
+class UserProfileSerializer(serializers.ModelSerializer):
+    user = UserSerializer(read_only=True)
+    class Meta:
+        model = UserProfile
         fields = '__all__'
 
 class ContactSerializer(serializers.ModelSerializer):
@@ -60,21 +67,22 @@ class ProtocolTypeSerializer(serializers.ModelSerializer):
 
 
 class ProtocolSerializer(serializers.ModelSerializer):
-    protocolType = ProtocolTypeSerializer(many=True, required=False)
+    protocol_type = ProtocolTypeSerializer(required=False)
     class Meta:
         model = Protocol
         fields = '__all__'
 
 
 class ExperimentSerializer(serializers.ModelSerializer):
-    protocol = ProtocolSerializer(many=True, required=False)
+    protocol = ProtocolSerializer(required=False)
     class Meta:
         model = Experiment
         fields = '__all__'
 
 
 class FileSerializer(serializers.ModelSerializer):
-    experiment = ExperimentSerializer(many=True, required=False)
+    experiment = ExperimentSerializer(required=False)
+    created_by = UserProfileSerializer(required=False)
     class Meta:
         model = File
         fields = '__all__'
