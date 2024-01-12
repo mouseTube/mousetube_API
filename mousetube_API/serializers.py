@@ -48,6 +48,29 @@ class ContactSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 
+class HardwareSerializer(serializers.ModelSerializer):
+    references_and_tutorials = ReferenceSerializer(many=True, required=False)
+    contacts = ContactSerializer(many=True, required=False)
+
+    class Meta:
+        model = Hardware
+        fields = "__all__"
+        # extra_kwargs = {'references_and_tutorials': {'required': False},
+        #                 'contacts': {'required': False}}
+
+
+
+class SoftwareSerializer(serializers.ModelSerializer):
+    references_and_tutorials = ReferenceSerializer(many=True, required=False)
+    contacts = ContactSerializer(many=True, required=False)
+
+    class Meta:
+        model = Software
+        fields = "__all__"
+        # extra_kwargs = {'references_and_tutorials': {'required': False},
+        #                 'contacts': {'required': False}}
+
+
 class SpeciesSerializer(serializers.ModelSerializer):
     class Meta:
         model = Species
@@ -75,6 +98,10 @@ class ProtocolSerializer(serializers.ModelSerializer):
 
 class ExperimentSerializer(serializers.ModelSerializer):
     protocol = ProtocolSerializer(required=False)
+    microphones = HardwareSerializer(many=True, required=False)
+    acquisition_hardware = HardwareSerializer(many=True, required=False)
+    acquisition_software = SoftwareSerializer(many=True, required=False)
+    references = ReferenceSerializer(many=True, required=False)
     class Meta:
         model = Experiment
         fields = '__all__'
@@ -82,17 +109,9 @@ class ExperimentSerializer(serializers.ModelSerializer):
 
 class FileSerializer(serializers.ModelSerializer):
     experiment = ExperimentSerializer(required=False)
+    repository = RepositorySerializer(many=True, required=False)
     created_by = UserProfileSerializer(required=False)
     class Meta:
         model = File
         fields = '__all__'
 
-class SoftwareSerializer(serializers.ModelSerializer):
-    references_and_tutorials = ReferenceSerializer(many=True, required=False)
-    contacts = ContactSerializer(many=True, required=False)
-
-    class Meta:
-        model = Software
-        fields = "__all__"
-        # extra_kwargs = {'references_and_tutorials': {'required': False},
-        #                 'contacts': {'required': False}}
