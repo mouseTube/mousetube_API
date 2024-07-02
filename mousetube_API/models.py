@@ -103,7 +103,8 @@ class Reference(models.Model):
 class Software(models.Model):
     CHOICES_SOFTWARE = (
         ("acquisition", "acquisition"),
-        ("analysis", "analysis")
+        ("analysis", "analysis"),
+        ("acquisition and analysis", "acquisition and analysis")
     )
 
     software_name = models.CharField(max_length=255)

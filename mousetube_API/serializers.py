@@ -49,8 +49,7 @@ class ContactSerializer(serializers.ModelSerializer):
 
 
 class HardwareSerializer(serializers.ModelSerializer):
-    references_and_tutorials = ReferenceSerializer(many=True, required=False)
-    contacts = ContactSerializer(many=True, required=False)
+    reference = ReferenceSerializer(many=True, required=False)
 
     class Meta:
         model = Hardware

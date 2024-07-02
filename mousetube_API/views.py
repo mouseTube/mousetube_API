@@ -60,6 +60,14 @@ class SoftwareViewSet(viewsets.ModelViewSet):
     queryset = Software.objects.all()
     serializer_class = SoftwareSerializer
 
+class HardwareAPIView(APIView):
+    def get(self, *arg, **kwargs):
+        hardware = Hardware.objects.all()
+        serializer = HardwareSerializer(hardware, many=True)
+        return Response(serializer.data)
+
+
+
 class SpeciesViewSet(viewsets.ModelViewSet):
     queryset = Species.objects.all()
     serializer_class = SpeciesSerializer
