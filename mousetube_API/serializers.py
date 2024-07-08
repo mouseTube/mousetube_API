@@ -95,19 +95,8 @@ class ProtocolSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 
-class ExperimentSerializer(serializers.ModelSerializer):
-    protocol = ProtocolSerializer(required=False)
-    microphones = HardwareSerializer(many=True, required=False)
-    acquisition_hardware = HardwareSerializer(many=True, required=False)
-    acquisition_software = SoftwareSerializer(many=True, required=False)
-    references = ReferenceSerializer(many=True, required=False)
-    class Meta:
-        model = Experiment
-        fields = '__all__'
-
 
 class FileSerializer(serializers.ModelSerializer):
-    experiment = ExperimentSerializer(required=False)
     repository = RepositorySerializer(many=True, required=False)
     created_by = UserProfileSerializer(required=False)
     class Meta:

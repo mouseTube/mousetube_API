@@ -88,10 +88,6 @@ class ProtocolViewSet(viewsets.ModelViewSet):
     serializer_class = ProtocolSerializer
 
 
-class ExperimentViewSet(viewsets.ModelViewSet):
-    queryset = Experiment.objects.all()
-    serializer_class = ExperimentSerializer
-
 class FileViewSet(viewsets.ModelViewSet):
     queryset = File.objects.all()
     serializer_class = FileSerializer

@@ -215,59 +215,11 @@ class Protocol(models.Model):
         verbose_name_plural = 'Protocols'
 
 
-class Experiment(models.Model):
-    name_experiment = models.CharField(max_length=255, unique=True)
-    subjects_age = models.CharField(max_length=255, default='', blank=True)
-    date_experiment = models.DateField(default='', blank=True)
-    temperature = models.CharField(max_length=255, default='', blank=True)
-    light_cycle = models.CharField(max_length=255, default='', blank=True)
-    microphones = models.ManyToManyField(Hardware, related_name='experiment_microphones', blank=True)
-    acquisition_hardware = models.ManyToManyField(Hardware, related_name='acquisition_hardware', blank=True)
-    acquisition_software = models.ManyToManyField(Software, related_name='acquisition_software', blank=True)
-    laboratory = models.CharField(max_length=255, default='', blank=True)
-    notes_experiment = models.TextField(default='', blank=True)
-    protocol = models.ForeignKey(Protocol, null=True, on_delete=models.SET_NULL, blank=True)
-    experiment_metadata = models.JSONField(null=True, blank=True)
-    references = models.ManyToManyField(Reference, blank=True)
-
-    created_at = models.DateTimeField(auto_now_add=True)
-    modified_at = models.DateTimeField(auto_now=True)
-    created_by = models.ForeignKey(User, null=True, related_name='experiment_created_by', on_delete=models.SET_NULL) #who entered the info in the database
-
-    def __str__(self):
-        return self.name_experiment
-
-    class Meta:
-        verbose_name = 'Experiment'
-        verbose_name_plural = 'Experiments'
-
-
-
-class Animal(models.Model):
-    CHOICES_SEX = (
-        ("male", "male"),
-        ("female", "female"),
-    )
-    strain = models.ForeignKey(Strain, null=True, on_delete=models.SET_NULL, blank=True)
-    sex = models.CharField(max_length=255, null=True, default="", choices=CHOICES_SEX)
-
-    created_at = models.DateTimeField(auto_now_add=True)
-    modified_at = models.DateTimeField(auto_now=True)
-    created_by = models.ForeignKey(User, null=True, related_name='animal_created_by', on_delete=models.SET_NULL) #who entered the info in the database
-
-    def __str__(self):
-        return self.animal_name
-
-    class Meta:
-        verbose_name = 'Animal'
-        verbose_name_plural = 'Animals'
 
 
 class File(models.Model):
     name_file = models.CharField(max_length=255)
-    experiment = models.ForeignKey(Experiment, null=True, on_delete=models.SET_NULL, blank=True)
     file_number = models.IntegerField(null=True, blank=True)
-    animal_list = models.ManyToManyField(Animal, related_name='file_animal', blank=True)
     link_file = models.CharField(max_length=255)
     doi_file = models.CharField(max_length=255, null=True, blank=True)
     file = models.FileField(upload_to='uploaded/', null=True, blank=True)
@@ -275,6 +227,7 @@ class File(models.Model):
     file_weight = models.CharField(max_length=255, null=True, blank=True)
     spectrogram = models.ImageField(upload_to='spectrogram/', null=True, blank=True)
     repository = models.ManyToManyField(Repository, related_name='file_repository', blank=True)
+    metadata = models.JSONField(blank=True, null=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
     modified_at = models.DateTimeField(auto_now=True)

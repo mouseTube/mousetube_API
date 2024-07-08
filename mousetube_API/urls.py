@@ -38,7 +38,6 @@ router.register('species', SpeciesViewSet, basename='species')
 router.register('strain', StrainViewSet, basename='strain')
 router.register('protocol_type', ProtocolTypeViewSet, basename='protocol_type')
 router.register('protocol', ProtocolViewSet, basename='protocol')
-router.register('experiment', ExperimentViewSet, basename='experiment')
 router.register('file', FileViewSet, basename='file')
 # router.register('software', SoftwareViewSet, basename='software')
 
