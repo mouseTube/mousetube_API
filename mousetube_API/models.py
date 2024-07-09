@@ -24,10 +24,12 @@ class UserProfile(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, related_name='user_profile', on_delete=models.SET_NULL)
     description = models.TextField(blank=True,null=True)
     phone = models.CharField(max_length=255, blank=True, null=True)
+    unit = models.CharField(max_length=255, blank=True, null=True)
     institution = models.CharField(max_length=255, blank=True, null=True)
     address = models.CharField(max_length=255,blank=True, null=True)
     country = CountryField(blank=True, null=True)
     orcid = models.CharField(max_length=255, blank=True, null=True)
+    administrator = models.IntegerField(blank=True, null=True)
     date_joined = models.DateTimeField(auto_now_add=True)
     updated_on = models.DateTimeField(auto_now=True)
 
@@ -227,6 +229,9 @@ class File(models.Model):
     file_weight = models.CharField(max_length=255, null=True, blank=True)
     spectrogram = models.ImageField(upload_to='spectrogram/', null=True, blank=True)
     repository = models.ManyToManyField(Repository, related_name='file_repository', blank=True)
+    microphones = models.ManyToManyField(Hardware, related_name='file_microphones', blank=True)
+    acquisition_hardware = models.ForeignKey(Hardware, related_name='file_acquisition_hardware', null=True, on_delete=models.SET_NULL)
+    acquisition_software = models.ForeignKey(Hardware, related_name='file_acquisition_software', null=True, on_delete=models.SET_NULL)
     metadata = models.JSONField(blank=True, null=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
