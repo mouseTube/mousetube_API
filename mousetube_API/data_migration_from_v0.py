@@ -12,6 +12,8 @@ from tkinter import filedialog as fd
 import pandas as pd
 import json
 import re
+import pymysql
+import datetime
 
 
 # def splitStringForComaOutsideQuotes(text: str):
@@ -45,5 +47,59 @@ if __name__ == '__main__':
 	    "salt", "confirmcode"])
 
 
+    conn = pymysql.connect(
+    host='localhost',
+    port=3307,
+    user='mousetube_webapp',
+    password='giVe@cce552d@t@Base',
+    db='mousetube',
+    charset='utf8mb4',
+    cursorclass=pymysql.cursors.DictCursor
+)
+    cursor = conn.cursor()
+    now = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
     for i in range(0, len(table)):
-        table.iloc[i]
+        if table.iloc[i]['confirmcode'] == 'y':
+            id = int(table.iloc[i]['id_user'])
+            sql = f"SELECT * FROM auth_user WHERE id = {id}"
+            cursor.execute(sql)
+
+            rows = cursor.fetchall()
+            # print(len(rows))
+            if len(rows) > 0:
+                for row in rows:
+                    print(row)
+                sql_update_userprofile = f"INSERT INTO mousetube_api_userprofile (id, phone, unit, institution, address, country, created_by_id, user_id, updated_on) VALUES ({id}, '{table.iloc[i]['phone_user']}', '{table.iloc[i]['unit_user']}', '{table.iloc[i]['institution_user']}', '{table.iloc[i]['address_user']}', '{table.iloc[i]['country_user']}', 3, {id}, '{now}')"
+                cursor.execute(sql_update_userprofile)
+                conn.commit()
+
+            else:
+
+                print(f"INSERT INTO auth_user (id, username, first_name, last_name, password, email, date_joined, updated_on) VALUES ({id}, '{table.iloc[i]['login_user']}', '{table.iloc[i]['first_name_user']}', '{table.iloc[i]['name_user']}', '{table.iloc[i]['password_user']}', '{table.iloc[i]['email_user']}', '{now}', '{now}')")
+
+                print("-----------")
+
+                print(f"INSERT INTO mousetube_api_userprofile (id, phone, unit, institution, address, country, created_by_id, user_id) VALUES ({id}, '{table.iloc[i]['phone_user']}', '{table.iloc[i]['unit_user']}', '{table.iloc[i]['institution_user']}', '{table.iloc[i]['address_user']}', '{table.iloc[i]['country_user']}', 3, {id})")
+
+                # sql_insert_user = "INSERT INTO auth_user (id, username, first_name, last_name, password, email) VALUES (%i, '%s', '%s', '%s', '%s', '%s')"
+                # cursor.execute(sql_insert_user, (id, table.iloc[i]['login_user'],table.iloc[i]['first_name_user'], table.iloc[i]['name_user'],
+                #                             table.iloc[i]['password_user'], table.iloc[i]['email_user']))
+
+                sql_insert_user = f"INSERT INTO auth_user (id, username, first_name, last_name, password, email, date_joined) VALUES ({id}, '{table.iloc[i]['login_user']}', '{table.iloc[i]['first_name_user']}', '{table.iloc[i]['name_user']}', '{table.iloc[i]['password_user']}', '{table.iloc[i]['email_user']}')"
+                cursor.execute(sql_insert_user)
+                conn.commit()
+
+                # sql_insert_userprofile = ("INSERT INTO mousetube_api_userprofile (id, phone, unit, institution, address, country, created_by_id, user_id) VALUES ("
+                #                           "%i, '%s', '%s', '%s', '%s', '%s', %i, %i)")
+                # cursor.execute(sql_insert_userprofile, (id, table.iloc[i]['phone_user'], table.iloc[i]['unit_user'], table.iloc[i]['institution_user'],
+                #                             table.iloc[i]['address_user'], table.iloc[i]['country_user'], 3, id))
+                sql_insert_userprofile = f"INSERT INTO mousetube_api_userprofile (id, phone, unit, institution, address, country, created_by_id, user_id, updated_on) VALUES ({id}, '{table.iloc[i]['phone_user']}', '{table.iloc[i]['unit_user']}', '{table.iloc[i]['institution_user']}', '{table.iloc[i]['address_user']}', '{table.iloc[i]['country_user']}', 3, {id}, '{now}')"
+                cursor.execute(sql_insert_userprofile)
+                conn.commit()
+
+
+
+
+    conn.close()
+

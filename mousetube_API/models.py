@@ -187,22 +187,30 @@ class Strain(models.Model):
         verbose_name_plural = 'Strains'
 
 
-class ProtocolType(models.Model):
-    name_protocol_type = models.CharField(max_length=255, unique=True)
-    protocol_type_description = models.TextField(default='')
+# class ProtocolType(models.Model):
+#     name_protocol_type = models.CharField(max_length=255, unique=True)
+#     protocol_type_description = models.TextField(default='')
+#
+#     def __str__(self):
+#         return self.name_protocol_type
+#
+#     class Meta:
+#         verbose_name = 'Protocol type'
+#         verbose_name_plural = 'Protocol types'
 
-    def __str__(self):
-        return self.name_protocol_type
 
-    class Meta:
-        verbose_name = 'Protocol type'
-        verbose_name_plural = 'Protocol types'
+
+class Keyword(models.Model):
+    keyword = models.CharField(max_length=255, unique=True)
+    category = models.CharField(max_length=255, blank=True, null=True)
+    description = models.TextField(blank=True, null=True)
 
 
 class Protocol(models.Model):
     name_protocol = models.CharField(max_length=255)
-    protocol_type = models.ForeignKey(ProtocolType, null=True, related_name='protocol_protocol_type', on_delete=models.SET_NULL)
+    # protocol_type = models.ForeignKey(ProtocolType, null=True, related_name='protocol_protocol_type', on_delete=models.SET_NULL)
     protocol_description = models.TextField(default='')
+    protocol_keywords = models.ManyToManyField(Keyword, related_name='protocol_keywords', blank=True)
     protocol_metadata = models.JSONField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     modified_at = models.DateTimeField(auto_now=True)
@@ -225,13 +233,16 @@ class File(models.Model):
     link_file = models.CharField(max_length=255)
     doi_file = models.CharField(max_length=255, null=True, blank=True)
     file = models.FileField(upload_to='uploaded/', null=True, blank=True)
+    protocol = models.ForeignKey(Protocol, related_name='file_protocol', null=True, on_delete=models.SET_NULL)
     number_of_channels = models.PositiveSmallIntegerField(default=1, null=True, blank=True) # mono or stereo, or more channels
     file_weight = models.CharField(max_length=255, null=True, blank=True)
     spectrogram = models.ImageField(upload_to='spectrogram/', null=True, blank=True)
     repository = models.ManyToManyField(Repository, related_name='file_repository', blank=True)
     microphones = models.ManyToManyField(Hardware, related_name='file_microphones', blank=True)
     acquisition_hardware = models.ForeignKey(Hardware, related_name='file_acquisition_hardware', null=True, on_delete=models.SET_NULL)
-    acquisition_software = models.ForeignKey(Hardware, related_name='file_acquisition_software', null=True, on_delete=models.SET_NULL)
+    acquisition_software = models.ForeignKey(Software, related_name='file_acquisition_software', null=True, on_delete=models.SET_NULL)
+    species = models.ForeignKey(Species, null=True, related_name='file_species', on_delete=models.SET_NULL)
+    strains = models.ManyToManyField(Strain, related_name='file_strains', blank=True)
     metadata = models.JSONField(blank=True, null=True)
 
     created_at = models.DateTimeField(auto_now_add=True)

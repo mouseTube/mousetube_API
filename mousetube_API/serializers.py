@@ -82,14 +82,14 @@ class StrainSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 
-class ProtocolTypeSerializer(serializers.ModelSerializer):
+class KeywordSerializer(serializers.ModelSerializer):
     class Meta:
-        model = ProtocolType
+        model = Keyword
         fields = '__all__'
 
 
 class ProtocolSerializer(serializers.ModelSerializer):
-    protocol_type = ProtocolTypeSerializer(required=False)
+    protocol_keywords = KeywordSerializer(many=True, required=False)
     class Meta:
         model = Protocol
         fields = '__all__'
@@ -98,6 +98,11 @@ class ProtocolSerializer(serializers.ModelSerializer):
 
 class FileSerializer(serializers.ModelSerializer):
     repository = RepositorySerializer(many=True, required=False)
+    microphones = HardwareSerializer(many=True, required=False)
+    acquisition_hardware = HardwareSerializer(required=False)
+    acquisition_software = SoftwareSerializer(required=False)
+    strains = StrainSerializer(many=True, required=False)
+    protocol = ProtocolSerializer(required=False)
     created_by = UserProfileSerializer(required=False)
     class Meta:
         model = File
