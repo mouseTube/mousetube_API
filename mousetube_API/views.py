@@ -78,9 +78,9 @@ class StrainViewSet(viewsets.ModelViewSet):
     serializer_class = StrainSerializer
 
 
-class KeywordViewSet(viewsets.ModelViewSet):
-    queryset = Keyword.objects.all()
-    serializer_class = KeywordSerializer
+class MetadataViewSet(viewsets.ModelViewSet):
+    queryset = Metadata.objects.all()
+    serializer_class = MetadataSerializer
 
 
 class ProtocolViewSet(viewsets.ModelViewSet):

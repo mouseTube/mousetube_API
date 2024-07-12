@@ -82,14 +82,26 @@ class StrainSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 
-class KeywordSerializer(serializers.ModelSerializer):
+class MetadataCategorySerializer(serializers.ModelSerializer):
     class Meta:
-        model = Keyword
+        model = MetadataCategory
+        fields = '__all__'
+
+class MetadataFieldSerializer(serializers.ModelSerializer):
+    metadata_category = MetadataCategorySerializer(many=True, required=False)
+    class Meta:
+        model = MetadataField
+        fields = '__all__'
+
+class MetadataSerializer(serializers.ModelSerializer):
+    metadata_field = MetadataFieldSerializer(many=True, required=False)
+    class Meta:
+        model = Metadata
         fields = '__all__'
 
 
 class ProtocolSerializer(serializers.ModelSerializer):
-    protocol_keywords = KeywordSerializer(many=True, required=False)
+    protocol_keywords = MetadataSerializer(many=True, required=False)
     class Meta:
         model = Protocol
         fields = '__all__'

@@ -199,22 +199,51 @@ class Strain(models.Model):
 #         verbose_name_plural = 'Protocol types'
 
 
-
-class Keyword(models.Model):
-    keyword = models.CharField(max_length=255, unique=True)
-    category = models.CharField(max_length=255, blank=True, null=True)
+class MetadataCategory(models.Model):
+    name_metadata_category = models.CharField(max_length=255, unique=True)
     description = models.TextField(blank=True, null=True)
+
+    def __str__(self):
+        return self.name_metadata_category
+
+    class Meta:
+        verbose_name = 'Metadata category'
+        verbose_name_plural = 'Metadata categories'
+
+
+class MetadataField(models.Model):
+    name_metadata_field = models.CharField(max_length=255, unique=True)
+    description = models.TextField(blank=True, null=True)
+    metadata_category = models.ManyToManyField(MetadataCategory, blank=True, related_name='metadatafield_categories')
+
+    def __str__(self):
+        return self.name_metadata_field
+
+    class Meta:
+        verbose_name = 'Metadata Field'
+        verbose_name_plural = 'Metadata Fields'
+
+
+class Metadata(models.Model):
+    name_metadata = models.CharField(max_length=255, unique=True)
+    metadata_field = models.ManyToManyField(MetadataField, blank=True, related_name='metadata_field')
+
+    def __str__(self):
+        return self.name_metadata
+
+    class Meta:
+        verbose_name = 'Metadata'
+        verbose_name_plural = 'Metadata'
 
 
 class Protocol(models.Model):
     name_protocol = models.CharField(max_length=255)
     # protocol_type = models.ForeignKey(ProtocolType, null=True, related_name='protocol_protocol_type', on_delete=models.SET_NULL)
     protocol_description = models.TextField(default='')
-    protocol_keywords = models.ManyToManyField(Keyword, related_name='protocol_keywords', blank=True)
-    protocol_metadata = models.JSONField(blank=True, null=True)
+    protocol_metadata = models.ManyToManyField(Metadata, blank=True, related_name="protocol_metadata")
     created_at = models.DateTimeField(auto_now_add=True)
     modified_at = models.DateTimeField(auto_now=True)
-    created_by = models.ForeignKey(User, null=True, related_name='protocol_created_by', on_delete=models.SET_NULL) #who entered the info in the database
+    created_by = models.ForeignKey(User, blank=True, null=True, related_name='protocol_created_by', on_delete=models.SET_NULL) #who entered the info in the database
     references = models.ManyToManyField(Reference, blank=True)
 
     def __str__(self):
@@ -243,7 +272,8 @@ class File(models.Model):
     acquisition_software = models.ForeignKey(Software, related_name='file_acquisition_software', null=True, on_delete=models.SET_NULL)
     species = models.ForeignKey(Species, null=True, related_name='file_species', on_delete=models.SET_NULL)
     strains = models.ManyToManyField(Strain, related_name='file_strains', blank=True)
-    metadata = models.JSONField(blank=True, null=True)
+    metadata_json = models.JSONField(blank=True, null=True)
+    metadata = models.ManyToManyField(Metadata, related_name='file_metadata', blank=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
     modified_at = models.DateTimeField(auto_now=True)
@@ -262,6 +292,8 @@ class Dataset(models.Model):
     list_files = models.ManyToManyField(File, related_name='file_in_dataset', blank=True)
     link_dataset = models.CharField(max_length=255)
     doi_dataset = models.CharField(max_length=255, null=True, blank=True)
+    metadata_json = models.JSONField(blank=True, null=True)
+    metadata = models.ManyToManyField(Metadata, related_name='dataset_metadata', blank=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
     modified_at = models.DateTimeField(auto_now=True)
