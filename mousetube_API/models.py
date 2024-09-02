@@ -30,11 +30,11 @@ class UserProfile(models.Model):
     country = CountryField(blank=True, null=True)
     orcid = models.CharField(max_length=255, blank=True, null=True)
     administrator = models.IntegerField(blank=True, null=True)
-    date_joined = models.DateTimeField(auto_now_add=True)
-    updated_on = models.DateTimeField(auto_now=True)
+    date_joined = models.DateTimeField(auto_now_add=True, null=True)
+    updated_on = models.DateTimeField(auto_now=True, null=True)
 
-    created_at = models.DateTimeField(auto_now_add=True)
-    modified_at = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(auto_now_add=True, null=True)
+    modified_at = models.DateTimeField(auto_now=True, null=True)
     created_by = models.ForeignKey(User, null=True, related_name='userprofile_created_by',
                                    on_delete=models.SET_NULL)  # who entered the info in the database
 
@@ -47,8 +47,8 @@ class Contact(models.Model):
     lastname = models.CharField(max_length=255, blank=True, null=True)
     email = models.EmailField(max_length=255, blank=True, null=True)
 
-    created_at = models.DateTimeField(auto_now_add=True)
-    modified_at = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(auto_now_add=True, null=True)
+    modified_at = models.DateTimeField(auto_now=True, null=True)
     created_by = models.ForeignKey(User, null=True, related_name='contact_created_by',
                                    on_delete=models.SET_NULL)  # who entered the info in the database
 
@@ -71,8 +71,8 @@ class Repository(models.Model):
     url = models.URLField(blank=True,null=True)
     url_api = models.URLField(blank=True,null=True)
 
-    created_at = models.DateTimeField(auto_now_add=True)
-    modified_at = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(auto_now_add=True, null=True)
+    modified_at = models.DateTimeField(auto_now=True, null=True)
     created_by = models.ForeignKey(User, null=True, related_name='repository_created_by',
                                    on_delete=models.SET_NULL)  # who entered the info in the database
 
