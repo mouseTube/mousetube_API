@@ -40,8 +40,8 @@
 			"description": "behavioural context used for the recording",
 			"type": "object",
 			"properties": {
-				"number of animal(s)": {
-					"description": "number of animal(s) present during recording",
+				"number of animals": {
+					"description": "number of animals present during recording",
 					"type": "string",
 					"enum": ["single", "dyad", "group (>2)"]
 				},
