@@ -31,8 +31,13 @@ def getCountryCodeFromCountryName(countryName):
 if __name__ == '__main__':
     dataFile = fd.askopenfile(filetypes=[("txt files", "*.txt")], title="Choose a data file")
     f = open(dataFile.name, 'r', encoding="utf8")
-    userRaw = f.read()
 
+
+    #################### USER TABLE ####################
+    '''
+    userRaw = f.read()
+    
+    
     countries = []
 
     COMMA_MATCHER = re.compile(r",(?=(?:[^\"']*[\"'][^\"']*[\"'])*[^\"']*$)")
@@ -69,7 +74,10 @@ if __name__ == '__main__':
     now = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
     for i in range(0, len(table)):
-        codeCountry = getCountryCodeFromCountryName(table.iloc[i]['country_user'])
+        if table.iloc[i]['country_user']:
+            codeCountry = getCountryCodeFromCountryName(table.iloc[i]['country_user'])
+        else:
+            codeCountry = ""
 
         if table.iloc[i]['confirmcode'] == 'y':
             id = int(table.iloc[i]['id_user'])
@@ -81,13 +89,19 @@ if __name__ == '__main__':
             if len(rows) > 0:
                 for row in rows:
                     print(row)
-                # print(f"Country: {table.iloc[i]['country_user']}")
-                sql_update_userprofile = f"INSERT INTO mousetube_api_userprofile (id, phone, unit, institution, address, country, created_by_id, user_id, updated_on) VALUES ({id}, '{table.iloc[i]['phone_user']}', '{table.iloc[i]['unit_user']}', '{table.iloc[i]['institution_user']}', '{table.iloc[i]['address_user']}', '{codeCountry}', 3, {id}, '{now}')"
+                # check if userprofile exists
+                sql_check_userprofile = f"SELECT * FROM mousetube_api_userprofile WHERE id = {id}"
+                cursor.execute(sql_check_userprofile)
+                profile = cursor.fetchall()
+                if len(profile) > 0:
+                    sql_update_userprofile = f"UPDATE mousetube_api_userprofile SET phone = '{table.iloc[i]['phone_user']}', unit = '{table.iloc[i]['unit_user']}', institution = '{table.iloc[i]['institution_user']}', address = '{table.iloc[i]['address_user']}', country = '{codeCountry}' WHERE id = {id}"
+                else:
+                    sql_update_userprofile = f"INSERT INTO mousetube_api_userprofile (id, phone, unit, institution, address, country, created_by_id, user_id, modified_at) VALUES ({id}, '{table.iloc[i]['phone_user']}', '{table.iloc[i]['unit_user']}', '{table.iloc[i]['institution_user']}', '{table.iloc[i]['address_user']}', '{codeCountry}', 3, {id}, '{now}')"
                 cursor.execute(sql_update_userprofile)
                 conn.commit()
 
             else:
-                print(f"INSERT INTO auth_user (id, username, first_name, last_name, password, email, date_joined, updated_on) VALUES ({id}, '{table.iloc[i]['login_user']}', '{table.iloc[i]['first_name_user']}', '{table.iloc[i]['name_user']}', '{table.iloc[i]['password_user']}', '{table.iloc[i]['email_user']}', '{now}', '{now}')")
+                print(f"INSERT INTO auth_user (id, username, first_name, last_name, password, email, date_joined) VALUES ({id}, '{table.iloc[i]['login_user']}', '{table.iloc[i]['first_name_user']}', '{table.iloc[i]['name_user']}', '{table.iloc[i]['password_user']}', '{table.iloc[i]['email_user']}', '{now}')")
 
                 print("-----------")
 
@@ -97,7 +111,7 @@ if __name__ == '__main__':
                 # cursor.execute(sql_insert_user, (id, table.iloc[i]['login_user'],table.iloc[i]['first_name_user'], table.iloc[i]['name_user'],
                 #                             table.iloc[i]['password_user'], table.iloc[i]['email_user']))
 
-                sql_insert_user = f"INSERT INTO auth_user (id, username, first_name, last_name, password, email, date_joined) VALUES ({id}, '{table.iloc[i]['login_user']}', '{table.iloc[i]['first_name_user']}', '{table.iloc[i]['name_user']}', '{table.iloc[i]['password_user']}', '{table.iloc[i]['email_user']}')"
+                sql_insert_user = f"INSERT INTO auth_user (id, username, first_name, last_name, password, email, date_joined) VALUES ({id}, '{table.iloc[i]['login_user']}', '{table.iloc[i]['first_name_user']}', '{table.iloc[i]['name_user']}', '{table.iloc[i]['password_user']}', '{table.iloc[i]['email_user']}', '{now}')"
                 cursor.execute(sql_insert_user)
                 conn.commit()
 
@@ -105,12 +119,12 @@ if __name__ == '__main__':
                 #                           "%i, '%s', '%s', '%s', '%s', '%s', %i, %i)")
                 # cursor.execute(sql_insert_userprofile, (id, table.iloc[i]['phone_user'], table.iloc[i]['unit_user'], table.iloc[i]['institution_user'],
                 #                             table.iloc[i]['address_user'], table.iloc[i]['country_user'], 3, id))
-                sql_insert_userprofile = f"INSERT INTO mousetube_api_userprofile (id, phone, unit, institution, address, country, created_by_id, user_id, updated_on) VALUES ({id}, '{table.iloc[i]['phone_user']}', '{table.iloc[i]['unit_user']}', '{table.iloc[i]['institution_user']}', '{table.iloc[i]['address_user']}', '{codeCountry}', 3, {id}, '{now}')"
+                sql_insert_userprofile = f"INSERT INTO mousetube_api_userprofile (id, phone, unit, institution, address, country, created_by_id, user_id, modified_at) VALUES ({id}, '{table.iloc[i]['phone_user']}', '{table.iloc[i]['unit_user']}', '{table.iloc[i]['institution_user']}', '{table.iloc[i]['address_user']}', '{codeCountry}', 3, {id}, '{now}')"
                 cursor.execute(sql_insert_userprofile)
                 conn.commit()
 
-
-
-
     conn.close()
+    '''
+
+    #################### PROTOCOL TABLE ####################
 

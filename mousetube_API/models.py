@@ -31,9 +31,7 @@ class UserProfile(models.Model):
     orcid = models.CharField(max_length=255, blank=True, null=True)
     administrator = models.IntegerField(blank=True, null=True)
     date_joined = models.DateTimeField(auto_now_add=True, null=True)
-    updated_on = models.DateTimeField(auto_now=True, null=True)
 
-    created_at = models.DateTimeField(auto_now_add=True, null=True)
     modified_at = models.DateTimeField(auto_now=True, null=True)
     created_by = models.ForeignKey(User, null=True, related_name='userprofile_created_by',
                                    on_delete=models.SET_NULL)  # who entered the info in the database
