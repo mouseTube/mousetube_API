@@ -44,6 +44,7 @@ class Contact(models.Model):
     firstname = models.CharField(max_length=255, blank=True, null=True)
     lastname = models.CharField(max_length=255, blank=True, null=True)
     email = models.EmailField(max_length=255, blank=True, null=True)
+    id_user = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, related_name='contact_user_profile', on_delete=models.SET_NULL)
 
     created_at = models.DateTimeField(auto_now_add=True, null=True)
     modified_at = models.DateTimeField(auto_now=True, null=True)
