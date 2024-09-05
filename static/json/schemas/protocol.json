@@ -10,17 +10,30 @@
 				"sex": {
 					"description": "sex of the animal(s) recorded",
 					"type": "string",
-					"enum": ["male(s)", "female(s)", "male(s) & female(s)"]
+					"enum": [
+						"male(s)",
+						"female(s)",
+						"male(s) & female(s)"
+					]
 				},
 				"age": {
 					"description": "age of the animal(s) recorded",
 					"type": "str",
-					"enum": ["pup", "juvenile", "adult"]
+					"enum": [
+						"pup",
+						"juvenile",
+						"adult"
+					]
 				},
 				"housing": {
 					"description": "housing condition of the animal(s) before the recording",
 					"type": "str",
-					"enum": ["grouped", "isolated", "grouped & isolated"]
+					"enum": [
+						"grouped",
+						"isolated",
+						"grouped & isolated"
+					]
+				}
 			}
 		},
 		"context": {
@@ -61,13 +74,22 @@
 				"channels": {
 					"description": "number of microphones used for recording",
 					"type": "string",
-					"enum": ["mono", "stereo", "more than 2"]
+					"enum": [
+						"mono",
+						"stereo",
+						"more than 2"
+					]
 				},
 				"sound isolation": {
 					"description": "presence of a sound attenuating chamber",
 					"type": "string",
-					"enum": ["soundproof room", "soundproof cage", "no specific sound isolation"]
+					"enum": [
+						"soundproof room",
+						"soundproof cage",
+						"no specific sound isolation"
+					]
 				}
+			}
 		}
 	}
 }
