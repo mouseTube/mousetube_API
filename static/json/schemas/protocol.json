@@ -1,0 +1,73 @@
+{
+	"title": "Protocol",
+	"description": "protocol description",
+	"type": "object",
+	"properties": {
+		"animals":{
+			"description": "information about animals",
+			"type": "object",
+			"properties": {
+				"sex": {
+					"description": "sex of the animal(s) recorded",
+					"type": "string",
+					"enum": ["male(s)", "female(s)", "male(s) & female(s)"]
+				},
+				"age": {
+					"description": "age of the animal(s) recorded",
+					"type": "str",
+					"enum": ["pup", "juvenile", "adult"]
+				},
+				"housing": {
+					"description": "housing condition of the animal(s) before the recording",
+					"type": "str",
+					"enum": ["grouped", "isolated", "grouped & isolated"]
+			}
+		},
+		"context": {
+			"description": "behavioural context used for the recording",
+			"type": "object",
+			"properties": {
+				"number of animal(s)": {
+					"description": "number of animal(s) present during recording",
+					"type": "string",
+					"enum": ["single", "dyad", "group (>2)"]
+				},
+				"duration": {
+					"description": "duration of the recording",
+					"type": "str",
+					"enum": ["short term (<1h)", "mid term (<1day)", "long term (>=1day)"]
+				},
+				"cage": {
+					"description": "type of recording cage",
+					"type": "str",
+					"enum": ["unfamiliar test cage", "familiar test cage", "home cage"]
+				},
+				"bedding": {
+					"description": "presence of bedding during recording",
+					"type": "str",
+					"enum": ["yes", "no"]
+				},
+				"time": {
+					"description": "time of the day or night (for the animal) during recording",
+					"type": "str",
+					"enum": ["day", "night"]
+				}
+			}
+		},
+		"technic": {
+			"description": "technical specificities used for the recording",
+			"type": "object",
+			"properties": {
+				"channels": {
+					"description": "number of microphones used for recording",
+					"type": "string",
+					"enum": ["mono", "stereo", "more than 2"]
+				},
+				"sound isolation": {
+					"description": "presence of a sound attenuating chamber",
+					"type": "string",
+					"enum": ["soundproof room", "soundproof cage", "no specific sound isolation"]
+				}
+		}
+	}
+}
