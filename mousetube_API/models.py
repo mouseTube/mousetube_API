@@ -201,6 +201,7 @@ class Strain(models.Model):
 class MetadataCategory(models.Model):
     name_metadata_category = models.CharField(max_length=255, unique=True)
     description = models.TextField(blank=True, null=True)
+    metadata_categories = models.ManyToManyField('self', blank=True, related_name="metadata_categories_categories")
 
     def __str__(self):
         return self.name_metadata_category

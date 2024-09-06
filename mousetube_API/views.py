@@ -92,3 +92,8 @@ class FileViewSet(viewsets.ModelViewSet):
     queryset = File.objects.all()
     serializer_class = FileSerializer
 
+
+class ProtocolMetadataViewSet(viewsets.ModelViewSet):
+    queryset = Metadata.objects.filter(metadata_field__metadata_category__metadata_categories__name_metadata_category="protocol")
+    #  https://dev.to/azayshrestha/understanding-djangos-prefetchrelated-and-prefetch-4i2o
+    serializer_class = ProtocolMetadataSerializer

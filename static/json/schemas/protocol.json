@@ -58,7 +58,7 @@
 				"bedding": {
 					"description": "presence of bedding during recording",
 					"type": "str",
-					"enum": ["yes", "no"]
+					"enum": ["bedding", "no bedding"]
 				},
 				"time": {
 					"description": "time of the day or night (for the animal) during recording",

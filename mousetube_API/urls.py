@@ -39,6 +39,7 @@ router.register('strain', StrainViewSet, basename='strain')
 router.register('metadata', MetadataViewSet, basename='metadata')
 router.register('protocol', ProtocolViewSet, basename='protocol')
 router.register('file', FileViewSet, basename='file')
+router.register('protocol_metadata', ProtocolMetadataViewSet, basename='protocol_metadata')
 # router.register('software', SoftwareViewSet, basename='software')
 
 urlpatterns = [

@@ -120,3 +120,9 @@ class FileSerializer(serializers.ModelSerializer):
         model = File
         fields = '__all__'
 
+
+class ProtocolMetadataSerializer(serializers.ModelSerializer):
+    metadata_field = MetadataFieldSerializer(many=True)
+    class Meta:
+        model = Metadata
+        fields = '__all__'
