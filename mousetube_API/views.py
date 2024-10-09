@@ -56,9 +56,11 @@ class SoftwareAPIView(APIView):
         serializer = SoftwareSerializer(software, many=True)
         return Response(serializer.data)
 
+
 class SoftwareViewSet(viewsets.ModelViewSet):
     queryset = Software.objects.all()
     serializer_class = SoftwareSerializer
+
 
 class HardwareAPIView(APIView):
     def get(self, *arg, **kwargs):
