@@ -46,6 +46,9 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/', include(router.urls)),
     path('api/software/', SoftwareAPIView.as_view()),
+    path('api/acquisition_software/', AcquisitionSoftwareAPIView.as_view()),
+    path('api/analysis_software/', AnalysisSoftwareAPIView.as_view()),
+    path('api/acquisition_and_analysis_software/', AcquisitionAndAnalysisSoftwareAPIView.as_view()),
     path('api/hardware/', HardwareAPIView.as_view()),
     path('api/country/',  CountryAPIView.as_view(), name='country')
 ]

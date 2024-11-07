@@ -57,6 +57,25 @@ class SoftwareAPIView(APIView):
         return Response(serializer.data)
 
 
+class AcquisitionSoftwareAPIView(APIView):
+    def get(self, *arg, **kwargs):
+        software = Software.objects.filter(software_type="acquisition")
+        serializer = SoftwareSerializer(software, many=True)
+        return Response(serializer.data)
+
+class AnalysisSoftwareAPIView(APIView):
+    def get(self, *arg, **kwargs):
+        software = Software.objects.filter(software_type="analysis")
+        serializer = SoftwareSerializer(software, many=True)
+        return Response(serializer.data)
+
+class AcquisitionAndAnalysisSoftwareAPIView(APIView):
+    def get(self, *arg, **kwargs):
+        software = Software.objects.filter(software_type="acquisition and analysis")
+        serializer = SoftwareSerializer(software, many=True)
+        return Response(serializer.data)
+
+
 class SoftwareViewSet(viewsets.ModelViewSet):
     queryset = Software.objects.all()
     serializer_class = SoftwareSerializer
