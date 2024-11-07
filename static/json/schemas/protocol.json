@@ -63,12 +63,12 @@
 				"time": {
 					"description": "time of the day or night (for the animal) during recording",
 					"type": "str",
-					"enum": ["day", "night"]
+					"enum": ["day cycle", "night cycle"]
 				}
 			}
 		},
-		"technic": {
-			"description": "technical specificities used for the recording",
+		"equipment": {
+			"description": "equipment specificities used for the recording",
 			"type": "object",
 			"properties": {
 				"channels": {
