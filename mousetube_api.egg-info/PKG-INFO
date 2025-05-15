@@ -1,0 +1,26 @@
+Metadata-Version: 2.4
+Name: mousetube_api
+Version: 1.0
+Summary: mousetube allows the exchange of mouse vocalisation recording files.
+Author-email: Nicolas Torquet <nicolas.torquet@igbmc.com>, Laurent Bouri <laurent.bouri@igbmc.fr>
+License: GPL-3.0
+License-File: LICENSE
+Requires-Dist: Django==5.1.7
+Requires-Dist: djangorestframework==3.16.0
+Requires-Dist: djoser==2.3.1
+Requires-Dist: django-cors-headers==4.7.0
+Requires-Dist: mysqlclient==2.2.7
+Requires-Dist: django-environ==0.12.0
+Requires-Dist: drf-spectacular==0.28.0
+Requires-Dist: uvicorn==0.29.0
+Requires-Dist: gunicorn==21.2.0
+Requires-Dist: mkdocs-material>=8.0
+Requires-Dist: mkdocstrings[python]>=0.11
+Requires-Dist: django-countries==7.5
+Requires-Dist: celery==5.3.6
+Requires-Dist: django-celery-results==2.5.1
+Requires-Dist: celery-progress==0.5
+Provides-Extra: dev
+Requires-Dist: pytest; extra == "dev"
+Requires-Dist: ruff; extra == "dev"
+Dynamic: license-file

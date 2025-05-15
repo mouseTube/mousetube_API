@@ -1,9 +1,0 @@
-Django
-djangorestframework
-djoser
-django-filter
-django-cors-headers
-Celery
-django-celery-results
-celery-progress
-django-historicalrecords
