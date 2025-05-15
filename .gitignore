@@ -10,7 +10,7 @@ __pycache__/
 *$py.class
 
 *.egg
-
+*.egg-info/
 dist/
 build/
 .eggs/
