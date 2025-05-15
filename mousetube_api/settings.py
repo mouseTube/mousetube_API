@@ -14,12 +14,11 @@ from django.core.management.utils import get_random_secret_key
 from pathlib import Path
 import os
 import environ
-from django_countries import countries
 
 # Add two custom countries to django_countries
 COUNTRIES_OVERRIDE = {
-    'EU': {'names': ['European Union'], 'alpha3': 'EUN', 'numeric': 998},
-    'GO': {'names': ['Global'], 'alpha3': 'GLO', 'numeric': 999},
+    "EU": {"names": ["European Union"], "alpha3": "EUN", "numeric": 998},
+    "GO": {"names": ["Global"], "alpha3": "GLO", "numeric": 999},
 }
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -28,7 +27,6 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
-
 
 
 env = environ.Env(
@@ -50,7 +48,7 @@ for e in env_paths:
         pass
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = env("DEBUG", default=False)
+DEBUG = env("DEBUG", default=True)
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = (
     env("SECRET_KEY") if env("SECRET_KEY", default=None) else get_random_secret_key()
@@ -91,54 +89,53 @@ SECURE_PROXY_SSL_HEADER = env.tuple(
 # Application definition
 
 INSTALLED_APPS = [
-    'django.contrib.admin',
-    'django.contrib.auth',
-    'django.contrib.contenttypes',
-    'django.contrib.sessions',
-    'django.contrib.messages',
-    'django.contrib.staticfiles',
-    'mousetube_api',
-    'rest_framework',
-    'rest_framework.authtoken',
-    'corsheaders',
-    'djoser',
-    'django_celery_results',
-    'celery_progress',
+    "django.contrib.admin",
+    "django.contrib.auth",
+    "django.contrib.contenttypes",
+    "django.contrib.sessions",
+    "django.contrib.messages",
+    "django.contrib.staticfiles",
+    "mousetube_api",
+    "rest_framework",
+    "rest_framework.authtoken",
+    "corsheaders",
+    "djoser",
+    "django_celery_results",
+    "celery_progress",
     "drf_spectacular",
 ]
 
 MIDDLEWARE = [
-    'django.middleware.security.SecurityMiddleware',
-    'django.contrib.sessions.middleware.SessionMiddleware',
-    'corsheaders.middleware.CorsMiddleware',
-    'django.middleware.common.CommonMiddleware',
-    'django.middleware.csrf.CsrfViewMiddleware',
-    'django.contrib.auth.middleware.AuthenticationMiddleware',
-    'django.contrib.messages.middleware.MessageMiddleware',
-    'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    "django.middleware.security.SecurityMiddleware",
+    "django.contrib.sessions.middleware.SessionMiddleware",
+    "corsheaders.middleware.CorsMiddleware",
+    "django.middleware.common.CommonMiddleware",
+    "django.middleware.csrf.CsrfViewMiddleware",
+    "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "django.contrib.messages.middleware.MessageMiddleware",
+    "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
 ADMIN_BASE_TEMPLATE = "admin/base_site.html"
-ROOT_URLCONF = 'mousetube_api.urls'
+ROOT_URLCONF = "mousetube_api.urls"
 
 TEMPLATES = [
     {
-        'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [BASE_DIR / 'templates']
-        ,
-        'APP_DIRS': True,
-        'OPTIONS': {
-            'context_processors': [
-                'django.template.context_processors.debug',
-                'django.template.context_processors.request',
-                'django.contrib.auth.context_processors.auth',
-                'django.contrib.messages.context_processors.messages',
+        "BACKEND": "django.template.backends.django.DjangoTemplates",
+        "DIRS": [BASE_DIR / "templates"],
+        "APP_DIRS": True,
+        "OPTIONS": {
+            "context_processors": [
+                "django.template.context_processors.debug",
+                "django.template.context_processors.request",
+                "django.contrib.auth.context_processors.auth",
+                "django.contrib.messages.context_processors.messages",
             ],
         },
     },
 ]
 
-WSGI_APPLICATION = 'mousetube_api.wsgi.application'
+WSGI_APPLICATION = "mousetube_api.wsgi.application"
 
 
 # Database
@@ -164,16 +161,16 @@ DATABASES = {
 
 AUTH_PASSWORD_VALIDATORS = [
     {
-        'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
+        "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator",
     },
     {
-        'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
+        "NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
     },
     {
-        'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
+        "NAME": "django.contrib.auth.password_validation.CommonPasswordValidator",
     },
     {
-        'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
+        "NAME": "django.contrib.auth.password_validation.NumericPasswordValidator",
     },
 ]
 
@@ -181,9 +178,9 @@ AUTH_PASSWORD_VALIDATORS = [
 # Internationalization
 # https://docs.djangoproject.com/en/4.2/topics/i18n/
 
-LANGUAGE_CODE = 'en-us'
+LANGUAGE_CODE = "en-us"
 
-TIME_ZONE = 'UTC'
+TIME_ZONE = "UTC"
 
 USE_I18N = True
 
@@ -225,13 +222,13 @@ REST_FRAMEWORK = {
     ],
 }
 
-broker_url = 'amqp://guest:guest@localhost:5672//'
-CELERY_ACCEPT_CONTENT = ['json']
-CELERY_TASK_SERIALIZER = 'json'
+broker_url = "amqp://guest:guest@localhost:5672//"
+CELERY_ACCEPT_CONTENT = ["json"]
+CELERY_TASK_SERIALIZER = "json"
 CELERY_TIMEZONE = "Europe/Paris"
-CELERY_IMPORTS = 'mousetube_api.tasks'
-CELERY_RESULT_BACKEND = 'django-db'
-CACHE_BACKEND = 'memcached://127.0.0.1:11211/'
+CELERY_IMPORTS = "mousetube_api.tasks"
+CELERY_RESULT_BACKEND = "django-db"
+CACHE_BACKEND = "memcached://127.0.0.1:11211/"
 
 LOG_DIR = Path(BASE_DIR) / "logs"
 LOG_DIR.mkdir(exist_ok=True)

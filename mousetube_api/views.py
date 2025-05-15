@@ -1,19 +1,19 @@
-'''
+"""
 Created by Nicolas Torquet at 27/10/2023
 torquetn@igbmc.fr
 Copyright: CNRS - INSERM - UNISTRA - ICS - IGBMC
 CNRS - Mouse Clinical Institute
 PHENOMIN, CNRS UMR7104, INSERM U964, Université de Strasbourg
 Code under GPL v3.0 licence
-'''
-from django_countries.fields import Country
+"""
+
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import viewsets
 from .models import *
 from .serializers import *
-from django.http import JsonResponse
 from django_countries import countries
+
 
 class CountryAPIView(APIView):
     def get(self, *arg, **kwargs):
@@ -40,6 +40,7 @@ class UserViewSet(viewsets.ModelViewSet):
     queryset = User.objects.all()
     serializer_class = UserSerializer
 
+
 class UserProfileViewSet(viewsets.ModelViewSet):
     queryset = UserProfile.objects.all()
     serializer_class = UserProfileSerializer
@@ -63,11 +64,13 @@ class AcquisitionSoftwareAPIView(APIView):
         serializer = SoftwareSerializer(software, many=True)
         return Response(serializer.data)
 
+
 class AnalysisSoftwareAPIView(APIView):
     def get(self, *arg, **kwargs):
         software = Software.objects.filter(software_type="analysis")
         serializer = SoftwareSerializer(software, many=True)
         return Response(serializer.data)
+
 
 class AcquisitionAndAnalysisSoftwareAPIView(APIView):
     def get(self, *arg, **kwargs):
@@ -86,7 +89,6 @@ class HardwareAPIView(APIView):
         hardware = Hardware.objects.all()
         serializer = HardwareSerializer(hardware, many=True)
         return Response(serializer.data)
-
 
 
 class SpeciesViewSet(viewsets.ModelViewSet):
@@ -115,6 +117,8 @@ class FileViewSet(viewsets.ModelViewSet):
 
 
 class ProtocolMetadataViewSet(viewsets.ModelViewSet):
-    queryset = Metadata.objects.filter(metadata_field__metadata_category__metadata_categories__name_metadata_category="protocol")
+    queryset = Metadata.objects.filter(
+        metadata_field__metadata_category__metadata_categories__name_metadata_category="protocol"
+    )
     #  https://dev.to/azayshrestha/understanding-djangos-prefetchrelated-and-prefetch-4i2o
     serializer_class = ProtocolMetadataSerializer

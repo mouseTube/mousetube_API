@@ -21,6 +21,7 @@ Including another URLconf
     1. Import the include() function: from django.urls import include, path
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
+
 from django.contrib import admin
 from django.urls import path, include
 from django.conf.urls.static import static
@@ -29,30 +30,34 @@ from .views import *
 
 router = DefaultRouter()
 # router.register('country', CountryViewSet, basename='country')
-router.register('repository', RepositoryViewSet, basename='repository')
-router.register('reference', ReferenceViewSet, basename='reference')
-router.register('contact', ContactViewSet, basename='contact')
-router.register('user', UserViewSet, basename='user')
-router.register('user_profile', UserProfileViewSet, basename='user_profile')
-router.register('species', SpeciesViewSet, basename='species')
-router.register('strain', StrainViewSet, basename='strain')
-router.register('metadata', MetadataViewSet, basename='metadata')
-router.register('protocol', ProtocolViewSet, basename='protocol')
-router.register('file', FileViewSet, basename='file')
-router.register('protocol_metadata', ProtocolMetadataViewSet, basename='protocol_metadata')
+router.register("repository", RepositoryViewSet, basename="repository")
+router.register("reference", ReferenceViewSet, basename="reference")
+router.register("contact", ContactViewSet, basename="contact")
+router.register("user", UserViewSet, basename="user")
+router.register("user_profile", UserProfileViewSet, basename="user_profile")
+router.register("species", SpeciesViewSet, basename="species")
+router.register("strain", StrainViewSet, basename="strain")
+router.register("metadata", MetadataViewSet, basename="metadata")
+router.register("protocol", ProtocolViewSet, basename="protocol")
+router.register("file", FileViewSet, basename="file")
+router.register(
+    "protocol_metadata", ProtocolMetadataViewSet, basename="protocol_metadata"
+)
 # router.register('software', SoftwareViewSet, basename='software')
 
 urlpatterns = [
-    path('admin/', admin.site.urls),
-    path('api/', include(router.urls)),
-    path('api/software/', SoftwareAPIView.as_view()),
-    path('api/acquisition_software/', AcquisitionSoftwareAPIView.as_view()),
-    path('api/analysis_software/', AnalysisSoftwareAPIView.as_view()),
-    path('api/acquisition_and_analysis_software/', AcquisitionAndAnalysisSoftwareAPIView.as_view()),
-    path('api/hardware/', HardwareAPIView.as_view()),
-    path('api/country/',  CountryAPIView.as_view(), name='country')
+    path("admin/", admin.site.urls),
+    path("api/", include(router.urls)),
+    path("api/software/", SoftwareAPIView.as_view()),
+    path("api/acquisition_software/", AcquisitionSoftwareAPIView.as_view()),
+    path("api/analysis_software/", AnalysisSoftwareAPIView.as_view()),
+    path(
+        "api/acquisition_and_analysis_software/",
+        AcquisitionAndAnalysisSoftwareAPIView.as_view(),
+    ),
+    path("api/hardware/", HardwareAPIView.as_view()),
+    path("api/country/", CountryAPIView.as_view(), name="country"),
 ]
 
 if settings.DEBUG:
-    urlpatterns += static(
-        settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

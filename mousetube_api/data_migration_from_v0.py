@@ -1,25 +1,20 @@
-'''
+"""
 Created by Nicolas Torquet at 09/07/2024
 torquetn@igbmc.fr
 Copyright: CNRS - INSERM - UNISTRA - ICS - IGBMC
 CNRS - Mouse Clinical Institute
 PHENOMIN, CNRS UMR7104, INSERM U964, Université de Strasbourg
 Code under GPL v3.0 licence
-'''
-
+"""
 
 from tkinter import filedialog as fd
-import pandas as pd
-import json
-import re
-import pymysql
-import datetime
 import pycountry
 
 
 # def splitStringForComaOutsideQuotes(text: str):
 #     for char in text:
 #         if char == "'":
+
 
 def getCountryCodeFromCountryName(countryName):
     for country in pycountry.countries:
@@ -28,13 +23,14 @@ def getCountryCodeFromCountryName(countryName):
     return ""
 
 
-if __name__ == '__main__':
-    dataFile = fd.askopenfile(filetypes=[("txt files", "*.txt")], title="Choose a data file")
-    f = open(dataFile.name, 'r', encoding="utf8")
-
+if __name__ == "__main__":
+    dataFile = fd.askopenfile(
+        filetypes=[("txt files", "*.txt")], title="Choose a data file"
+    )
+    f = open(dataFile.name, "r", encoding="utf8")
 
     #################### USER TABLE ####################
-    '''
+    """
     userRaw = f.read()
     
     
@@ -124,7 +120,6 @@ if __name__ == '__main__':
                 conn.commit()
 
     conn.close()
-    '''
+    """
 
     #################### PROTOCOL TABLE ####################
-
