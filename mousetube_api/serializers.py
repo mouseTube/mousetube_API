@@ -7,9 +7,24 @@ PHENOMIN, CNRS UMR7104, INSERM U964, Université de Strasbourg
 Code under GPL v3.0 licence
 """
 
-from djoser.serializers import UserSerializer
+# from djoser.serializers import UserSerializer
 from rest_framework import serializers
-from .models import *
+from .models import (
+    Repository,
+    Reference,
+    User,
+    UserProfile,
+    Contact,
+    Hardware,
+    Software,
+    Species,
+    Strain,
+    MetadataCategory,
+    MetadataField,
+    Metadata,
+    Protocol,
+    File,
+)
 
 
 # class CountrySerializer(serializers.Serializer):

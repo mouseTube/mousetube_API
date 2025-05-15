@@ -9,7 +9,22 @@ Code under GPL v3.0 licence
 
 from django.contrib import admin
 
-from .models import *
+from .models import (
+    UserProfile,
+    Contact,
+    Repository,
+    Reference,
+    Species,
+    Strain,
+    MetadataCategory,
+    MetadataField,
+    Metadata,
+    Protocol,
+    File,
+    Dataset,
+    Software,
+    Hardware,
+)
 
 admin.site.register(UserProfile)
 admin.site.register(Contact)

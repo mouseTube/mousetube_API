@@ -10,8 +10,35 @@ Code under GPL v3.0 licence
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import viewsets
-from .models import *
-from .serializers import *
+from .models import (
+    Contact,
+    Repository,
+    Reference,
+    User,
+    UserProfile,
+    Software,
+    Hardware,
+    Species,
+    Strain,
+    Metadata,
+    Protocol,
+    File,
+)
+from .serializers import (
+    SpeciesSerializer,
+    StrainSerializer,
+    MetadataSerializer,
+    ProtocolSerializer,
+    FileSerializer,
+    ProtocolMetadataSerializer,
+    HardwareSerializer,
+    SoftwareSerializer,
+    RepositorySerializer,
+    ReferenceSerializer,
+    ContactSerializer,
+    UserSerializer,
+    UserProfileSerializer,
+)
 from django_countries import countries
 
 
@@ -46,11 +73,6 @@ class UserProfileViewSet(viewsets.ModelViewSet):
     serializer_class = UserProfileSerializer
 
 
-class SoftwareViewSet(viewsets.ModelViewSet):
-    queryset = Software.objects.all()
-    serializer_class = SoftwareSerializer
-
-
 class SoftwareAPIView(APIView):
     def get(self, *arg, **kwargs):
         software = Software.objects.all()
@@ -77,11 +99,6 @@ class AcquisitionAndAnalysisSoftwareAPIView(APIView):
         software = Software.objects.filter(software_type="acquisition and analysis")
         serializer = SoftwareSerializer(software, many=True)
         return Response(serializer.data)
-
-
-class SoftwareViewSet(viewsets.ModelViewSet):
-    queryset = Software.objects.all()
-    serializer_class = SoftwareSerializer
 
 
 class HardwareAPIView(APIView):

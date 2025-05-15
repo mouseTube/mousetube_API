@@ -26,7 +26,26 @@ from django.contrib import admin
 from django.urls import path, include
 from django.conf.urls.static import static
 from rest_framework.routers import DefaultRouter
-from .views import *
+from .views import (
+    RepositoryViewSet,
+    ReferenceViewSet,
+    ContactViewSet,
+    UserViewSet,
+    UserProfileViewSet,
+    SpeciesViewSet,
+    StrainViewSet,
+    MetadataViewSet,
+    ProtocolViewSet,
+    FileViewSet,
+    ProtocolMetadataViewSet,
+    SoftwareAPIView,
+    AcquisitionSoftwareAPIView,
+    AnalysisSoftwareAPIView,
+    AcquisitionAndAnalysisSoftwareAPIView,
+    HardwareAPIView,
+    CountryAPIView,
+)
+from django.conf import settings
 
 router = DefaultRouter()
 # router.register('country', CountryViewSet, basename='country')
