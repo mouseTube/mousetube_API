@@ -1,0 +1,83 @@
+services:
+  db:
+    image: mariadb:latest
+    restart: always
+    environment:
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASS}
+      MARIADB_DATABASE: ${DB_NAME}
+      MARIADB_USER: ${DB_USER}
+      MARIADB_PASSWORD: ${DB_PASSWORD}
+    ports:
+      - "${DB_PORT}:3306"
+    volumes:
+      - mariadb_data:/var/lib/mysql
+
+  web:
+    build:
+      context: .
+    command: /entrypoint.sh
+    volumes:
+      - .:/app
+      - ./staticfiles:/app/staticfiles
+      - ./media:/app/media
+    expose:
+      - "8000"
+    depends_on:
+      - db
+    env_file:
+      - .env
+    environment:
+      DB_HOST: db
+      FIXTURE_FILE: /app/exported_data.json
+    user: "${UID:-1000}:${GID:-1000}"
+
+  frontend:
+    build: ../mousetube_frontend
+    command: /entrypoint.sh
+    volumes:
+      - ../mousetube_frontend:/app
+    expose:
+      - "3000"
+    depends_on:
+      - web
+    env_file:
+      - ../mousetube_frontend/.env
+    user: "${UID:-1000}:${GID:-1000}"
+
+  nginx:
+    image: nginx:latest
+    build:
+      context: ./nginx
+    volumes:
+      - nginx_certs:/etc/letsencrypt
+      - ./nginx/certbot:/var/www/certbot
+      # - ./nginx/ssl/nginx.crt:/etc/letsencrypt/live/${DOMAIN}/fullchain.pem
+      # - ./nginx/ssl/nginx.key:/etc/letsencrypt/live/${DOMAIN}/privkey.pem
+      - ./staticfiles:/app/staticfiles
+      - ./media:/app/media
+      - ./logs/nginx:/var/log/nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - frontend
+      - web
+    environment:
+      DOMAIN: ${DOMAIN}
+    restart:
+      always
+
+  certbot:
+    image: certbot/certbot
+    volumes:
+      - nginx_certs:/etc/letsencrypt
+      - ./nginx/certbot:/var/www/certbot
+      - ./nginx/conf.d:/etc/nginx/conf.d
+    entrypoint: >
+      sh -c "certbot certonly --webroot -w /var/www/certbot
+      --email admin@${DOMAIN} --agree-tos --no-eff-email
+      -d ${DOMAIN}"
+
+volumes:
+  mariadb_data:
+  nginx_certs:
