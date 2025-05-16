@@ -342,10 +342,10 @@ class Software(models.Model):
         verbose_name_plural = "Software"
 
 
+# ####################
+# ####################
+# ####################
 
-# ####################
-# ####################
-# ####################
 
 class UserProfile(models.Model):
     user = models.OneToOneField(
@@ -415,7 +415,10 @@ class Repository(models.Model):
     created_at = models.DateTimeField(auto_now_add=True, null=True)
     modified_at = models.DateTimeField(auto_now=True, null=True)
     created_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL, null=True, related_name="repository_created_by", on_delete=models.SET_NULL
+        settings.AUTH_USER_MODEL,
+        null=True,
+        related_name="repository_created_by",
+        on_delete=models.SET_NULL,
     )  # who entered the info in the database
 
     def __str__(self):
@@ -447,7 +450,10 @@ class Hardware(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     modified_at = models.DateTimeField(auto_now=True)
     created_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL, null=True, related_name="hardware_created_by", on_delete=models.SET_NULL
+        settings.AUTH_USER_MODEL,
+        null=True,
+        related_name="hardware_created_by",
+        on_delete=models.SET_NULL,
     )  # who entered the info in the database
 
     def __str__(self):
@@ -463,7 +469,10 @@ class Species(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     modified_at = models.DateTimeField(auto_now=True)
     created_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL, null=True, related_name="species_created_by", on_delete=models.SET_NULL
+        settings.AUTH_USER_MODEL,
+        null=True,
+        related_name="species_created_by",
+        on_delete=models.SET_NULL,
     )  # who entered the info in the database
 
     def __str__(self):
@@ -481,7 +490,10 @@ class MetadataCategory(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     modified_at = models.DateTimeField(auto_now=True)
     created_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL, null=True, related_name="metadata_category_created_by", on_delete=models.SET_NULL
+        settings.AUTH_USER_MODEL,
+        null=True,
+        related_name="metadata_category_created_by",
+        on_delete=models.SET_NULL,
     )
 
     def __str__(self):
@@ -501,7 +513,10 @@ class MetadataField(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     modified_at = models.DateTimeField(auto_now=True)
     created_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL, null=True, related_name="metadata_field_created_by", on_delete=models.SET_NULL
+        settings.AUTH_USER_MODEL,
+        null=True,
+        related_name="metadata_field_created_by",
+        on_delete=models.SET_NULL,
     )
 
     def __str__(self):
@@ -520,7 +535,10 @@ class Metadata(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     modified_at = models.DateTimeField(auto_now=True)
     created_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL, null=True, related_name="metadata_created_by", on_delete=models.SET_NULL
+        settings.AUTH_USER_MODEL,
+        null=True,
+        related_name="metadata_created_by",
+        on_delete=models.SET_NULL,
     )
 
     def __str__(self):
@@ -546,7 +564,10 @@ class Dataset(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     modified_at = models.DateTimeField(auto_now=True)
     created_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL, null=True, related_name="dataset_created_by", on_delete=models.SET_NULL
+        settings.AUTH_USER_MODEL,
+        null=True,
+        related_name="dataset_created_by",
+        on_delete=models.SET_NULL,
     )  # who entered the info in the database
 
     def __str__(self):
