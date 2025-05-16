@@ -152,7 +152,7 @@ class Protocol(models.Model):
         verbose_name_plural = "Protocols"
 
 
-class Experiment(models.Model):
+class RecordingSession(models.Model):
     """
     Represents an experiment.
 
@@ -173,7 +173,6 @@ class Experiment(models.Model):
 
     name = models.CharField(max_length=255, unique=True)
     protocol = models.ForeignKey(Protocol, on_delete=models.CASCADE)
-    group_subject = models.CharField(max_length=255, blank=True, null=True)
     date = models.DateField(blank=True, null=True)
     temperature = models.CharField(max_length=255, blank=True, null=True)
     light_cycle = models.CharField(max_length=255, blank=True, null=True)
@@ -198,6 +197,23 @@ class Experiment(models.Model):
         verbose_name_plural = "Experiments"
 
 
+class SessionSubject(models.Model):
+    """
+    Represents a Session subjects in the system.
+
+    Attributes:
+        session (str): The recording Session.
+        subject (Strain): The subjects used during the selected recording session.
+    """
+
+    recording_session = models.ForeignKey(RecordingSession, max_length=255, unique=True)
+    subject = models.ManyToManyField(Subject, on_delete=models.CASCADE)
+
+    class Meta:
+        verbose_name = "SessionSubject"
+        verbose_name_plural = "SessionSubjects"
+
+
 class File(models.Model):
     """
     Represents a file associated with an experiment or subject.
@@ -215,8 +231,8 @@ class File(models.Model):
     """
 
     name = models.CharField(max_length=255, blank=True, null=True)
-    experiment = models.ForeignKey(
-        Experiment, on_delete=models.CASCADE, blank=True, null=True
+    recording_session = models.ForeignKey(
+        RecordingSession, on_delete=models.CASCADE, blank=True, null=True
     )
     subject = models.ForeignKey(
         Subject, on_delete=models.CASCADE, blank=True, null=True
