@@ -1,0 +1,61 @@
+name: 🧹 Code Quality & Build Check
+
+on:
+  # 🔁 Trigger when a PR is opened or updated targeting the main branch
+  pull_request:
+    branches: [main]
+
+  # ✅ Trigger when a commit is merged or pushed directly to the main branch
+  push:
+    branches: [main]
+
+jobs:
+  quality-check:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 📥 1. Checkout the repository
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+
+      # 🐍 2. Set up Python environment
+      - name: 🐍 Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # ⚡ 3. Cache pip dependencies to speed up future builds
+      - name: ⚡ Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/pyproject.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      # 📦 4. Install necessary tools (Ruff, Bandit, and build)
+      - name: 📦 Install dependencies (Ruff, Bandit, build)
+        run: |
+          python -m pip install --upgrade pip
+          pip install bandit ruff build
+
+      # 🎨 5. Check code formatting with Ruff
+      - name: 🎨 Ruff formatting check
+        run: |
+          ruff check .
+          ruff format --check .
+
+      # 🛡️ 6. Run Bandit security scan
+      - name: 🛡️ Bandit security check
+        run: |
+          bandit -r . -x tests
+
+      # 🧪 7. Test installing the package in development mode (force reinstall)
+      - name: 🧪 pip install -e . (force reinstall)
+        run: |
+          pip install --force-reinstall -e .
+
+      # 🏗️ 8. Build the project (testing packaging)
+      - name: 🏗️ Build the project
+        run: |
+          python -m build
