@@ -138,7 +138,7 @@ fi
 
 # Migrations
 echo "🐍 Running Django migrations..."
-python3 manage.py makemigrations --noinput
+python3 manage.py makemigrations mousetube_api --noinput
 python3 manage.py migrate --noinput
 
 # Fixtures (conditional load)
