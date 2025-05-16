@@ -1,17 +1,30 @@
-'''
+"""
 Created by Nicolas Torquet at 27/10/2023
 torquetn@igbmc.fr
 Copyright: CNRS - INSERM - UNISTRA - ICS - IGBMC
 CNRS - Mouse Clinical Institute
 PHENOMIN, CNRS UMR7104, INSERM U964, Université de Strasbourg
 Code under GPL v3.0 licence
-'''
-from django_countries.fields import Country
-from djoser.serializers import UserSerializer
+"""
+
+# from djoser.serializers import UserSerializer
 from rest_framework import serializers
-from rest_framework.serializers import Serializer, FileField
-from .models import *
-from django_countries.serializer_fields import CountryField
+from .models import (
+    Repository,
+    Reference,
+    User,
+    UserProfile,
+    Contact,
+    Hardware,
+    Software,
+    Species,
+    Strain,
+    MetadataCategory,
+    MetadataField,
+    Metadata,
+    Protocol,
+    File,
+)
 
 
 # class CountrySerializer(serializers.Serializer):
@@ -19,33 +32,37 @@ from django_countries.serializer_fields import CountryField
 #     class Meta:
 #         fields = '__all__'
 
+
 class RepositorySerializer(serializers.ModelSerializer):
     class Meta:
         model = Repository
-        fields = '__all__'
+        fields = "__all__"
 
 
 class ReferenceSerializer(serializers.ModelSerializer):
     class Meta:
         model = Reference
-        fields = '__all__'
+        fields = "__all__"
 
 
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = '__all__'
+        fields = "__all__"
+
 
 class UserProfileSerializer(serializers.ModelSerializer):
     user = UserSerializer(read_only=True)
+
     class Meta:
         model = UserProfile
-        fields = '__all__'
+        fields = "__all__"
+
 
 class ContactSerializer(serializers.ModelSerializer):
     class Meta:
         model = Contact
-        fields = '__all__'
+        fields = "__all__"
 
 
 class HardwareSerializer(serializers.ModelSerializer):
@@ -56,7 +73,6 @@ class HardwareSerializer(serializers.ModelSerializer):
         fields = "__all__"
         # extra_kwargs = {'references_and_tutorials': {'required': False},
         #                 'contacts': {'required': False}}
-
 
 
 class SoftwareSerializer(serializers.ModelSerializer):
@@ -70,43 +86,46 @@ class SoftwareSerializer(serializers.ModelSerializer):
         #                 'contacts': {'required': False}}
 
 
-
 class SpeciesSerializer(serializers.ModelSerializer):
     class Meta:
         model = Species
-        fields = '__all__'
+        fields = "__all__"
 
 
 class StrainSerializer(serializers.ModelSerializer):
     class Meta:
         model = Strain
-        fields = '__all__'
+        fields = "__all__"
 
 
 class MetadataCategorySerializer(serializers.ModelSerializer):
     class Meta:
         model = MetadataCategory
-        fields = '__all__'
+        fields = "__all__"
+
 
 class MetadataFieldSerializer(serializers.ModelSerializer):
     metadata_category = MetadataCategorySerializer(many=True, required=False)
+
     class Meta:
         model = MetadataField
-        fields = '__all__'
+        fields = "__all__"
+
 
 class MetadataSerializer(serializers.ModelSerializer):
     metadata_field = MetadataFieldSerializer(many=True, required=False)
+
     class Meta:
         model = Metadata
-        fields = '__all__'
+        fields = "__all__"
 
 
 class ProtocolSerializer(serializers.ModelSerializer):
     protocol_keywords = MetadataSerializer(many=True, required=False)
+
     class Meta:
         model = Protocol
-        fields = '__all__'
-
+        fields = "__all__"
 
 
 class FileSerializer(serializers.ModelSerializer):
@@ -117,13 +136,15 @@ class FileSerializer(serializers.ModelSerializer):
     strains = StrainSerializer(many=True, required=False)
     protocol = ProtocolSerializer(required=False)
     created_by = UserProfileSerializer(required=False)
+
     class Meta:
         model = File
-        fields = '__all__'
+        fields = "__all__"
 
 
 class ProtocolMetadataSerializer(serializers.ModelSerializer):
     metadata_field = MetadataFieldSerializer(many=True)
+
     class Meta:
         model = Metadata
-        fields = '__all__'
+        fields = "__all__"
