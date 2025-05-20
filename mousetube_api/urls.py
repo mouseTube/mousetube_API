@@ -29,8 +29,7 @@ from rest_framework.routers import DefaultRouter
 from .views import (
     RepositoryViewSet,
     ReferenceViewSet,
-    ContactViewSet,
-    UserViewSet,
+    LegacyUserViewSet,
     UserProfileViewSet,
     SpeciesViewSet,
     StrainViewSet,
@@ -51,8 +50,7 @@ router = DefaultRouter()
 # router.register('country', CountryViewSet, basename='country')
 router.register("repository", RepositoryViewSet, basename="repository")
 router.register("reference", ReferenceViewSet, basename="reference")
-router.register("contact", ContactViewSet, basename="contact")
-router.register("user", UserViewSet, basename="user")
+router.register("legacy_user", LegacyUserViewSet, basename="legacy_user")
 router.register("user_profile", UserProfileViewSet, basename="user_profile")
 router.register("species", SpeciesViewSet, basename="species")
 router.register("strain", StrainViewSet, basename="strain")

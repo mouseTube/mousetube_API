@@ -1,0 +1,12 @@
+{
+    "title": "Species",
+    "description": "Represents a biological species.",
+    "type": "object",
+    "required": ["name"],
+    "properties": {
+      "name": {
+        "description": "Scientific or common name of the species.",
+        "type": "string"
+      }
+    }
+  }

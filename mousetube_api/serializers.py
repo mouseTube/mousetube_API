@@ -12,9 +12,8 @@ from rest_framework import serializers
 from .models import (
     Repository,
     Reference,
-    User,
+    LegacyUser,
     UserProfile,
-    Contact,
     Hardware,
     Software,
     Species,
@@ -47,7 +46,7 @@ class ReferenceSerializer(serializers.ModelSerializer):
 
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
-        model = User
+        model = LegacyUser
         fields = "__all__"
 
 
@@ -56,12 +55,6 @@ class UserProfileSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = UserProfile
-        fields = "__all__"
-
-
-class ContactSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Contact
         fields = "__all__"
 
 
@@ -76,8 +69,8 @@ class HardwareSerializer(serializers.ModelSerializer):
 
 
 class SoftwareSerializer(serializers.ModelSerializer):
-    references_and_tutorials = ReferenceSerializer(many=True, required=False)
-    contacts = ContactSerializer(many=True, required=False)
+    references = ReferenceSerializer(many=True, required=False)
+    users = UserSerializer(many=True, required=False)
 
     class Meta:
         model = Software

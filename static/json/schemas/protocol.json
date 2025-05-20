@@ -18,7 +18,7 @@
 				},
 				"age": {
 					"description": "age of the animal(s) recorded",
-					"type": "str",
+					"type": "string",
 					"enum": [
 						"pup",
 						"juvenile",
@@ -27,13 +27,17 @@
 				},
 				"housing": {
 					"description": "housing condition of the animal(s) before the recording",
-					"type": "str",
+					"type": "string",
 					"enum": [
 						"grouped",
 						"isolated",
 						"grouped & isolated"
 					]
-				}
+				},
+				"species": {
+						"description": "species of the animal(s) recorded",
+						"type": "string"
+						}
 			}
 		},
 		"context": {
@@ -47,23 +51,36 @@
 				},
 				"duration": {
 					"description": "duration of the recording",
-					"type": "str",
+					"type": "string",
 					"enum": ["short term (<1h)", "mid term (<1day)", "long term (>=1day)"]
 				},
 				"cage": {
 					"description": "type of recording cage",
-					"type": "str",
+					"type": "string",
 					"enum": ["unfamiliar test cage", "familiar test cage", "home cage"]
 				},
 				"bedding": {
 					"description": "presence of bedding during recording",
-					"type": "str",
+					"type": "string",
 					"enum": ["bedding", "no bedding"]
 				},
-				"time": {
+				"light_cycle": {
 					"description": "time of the day or night (for the animal) during recording",
-					"type": "str",
+					"type": "string",
 					"enum": ["day cycle", "night cycle"]
+				},
+				"temperature": {
+					"properties": {
+						"value": {
+							"description": "value of the temperature",
+							"type": "float"
+						},
+						"unit": {
+							"description": "unit of the temperature",
+							"type": "string",
+							"enum": ["°C", "°F"]
+						}
+					}
 				}
 			}
 		},
@@ -71,6 +88,18 @@
 			"description": "equipment specificities used for the recording",
 			"type": "object",
 			"properties": {
+				"microphone": {
+					"description": "Microphone model or type used in this protocol.",
+					"type": "string"
+				},
+				"acquisition_hardware": {
+					"description": "Hardware used for audio acquisition in this protocol.",
+					"type": "string"
+				},
+				"acquisition_software": {
+					"description": "Software used to record audio in this protocol.",
+					"type": "string"
+				},
 				"channels": {
 					"description": "number of microphones used for recording",
 					"type": "string",

@@ -11,10 +11,9 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import viewsets
 from .models import (
-    Contact,
     Repository,
     Reference,
-    User,
+    LegacyUser,
     UserProfile,
     Software,
     Hardware,
@@ -35,7 +34,6 @@ from .serializers import (
     SoftwareSerializer,
     RepositorySerializer,
     ReferenceSerializer,
-    ContactSerializer,
     UserSerializer,
     UserProfileSerializer,
 )
@@ -58,13 +56,8 @@ class ReferenceViewSet(viewsets.ModelViewSet):
     serializer_class = ReferenceSerializer
 
 
-class ContactViewSet(viewsets.ModelViewSet):
-    queryset = Contact.objects.all()
-    serializer_class = ContactSerializer
-
-
-class UserViewSet(viewsets.ModelViewSet):
-    queryset = User.objects.all()
+class LegacyUserViewSet(viewsets.ModelViewSet):
+    queryset = LegacyUser.objects.all()
     serializer_class = UserSerializer
 
 

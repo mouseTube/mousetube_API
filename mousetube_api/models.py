@@ -12,16 +12,55 @@ from django.conf import settings
 from django_countries.fields import CountryField
 
 
-def get_display(key, list):
-    d = dict(list)
-    if key in d:
-        return d[key]
-    return None
-
-
-class User(models.Model):
+class UserProfile(models.Model):
     """
-    Represents a user of the system.
+    Extended profile information for a user.
+
+    Fields:
+        user (OneToOneField): Linked user account.
+        description (TextField): Optional textual description of the user.
+        phone (CharField): Contact phone number.
+        unit (CharField): Organizational unit or department.
+        institution (CharField): Institution name (e.g., university, company).
+        address (CharField): Physical address of the user.
+        country (CountryField): Country of the user.
+        orcid (CharField): ORCID researcher identifier.
+        administrator (BooleanField): Whether the user has admin privileges.
+        date_joined (DateTimeField): Timestamp when the profile was created.
+        modified_at (DateTimeField): Last modification timestamp.
+        created_by (ForeignKey): User who created this profile.
+    """
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        related_name="user_profile",
+        on_delete=models.SET_NULL,
+    )
+    description = models.TextField(blank=True, null=True)
+    phone = models.CharField(max_length=255, blank=True, null=True)
+    unit = models.CharField(max_length=255, blank=True, null=True)
+    institution = models.CharField(max_length=255, blank=True, null=True)
+    address = models.CharField(max_length=255, blank=True, null=True)
+    country = CountryField(blank=True, null=True)
+    orcid = models.CharField(max_length=255, blank=True, null=True)
+    administrator = models.BooleanField(blank=True, null=True)
+    date_joined = models.DateTimeField(auto_now_add=True, null=True)
+
+    modified_at = models.DateTimeField(auto_now=True, null=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        related_name="userprofile_created_by",
+        on_delete=models.SET_NULL,
+    )  # who entered the info in the database
+
+    def __str__(self):
+        return self.user.username
+
+
+class LegacyUser(models.Model):
+    """
+    Represents a user of the last system.
 
     Attributes:
         name_user (str): The last name of the user.
@@ -51,6 +90,133 @@ class User(models.Model):
         return f"{self.first_name_user} {self.name_user}"
 
 
+
+class MetadataCategory(models.Model):
+    """
+    Category used to organize metadata fields hierarchically.
+
+    Fields:
+        name (CharField): Name of the category.
+        description (TextField): Optional description of the category.
+        parents (ManyToManyField): Parent categories for nested structure.
+        created_at (DateTimeField): Timestamp when the category was created.
+        modified_at (DateTimeField): Last modification timestamp.
+        created_by (ForeignKey): User who created the category.
+    """
+    name = models.CharField(max_length=255, unique=True)
+    description = models.TextField(blank=True, null=True)
+    parents = models.ManyToManyField("self", symmetrical=False, related_name="children")
+    created_at = models.DateTimeField(auto_now_add=True)
+    modified_at = models.DateTimeField(auto_now=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        related_name="metadata_category_created_by",
+        on_delete=models.SET_NULL,
+    )
+
+    def __str__(self):
+        return self.name
+
+    class Meta:
+        verbose_name = "Metadata category"
+        verbose_name_plural = "Metadata categories"
+
+
+class MetadataField(models.Model):
+    """
+    Field used to store a single metadata attribute.
+
+    Fields:
+        name (CharField): Name of the metadata field.
+        description (TextField): Optional description of the field.
+        metadata_category (ManyToManyField): Categories this field belongs to.
+        created_at (DateTimeField): Timestamp when the field was created.
+        modified_at (DateTimeField): Last modification timestamp.
+        created_by (ForeignKey): User who created the field.
+    """
+    name = models.CharField(max_length=255, unique=True)
+    description = models.TextField(blank=True, null=True)
+    metadata_category = models.ManyToManyField(
+        MetadataCategory, blank=True, related_name="metadatafield_categories"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    modified_at = models.DateTimeField(auto_now=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        related_name="metadata_field_created_by",
+        on_delete=models.SET_NULL,
+    )
+
+    def __str__(self):
+        return self.name
+
+    class Meta:
+        verbose_name = "Metadata Field"
+        verbose_name_plural = "Metadata Fields"
+
+
+class Metadata(models.Model):
+    """
+    A set of metadata fields grouped under a name.
+
+    Fields:
+        metadata_field (ForeignKey): Fields included in this metadata.
+        value (JSONField): JSON representation of the metadata values.
+        created_at (DateTimeField): Timestamp when the metadata was created.
+        modified_at (DateTimeField): Last modification timestamp.
+        created_by (ForeignKey): User who created the metadata.
+    """
+    metadata_field = models.ForeignKey(
+        MetadataField, null=True, related_name="metadata_field", on_delete=models.CASCADE
+    )
+    value = models.JSONField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    modified_at = models.DateTimeField(auto_now=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        related_name="metadata_created_by",
+        on_delete=models.SET_NULL,
+    )
+
+    def __str__(self):
+        return self.value
+
+    class Meta:
+        verbose_name = "Metadata"
+        verbose_name_plural = "Metadata"
+
+
+class Species(models.Model):
+    """
+    Represents a biological species relevant to the data.
+
+    Fields:
+        name (CharField): Scientific or common name of the species.
+        created_at (DateTimeField): Timestamp when the species entry was created.
+        modified_at (DateTimeField): Last modification timestamp.
+        created_by (ForeignKey): User who created the species entry.
+    """
+    name = models.CharField(max_length=255, unique=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    modified_at = models.DateTimeField(auto_now=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        related_name="species_created_by",
+        on_delete=models.SET_NULL,
+    )
+
+    def __str__(self):
+        return self.name
+
+    class Meta:
+        verbose_name = "Species"
+        verbose_name_plural = "Species"
+
+
 class Strain(models.Model):
     """
     Represents a strain of a mouse.
@@ -58,12 +224,25 @@ class Strain(models.Model):
     Attributes:
         name (str): The name of the strain.
         background (str): The genetic background of the strain.
+        species (Species): The species associated with the strain.
         bibliography (str, optional): Bibliographical references related to the strain.
+        created_at (DateTimeField): Timestamp when the species entry was created.
+        modified_at (DateTimeField): Last modification timestamp.
+        created_by (ForeignKey): User who created the species entry.
     """
 
     name = models.CharField(max_length=255, unique=True)
     background = models.CharField(max_length=255)
+    species = models.ForeignKey(Species, on_delete=models.CASCADE, null=True)
     bibliography = models.TextField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True, null=True)
+    modified_at = models.DateTimeField(auto_now=True, null=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        related_name="strain_created_by",
+        on_delete=models.SET_NULL,
+    )
 
     def __str__(self):
         """
@@ -91,7 +270,7 @@ class Subject(models.Model):
         group (str, optional): The group the subject belongs to.
         genotype (str, optional): The genotype of the subject.
         treatment (str, optional): The treatment applied to the subject.
-        user (User): The user associated with the subject.
+        user (LegacyUser): The user associated with the subject.
     """
 
     SEX_CHOICES = [
@@ -106,7 +285,7 @@ class Subject(models.Model):
     group = models.CharField(max_length=255, blank=True, null=True)
     genotype = models.CharField(max_length=255, blank=True, null=True)
     treatment = models.CharField(max_length=255, blank=True, null=True)
-    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    user = models.ForeignKey(LegacyUser, on_delete=models.CASCADE)
 
     def __str__(self):
         """
@@ -130,13 +309,16 @@ class Protocol(models.Model):
         name (str): The name of the protocol.
         number_files (int, optional): The number of files associated with the protocol.
         description (str): A description of the protocol.
-        user (User): The user associated with the protocol.
+        user (LegacyUser): The user associated with the protocol.
     """
 
     name = models.CharField(max_length=255)
     number_files = models.IntegerField(blank=True, null=True)
     description = models.TextField(default="")
-    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    user = models.ForeignKey(LegacyUser, on_delete=models.CASCADE)
+    metadata = models.ManyToManyField(
+        Metadata, related_name="protocol_metadata", blank=True
+    )
 
     def __str__(self):
         """
@@ -159,15 +341,7 @@ class RecordingSession(models.Model):
     Attributes:
         name (str): The name of the experiment.
         protocol (Protocol): The protocol associated with the experiment.
-        group_subject (str, optional): The group of subjects involved in the experiment.
         date (date, optional): The date of the experiment.
-        temperature (str, optional): The temperature during the experiment.
-        light_cycle (str, optional): The light cycle during the experiment.
-        microphone (str, optional): The microphone used in the experiment.
-        acquisition_hardware (str, optional): The hardware used for acquisition.
-        acquisition_software (str, optional): The software used for acquisition.
-        sampling_rate (float, optional): The sampling rate of the data.
-        bit_depth (float, optional): The bit depth of the data.
         laboratory (str, optional): The laboratory where the experiment was conducted.
     """
 
@@ -197,7 +371,7 @@ class RecordingSession(models.Model):
         verbose_name_plural = "Experiments"
 
 
-class SessionSubject(models.Model):
+class SubjectSession(models.Model):
     """
     Represents a Session subjects in the system.
 
@@ -206,8 +380,8 @@ class SessionSubject(models.Model):
         subject (Strain): The subjects used during the selected recording session.
     """
 
-    recording_session = models.ForeignKey(RecordingSession, max_length=255, unique=True)
-    subject = models.ManyToManyField(Subject, on_delete=models.CASCADE)
+    recording_session = models.ForeignKey(RecordingSession, on_delete=models.CASCADE)
+    subject = models.ForeignKey(Subject, on_delete=models.CASCADE)
 
     class Meta:
         verbose_name = "SessionSubject"
@@ -221,12 +395,11 @@ class File(models.Model):
     Attributes:
         experiment (Experiment, optional): The experiment associated with the file.
         subject (Subject, optional): The subject associated with the file.
-        number (int, optional): The number of the file.
         link (str, optional): The URL link to the file.
         notes (str, optional): Notes about the file.
         doi (str, optional): The DOI of the file.
         is_valid_link (bool): Whether the link is valid.
-        donwloads (int): The number of downloads for the file.
+        downloads (int): The number of downloads for the file.
         spectrogram_image (str, optional): The path to the spectrogram image associated with the file.
     """
 
@@ -237,7 +410,6 @@ class File(models.Model):
     subject = models.ForeignKey(
         Subject, on_delete=models.CASCADE, blank=True, null=True
     )
-    number = models.IntegerField(blank=True, null=True)
     link = models.URLField(blank=True, null=True)
     notes = models.TextField(blank=True, null=True)
     doi = models.CharField(max_length=255, blank=True, null=True)
@@ -259,33 +431,6 @@ class File(models.Model):
     class Meta:
         verbose_name = "File"
         verbose_name_plural = "Files"
-
-
-class PageView(models.Model):
-    """
-    Represents a page view for tracking purposes.
-
-    Attributes:
-        path (str): The path of the page.
-        date (date): The date of the page view.
-        count (int): The number of views for the page on the given date.
-    """
-
-    path = models.CharField(max_length=255)
-    date = models.DateField(auto_now_add=True)
-    count = models.PositiveIntegerField(default=0)
-
-    class Meta:
-        unique_together = ("path", "date")
-
-    def __str__(self):
-        """
-        Returns a string representation of the page view.
-
-        Returns:
-            str: The path, date, and count of the page view.
-        """
-        return f"{self.path} - {self.date} ({self.count})"
 
 
 class Reference(models.Model):
@@ -348,7 +493,7 @@ class Software(models.Model):
     description = models.TextField(default="", blank=True)
     technical_requirements = models.TextField(default="", blank=True)
     references = models.ManyToManyField(Reference, related_name="software", blank=True)
-    users = models.ManyToManyField(User, related_name="software_to_user", blank=True)
+    users = models.ManyToManyField(LegacyUser, related_name="software_to_user", blank=True)
 
     def __str__(self):
         return self.name
@@ -358,94 +503,20 @@ class Software(models.Model):
         verbose_name_plural = "Software"
 
 
-# ####################
-# ####################
-# ####################
-
-
-class UserProfile(models.Model):
-    user = models.OneToOneField(
-        settings.AUTH_USER_MODEL,
-        null=True,
-        related_name="user_profile",
-        on_delete=models.SET_NULL,
-    )
-    description = models.TextField(blank=True, null=True)
-    phone = models.CharField(max_length=255, blank=True, null=True)
-    unit = models.CharField(max_length=255, blank=True, null=True)
-    institution = models.CharField(max_length=255, blank=True, null=True)
-    address = models.CharField(max_length=255, blank=True, null=True)
-    country = CountryField(blank=True, null=True)
-    orcid = models.CharField(max_length=255, blank=True, null=True)
-    administrator = models.BooleanField(blank=True, null=True)
-    date_joined = models.DateTimeField(auto_now_add=True, null=True)
-
-    modified_at = models.DateTimeField(auto_now=True, null=True)
-    created_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        null=True,
-        related_name="userprofile_created_by",
-        on_delete=models.SET_NULL,
-    )  # who entered the info in the database
-
-    def __str__(self):
-        return self.user.username
-
-
-class Contact(models.Model):
-    firstname = models.CharField(max_length=255, blank=True, null=True)
-    lastname = models.CharField(max_length=255, blank=True, null=True)
-    email = models.EmailField(max_length=255, blank=True, null=True)
-    user = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        null=True,
-        related_name="contact_user_profile",
-        on_delete=models.SET_NULL,
-    )
-
-    created_at = models.DateTimeField(auto_now_add=True, null=True)
-    modified_at = models.DateTimeField(auto_now=True, null=True)
-    created_by = models.ForeignKey(
-        User, null=True, related_name="contact_created_by", on_delete=models.SET_NULL
-    )  # who entered the info in the database
-
-    def __str__(self):
-        if self.firstname and self.lastname:
-            return self.firstname + " " + self.lastname
-        else:
-            return self.email
-
-    class Meta:
-        verbose_name = "Contact"
-        verbose_name_plural = "Contacts"
-
-
-class Repository(models.Model):
-    name = models.CharField(max_length=255)
-    description = models.TextField(blank=True, null=True)
-    logo = models.ImageField(blank=True, null=True, upload_to="logo")
-    area = CountryField(blank=True, null=True)
-    url = models.URLField(blank=True, null=True)
-    url_api = models.URLField(blank=True, null=True)
-
-    created_at = models.DateTimeField(auto_now_add=True, null=True)
-    modified_at = models.DateTimeField(auto_now=True, null=True)
-    created_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        null=True,
-        related_name="repository_created_by",
-        on_delete=models.SET_NULL,
-    )  # who entered the info in the database
-
-    def __str__(self):
-        return self.name
-
-    class Meta:
-        verbose_name = "Repository"
-        verbose_name_plural = "Repositories"
-
-
 class Hardware(models.Model):
+    """
+    Describes a hardware component used in data collection or playback.
+
+    Fields:
+        name (CharField): Name of the hardware.
+        type (CharField): Type of hardware (microphone, speaker, etc.).
+        made_by (TextField): Manufacturer or source of the hardware.
+        description (TextField): Optional details about the hardware.
+        references (ManyToManyField): References or publications related to the hardware.
+        created_at (DateTimeField): Timestamp when the hardware record was created.
+        modified_at (DateTimeField): Last modification timestamp.
+        created_by (ForeignKey): User who created the hardware record.
+    """
     CHOICES_HARDWARE = (
         ("soundcard", "soundcard"),
         ("microphone", "microphone"),
@@ -470,7 +541,7 @@ class Hardware(models.Model):
         null=True,
         related_name="hardware_created_by",
         on_delete=models.SET_NULL,
-    )  # who entered the info in the database
+    )
 
     def __str__(self):
         return self.name
@@ -480,35 +551,34 @@ class Hardware(models.Model):
         verbose_name_plural = "Hardware"
 
 
-class Species(models.Model):
-    name = models.CharField(max_length=255, unique=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    modified_at = models.DateTimeField(auto_now=True)
-    created_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        null=True,
-        related_name="species_created_by",
-        on_delete=models.SET_NULL,
-    )  # who entered the info in the database
+class Repository(models.Model):
+    """
+    Represents an external or internal data repository.
 
-    def __str__(self):
-        return self.name
-
-    class Meta:
-        verbose_name = "Species"
-        verbose_name_plural = "Species"
-
-
-class MetadataCategory(models.Model):
-    name = models.CharField(max_length=255, unique=True)
+    Fields:
+        name (CharField): Repository name.
+        description (TextField): Optional description of the repository.
+        logo (ImageField): Optional logo image.
+        area (CountryField): Country or region associated with the repository.
+        url (URLField): Main URL of the repository.
+        url_api (URLField): URL to the repository's API endpoint.
+        created_at (DateTimeField): Timestamp when the repository was created.
+        modified_at (DateTimeField): Last modification timestamp.
+        created_by (ForeignKey): User who created the repository record.
+    """
+    name = models.CharField(max_length=255)
     description = models.TextField(blank=True, null=True)
-    parents = models.ManyToManyField("self", symmetrical=False, related_name="children")
-    created_at = models.DateTimeField(auto_now_add=True)
-    modified_at = models.DateTimeField(auto_now=True)
+    logo = models.ImageField(blank=True, null=True, upload_to="logo")
+    area = CountryField(blank=True, null=True)
+    url = models.URLField(blank=True, null=True)
+    url_api = models.URLField(blank=True, null=True)
+
+    created_at = models.DateTimeField(auto_now_add=True, null=True)
+    modified_at = models.DateTimeField(auto_now=True, null=True)
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         null=True,
-        related_name="metadata_category_created_by",
+        related_name="repository_created_by",
         on_delete=models.SET_NULL,
     )
 
@@ -516,56 +586,25 @@ class MetadataCategory(models.Model):
         return self.name
 
     class Meta:
-        verbose_name = "Metadata category"
-        verbose_name_plural = "Metadata categories"
-
-
-class MetadataField(models.Model):
-    name = models.CharField(max_length=255, unique=True)
-    description = models.TextField(blank=True, null=True)
-    metadata_category = models.ManyToManyField(
-        MetadataCategory, blank=True, related_name="metadatafield_categories"
-    )
-    created_at = models.DateTimeField(auto_now_add=True)
-    modified_at = models.DateTimeField(auto_now=True)
-    created_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        null=True,
-        related_name="metadata_field_created_by",
-        on_delete=models.SET_NULL,
-    )
-
-    def __str__(self):
-        return self.name
-
-    class Meta:
-        verbose_name = "Metadata Field"
-        verbose_name_plural = "Metadata Fields"
-
-
-class Metadata(models.Model):
-    name = models.CharField(max_length=255, unique=True)
-    metadata_field = models.ManyToManyField(
-        MetadataField, blank=True, related_name="metadata_field"
-    )
-    created_at = models.DateTimeField(auto_now_add=True)
-    modified_at = models.DateTimeField(auto_now=True)
-    created_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        null=True,
-        related_name="metadata_created_by",
-        on_delete=models.SET_NULL,
-    )
-
-    def __str__(self):
-        return self.name
-
-    class Meta:
-        verbose_name = "Metadata"
-        verbose_name_plural = "Metadata"
+        verbose_name = "Repository"
+        verbose_name_plural = "Repositories"
 
 
 class Dataset(models.Model):
+    """
+    A collection of files grouped together with associated metadata.
+
+    Fields:
+        name (CharField): Name of the dataset.
+        list_files (ManyToManyField): Files included in the dataset.
+        link (CharField): External link or identifier for the dataset.
+        doi (CharField): DOI of the dataset, if applicable.
+        metadata_json (JSONField): Free-form metadata in JSON format.
+        metadata (ManyToManyField): Structured metadata linked to the dataset.
+        created_at (DateTimeField): Timestamp when the dataset was created.
+        modified_at (DateTimeField): Last modification timestamp.
+        created_by (ForeignKey): User who created the dataset.
+    """
     name = models.CharField(max_length=255)
     list_files = models.ManyToManyField(
         File, related_name="file_in_dataset", blank=True
@@ -584,7 +623,7 @@ class Dataset(models.Model):
         null=True,
         related_name="dataset_created_by",
         on_delete=models.SET_NULL,
-    )  # who entered the info in the database
+    )
 
     def __str__(self):
         return self.name
@@ -592,3 +631,31 @@ class Dataset(models.Model):
     class Meta:
         verbose_name = "Dataset"
         verbose_name_plural = "Datasets"
+
+
+class PageView(models.Model):
+    """
+    Represents a page view for tracking purposes.
+
+    Attributes:
+        path (str): The path of the page.
+        date (date): The date of the page view.
+        count (int): The number of views for the page on the given date.
+    """
+
+    path = models.CharField(max_length=255)
+    date = models.DateField(auto_now_add=True)
+    count = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        unique_together = ("path", "date")
+
+    def __str__(self):
+        """
+        Returns a string representation of the page view.
+
+        Returns:
+            str: The path, date, and count of the page view.
+        """
+        return f"{self.path} - {self.date} ({self.count})"
+

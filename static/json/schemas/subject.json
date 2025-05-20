@@ -1,0 +1,33 @@
+{
+    "title": "Subject",
+    "description": "Metadata schema describing an experimental subject (e.g., mouse).",
+    "type": "object",
+    "required": ["name", "strain"],
+    "properties": {
+      "name": {
+        "description": "Unique name or identifier for the subject.",
+        "type": "string"
+      },
+      "origin": {
+        "description": "Origin of the subject (e.g., vendor, lab).",
+        "type": "string"
+      },
+      "sex": {
+        "description": "Sex of the subject.",
+        "type": "string",
+        "enum": ["male", "female"]
+      },
+      "group": {
+        "description": "Experimental group or cohort the subject belongs to.",
+        "type": "string"
+      },
+      "genotype": {
+        "description": "Genotype information for the subject.",
+        "type": "string"
+      },
+      "treatment": {
+        "description": "Treatment(s) applied to the subject, if any.",
+        "type": "string"
+      }
+    }
+  }

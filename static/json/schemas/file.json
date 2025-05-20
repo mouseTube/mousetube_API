@@ -1,0 +1,36 @@
+{
+    "title": "File",
+    "description": "Metadata for a single audio recording file.",
+    "type": "object",
+    "properties": {
+      "filename": {
+        "description": "Name of the audio file.",
+        "type": "string"
+      },
+      "date": {
+        "description": "Date when the recording was made (ISO format).",
+        "type": "string",
+        "format": "date"
+      },
+      "sampling_rate": {
+        "description": "Sampling rate of the recording in Hz (e.g., 250000).",
+        "type": "number",
+        "minimum": 1
+      },
+      "bit_depth": {
+        "description": "Bit depth of the recording (e.g., 16, 24).",
+        "type": "number",
+        "enum": [8, 16, 24, 32]
+      },
+      "laboratory": {
+        "description": "Name or identifier of the laboratory where the recording was performed.",
+        "type": "string"
+      },
+      
+      "notes": {
+        "description": "Optional notes about this specific file.",
+        "type": "string"
+      }
+    },
+    "required": ["sampling_rate", "bit_depth", "date", "laboratory", "filename"]
+  }

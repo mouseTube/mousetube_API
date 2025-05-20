@@ -11,7 +11,7 @@ from django.contrib import admin
 
 from .models import (
     UserProfile,
-    Contact,
+    LegacyUser,
     Repository,
     Reference,
     Species,
@@ -27,7 +27,7 @@ from .models import (
 )
 
 admin.site.register(UserProfile)
-admin.site.register(Contact)
+admin.site.register(LegacyUser)
 admin.site.register(Repository)
 admin.site.register(Reference)
 admin.site.register(Species)

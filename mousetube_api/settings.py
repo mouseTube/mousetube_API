@@ -103,6 +103,7 @@ INSTALLED_APPS = [
     "django_celery_results",
     "celery_progress",
     "drf_spectacular",
+    "django_extensions",
 ]
 
 MIDDLEWARE = [
@@ -151,7 +152,13 @@ DATABASES = {
         "PASSWORD": env("DB_PASSWORD", default=""),
         "HOST": env("DB_HOST", default="127.0.0.1"),
         "PORT": "3306" if IS_DOCKER else env("DB_PORT", default="3306"),
-        "OPTIONS": {"ssl": env.bool("DB_SSL", default=False)},
+        "OPTIONS": {} if not env.bool("DB_SSL", default=False) else {
+            "ssl": {
+                "ca": env("DB_SSL_CA", default=None),
+                "cert": env("DB_SSL_CERT", default=None),
+                "key": env("DB_SSL_KEY", default=None),
+            }
+        }
     }
 }
 

@@ -1,0 +1,20 @@
+{
+    "title": "Strain",
+    "description": "Represents a mouse strain.",
+    "type": "object",
+    "required": ["name", "background", "species"],
+    "properties": {
+      "name": {
+        "description": "Name of the strain.",
+        "type": "string"
+      },
+      "background": {
+        "description": "Genetic background of the strain.",
+        "type": "string"
+      },
+      "bibliography": {
+        "description": "Bibliographical references related to the strain.",
+        "type": "string"
+      }
+    }
+  }
