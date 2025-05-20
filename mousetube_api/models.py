@@ -30,6 +30,7 @@ class UserProfile(models.Model):
         modified_at (DateTimeField): Last modification timestamp.
         created_by (ForeignKey): User who created this profile.
     """
+
     user = models.OneToOneField(
         settings.AUTH_USER_MODEL,
         null=True,
@@ -90,7 +91,6 @@ class LegacyUser(models.Model):
         return f"{self.first_name_user} {self.name_user}"
 
 
-
 class MetadataCategory(models.Model):
     """
     Category used to organize metadata fields hierarchically.
@@ -103,6 +103,7 @@ class MetadataCategory(models.Model):
         modified_at (DateTimeField): Last modification timestamp.
         created_by (ForeignKey): User who created the category.
     """
+
     name = models.CharField(max_length=255, unique=True)
     description = models.TextField(blank=True, null=True)
     parents = models.ManyToManyField("self", symmetrical=False, related_name="children")
@@ -135,6 +136,7 @@ class MetadataField(models.Model):
         modified_at (DateTimeField): Last modification timestamp.
         created_by (ForeignKey): User who created the field.
     """
+
     name = models.CharField(max_length=255, unique=True)
     description = models.TextField(blank=True, null=True)
     metadata_category = models.ManyToManyField(
@@ -168,8 +170,12 @@ class Metadata(models.Model):
         modified_at (DateTimeField): Last modification timestamp.
         created_by (ForeignKey): User who created the metadata.
     """
+
     metadata_field = models.ForeignKey(
-        MetadataField, null=True, related_name="metadata_field", on_delete=models.CASCADE
+        MetadataField,
+        null=True,
+        related_name="metadata_field",
+        on_delete=models.CASCADE,
     )
     value = models.JSONField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -199,6 +205,7 @@ class Species(models.Model):
         modified_at (DateTimeField): Last modification timestamp.
         created_by (ForeignKey): User who created the species entry.
     """
+
     name = models.CharField(max_length=255, unique=True)
     created_at = models.DateTimeField(auto_now_add=True)
     modified_at = models.DateTimeField(auto_now=True)
@@ -493,7 +500,9 @@ class Software(models.Model):
     description = models.TextField(default="", blank=True)
     technical_requirements = models.TextField(default="", blank=True)
     references = models.ManyToManyField(Reference, related_name="software", blank=True)
-    users = models.ManyToManyField(LegacyUser, related_name="software_to_user", blank=True)
+    users = models.ManyToManyField(
+        LegacyUser, related_name="software_to_user", blank=True
+    )
 
     def __str__(self):
         return self.name
@@ -517,6 +526,7 @@ class Hardware(models.Model):
         modified_at (DateTimeField): Last modification timestamp.
         created_by (ForeignKey): User who created the hardware record.
     """
+
     CHOICES_HARDWARE = (
         ("soundcard", "soundcard"),
         ("microphone", "microphone"),
@@ -566,6 +576,7 @@ class Repository(models.Model):
         modified_at (DateTimeField): Last modification timestamp.
         created_by (ForeignKey): User who created the repository record.
     """
+
     name = models.CharField(max_length=255)
     description = models.TextField(blank=True, null=True)
     logo = models.ImageField(blank=True, null=True, upload_to="logo")
@@ -605,6 +616,7 @@ class Dataset(models.Model):
         modified_at (DateTimeField): Last modification timestamp.
         created_by (ForeignKey): User who created the dataset.
     """
+
     name = models.CharField(max_length=255)
     list_files = models.ManyToManyField(
         File, related_name="file_in_dataset", blank=True
@@ -658,4 +670,3 @@ class PageView(models.Model):
             str: The path, date, and count of the page view.
         """
         return f"{self.path} - {self.date} ({self.count})"
-
