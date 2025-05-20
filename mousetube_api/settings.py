@@ -104,6 +104,7 @@ INSTALLED_APPS = [
     "celery_progress",
     "drf_spectacular",
     "django_extensions",
+    "django_countries",
 ]
 
 MIDDLEWARE = [
