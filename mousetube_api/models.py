@@ -10,6 +10,9 @@
 from django.db import models
 from django.conf import settings
 from django_countries.fields import CountryField
+from django.contrib.contenttypes.models import ContentType
+from django.contrib.contenttypes.fields import GenericForeignKey
+from django.contrib.contenttypes.fields import GenericRelation
 
 
 class UserProfile(models.Model):
@@ -162,9 +165,12 @@ class Metadata(models.Model):
         on_delete=models.CASCADE,
     )
     value = models.JSONField(blank=True, null=True)
+    content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
+    object_id = models.PositiveIntegerField()
+    content_object = GenericForeignKey("content_type", "object_id")
 
     def __str__(self):
-        return self.value
+        return f"{self.metadata_field.name}: {self.value}"
 
     class Meta:
         verbose_name = "Metadata"
@@ -183,9 +189,7 @@ class Species(models.Model):
     """
 
     name = models.CharField(max_length=255, unique=True)
-    metadata = models.ManyToManyField(
-        Metadata, related_name="species_metadata", blank=True
-    ),
+    metadata = GenericRelation(Metadata)
     created_at = models.DateTimeField(auto_now_add=True)
     modified_at = models.DateTimeField(auto_now=True)
     created_by = models.ForeignKey(
@@ -221,9 +225,7 @@ class Strain(models.Model):
     background = models.CharField(max_length=255)
     species = models.ForeignKey(Species, on_delete=models.CASCADE, null=True)
     bibliography = models.TextField(blank=True, null=True)
-    metadata = models.ManyToManyField(
-        Metadata, related_name="strain_metadata", blank=True
-    ),
+    metadata = GenericRelation(Metadata)
     created_at = models.DateTimeField(auto_now_add=True, null=True)
     modified_at = models.DateTimeField(auto_now=True, null=True)
     created_by = models.ForeignKey(
@@ -274,9 +276,7 @@ class Subject(models.Model):
     group = models.CharField(max_length=255, blank=True, null=True)
     genotype = models.CharField(max_length=255, blank=True, null=True)
     treatment = models.CharField(max_length=255, blank=True, null=True)
-    metadata = models.ManyToManyField(
-        Metadata, related_name="subject_metadata", blank=True
-    ),
+    metadata = GenericRelation(Metadata)
     user = models.ForeignKey(LegacyUser, on_delete=models.CASCADE)
 
     def __str__(self):
@@ -308,9 +308,7 @@ class Protocol(models.Model):
     number_files = models.IntegerField(blank=True, null=True)
     description = models.TextField(default="")
     user = models.ForeignKey(LegacyUser, on_delete=models.CASCADE)
-    metadata = models.ManyToManyField(
-        Metadata, related_name="protocol_metadata", blank=True
-    )
+    metadata = GenericRelation(Metadata)
 
     def __str__(self):
         """
@@ -410,9 +408,7 @@ class File(models.Model):
     spectrogram_image = models.ImageField(
         upload_to="audio_images/", null=True, blank=True
     )
-    metadata = models.ManyToManyField(
-        Metadata, related_name="file_metadata", blank=True
-    )
+    metadata = GenericRelation(Metadata)
 
     def __str__(self):
         """
@@ -612,9 +608,7 @@ class Dataset(models.Model):
     link = models.CharField(max_length=255)
     doi = models.CharField(max_length=255, null=True, blank=True)
     metadata_json = models.JSONField(blank=True, null=True)
-    metadata = models.ManyToManyField(
-        Metadata, related_name="dataset_metadata", blank=True
-    )
+    metadata = GenericRelation(Metadata)
 
     created_at = models.DateTimeField(auto_now_add=True)
     modified_at = models.DateTimeField(auto_now=True)
