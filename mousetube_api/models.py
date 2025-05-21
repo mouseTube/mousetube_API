@@ -165,7 +165,9 @@ class Metadata(models.Model):
         on_delete=models.CASCADE,
     )
     value = models.JSONField(blank=True, null=True)
-    content_type = models.ForeignKey(ContentType, blank=True, null=True, on_delete=models.CASCADE)
+    content_type = models.ForeignKey(
+        ContentType, blank=True, null=True, on_delete=models.CASCADE
+    )
     object_id = models.PositiveIntegerField(blank=True, null=True)
     content_object = GenericForeignKey("content_type", "object_id")
 
