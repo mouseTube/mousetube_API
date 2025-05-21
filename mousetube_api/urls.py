@@ -41,7 +41,7 @@ from .views import (
     ReferenceAPIView,
     SubjectAPIView,
     RecordingSessionAPIView,
-    SubjectSessionAPIView
+    SubjectSessionAPIView,
 )
 from django.conf import settings
 
@@ -60,8 +60,14 @@ urlpatterns = [
     path("api/hardware/", HardwareAPIView.as_view(), name="hardware"),
     path("api/country/", CountryAPIView.as_view(), name="country"),
     path("api/subject/", SubjectAPIView.as_view(), name="subject"),
-    path("api/recording_session/", RecordingSessionAPIView.as_view(), name="recording_session"),
-    path("api/subject_session/", SubjectSessionAPIView.as_view(), name="subject_session"),
+    path(
+        "api/recording_session/",
+        RecordingSessionAPIView.as_view(),
+        name="recording_session",
+    ),
+    path(
+        "api/subject_session/", SubjectSessionAPIView.as_view(), name="subject_session"
+    ),
 ]
 
 if settings.DEBUG:

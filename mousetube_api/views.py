@@ -44,7 +44,7 @@ from .serializers import (
     SubjectSerializer,
     RecordingSessionSerializer,
     SubjectSessionSerializer,
-    PageViewSerializer
+    PageViewSerializer,
 )
 from django_countries import countries
 from django.db.models import Q
@@ -166,8 +166,9 @@ class RecordingSessionAPIView(APIView):
         recording_session = RecordingSession.objects.all()
         serializers = self.serializer_class(recording_session, many=True)
         return Response(serializers.data)
-    
-class SubjectSessionAPIView(APIView):   
+
+
+class SubjectSessionAPIView(APIView):
     serializer_class = SubjectSessionSerializer
 
     def get(self, *arg, **kwargs):

@@ -32,7 +32,6 @@ from .models import (
 from django.contrib.auth.models import User
 
 
-
 class MetadataCategorySerializer(serializers.ModelSerializer):
     class Meta:
         model = MetadataCategory
@@ -54,6 +53,7 @@ class MetadataSerializer(serializers.ModelSerializer):
         model = Metadata
         fields = "__all__"
 
+
 class RepositorySerializer(serializers.ModelSerializer):
     class Meta:
         model = Repository
@@ -70,6 +70,7 @@ class LegacyUserSerializer(serializers.ModelSerializer):
     class Meta:
         model = LegacyUser
         fields = "__all__"
+
 
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
@@ -101,6 +102,7 @@ class SoftwareSerializer(serializers.ModelSerializer):
     class Meta:
         model = Software
         fields = "__all__"
+
 
 class SpeciesSerializer(serializers.ModelSerializer):
     metadata = MetadataSerializer(many=True, required=False)
@@ -134,6 +136,7 @@ class RecordingSessionSerializer(serializers.ModelSerializer):
         model = RecordingSession
         fields = "__all__"
 
+
 class FileSerializer(serializers.ModelSerializer):
     repository = RepositorySerializer(many=True, required=False)
     recording_session = RecordingSessionSerializer(many=True, required=False)
@@ -151,6 +154,7 @@ class SubjectSerializer(serializers.ModelSerializer):
     class Meta:
         model = Subject
         fields = "__all__"
+
 
 class SubjectSessionSerializer(serializers.ModelSerializer):
     recording_session = RecordingSessionSerializer(read_only=True)
