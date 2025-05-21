@@ -183,6 +183,9 @@ class Species(models.Model):
     """
 
     name = models.CharField(max_length=255, unique=True)
+    metadata = models.ManyToManyField(
+        Metadata, related_name="species_metadata", blank=True
+    ),
     created_at = models.DateTimeField(auto_now_add=True)
     modified_at = models.DateTimeField(auto_now=True)
     created_by = models.ForeignKey(
@@ -218,6 +221,9 @@ class Strain(models.Model):
     background = models.CharField(max_length=255)
     species = models.ForeignKey(Species, on_delete=models.CASCADE, null=True)
     bibliography = models.TextField(blank=True, null=True)
+    metadata = models.ManyToManyField(
+        Metadata, related_name="strain_metadata", blank=True
+    ),
     created_at = models.DateTimeField(auto_now_add=True, null=True)
     modified_at = models.DateTimeField(auto_now=True, null=True)
     created_by = models.ForeignKey(
@@ -268,6 +274,9 @@ class Subject(models.Model):
     group = models.CharField(max_length=255, blank=True, null=True)
     genotype = models.CharField(max_length=255, blank=True, null=True)
     treatment = models.CharField(max_length=255, blank=True, null=True)
+    metadata = models.ManyToManyField(
+        Metadata, related_name="subject_metadata", blank=True
+    ),
     user = models.ForeignKey(LegacyUser, on_delete=models.CASCADE)
 
     def __str__(self):
@@ -400,6 +409,9 @@ class File(models.Model):
     downloads = models.IntegerField(default=0)
     spectrogram_image = models.ImageField(
         upload_to="audio_images/", null=True, blank=True
+    )
+    metadata = models.ManyToManyField(
+        Metadata, related_name="file_metadata", blank=True
     )
 
     def __str__(self):
