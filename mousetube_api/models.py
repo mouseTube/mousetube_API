@@ -165,8 +165,8 @@ class Metadata(models.Model):
         on_delete=models.CASCADE,
     )
     value = models.JSONField(blank=True, null=True)
-    content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
-    object_id = models.PositiveIntegerField()
+    content_type = models.ForeignKey(ContentType, blank=True, null=True, on_delete=models.CASCADE)
+    object_id = models.PositiveIntegerField(blank=True, null=True)
     content_object = GenericForeignKey("content_type", "object_id")
 
     def __str__(self):
@@ -567,7 +567,6 @@ class Repository(models.Model):
     area = CountryField(blank=True, null=True)
     url = models.URLField(blank=True, null=True)
     url_api = models.URLField(blank=True, null=True)
-
     created_at = models.DateTimeField(auto_now_add=True, null=True)
     modified_at = models.DateTimeField(auto_now=True, null=True)
     created_by = models.ForeignKey(
@@ -609,7 +608,6 @@ class Dataset(models.Model):
     doi = models.CharField(max_length=255, null=True, blank=True)
     metadata_json = models.JSONField(blank=True, null=True)
     metadata = GenericRelation(Metadata)
-
     created_at = models.DateTimeField(auto_now_add=True)
     modified_at = models.DateTimeField(auto_now=True)
     created_by = models.ForeignKey(
