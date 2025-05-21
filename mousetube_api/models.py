@@ -106,7 +106,6 @@ class MetadataCategory(models.Model):
     description = models.TextField(blank=True, null=True)
     source = models.CharField(max_length=50, null=True, blank=True)
     parents = models.ManyToManyField("self", symmetrical=False, related_name="children")
-    
 
     def __str__(self):
         return self.name

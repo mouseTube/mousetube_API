@@ -42,9 +42,7 @@ class Command(BaseCommand):
         if node_type == "object" and properties:
             category_name = current_name or node.get("title", "Root")
             category, _ = MetadataCategory.objects.get_or_create(
-                name=category_name,
-                source=source,
-                defaults={"description": description}
+                name=category_name, source=source, defaults={"description": description}
             )
             if description and not category.description:
                 category.description = description
@@ -56,7 +54,12 @@ class Command(BaseCommand):
 
             # Recurse into each subproperty
             for prop_name, prop_node in properties.items():
-                self._parse_node(prop_node, parent_category=category, source=source, current_name=prop_name)
+                self._parse_node(
+                    prop_node,
+                    parent_category=category,
+                    source=source,
+                    current_name=prop_name,
+                )
 
         else:
             # Terminal field
@@ -65,9 +68,7 @@ class Command(BaseCommand):
                 return  # skip if no name
 
             field, _ = MetadataField.objects.get_or_create(
-                name=field_name,
-                source=source,
-                defaults={"description": description}
+                name=field_name, source=source, defaults={"description": description}
             )
             if description and not field.description:
                 field.description = description
