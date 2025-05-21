@@ -27,8 +27,6 @@ from .models import (
     RecordingSession,
     SubjectSession,
     PageView,
-    MetadataCategory,
-    MetadataField,
 )
 from .serializers import (
     SpeciesSerializer,
@@ -36,7 +34,6 @@ from .serializers import (
     MetadataSerializer,
     ProtocolSerializer,
     FileSerializer,
-    ProtocolMetadataSerializer,
     HardwareSerializer,
     SoftwareSerializer,
     RepositorySerializer,
@@ -47,9 +44,7 @@ from .serializers import (
     SubjectSerializer,
     RecordingSessionSerializer,
     SubjectSessionSerializer,
-    PageViewSerializer,
-    MetadataCategorySerializer,
-    MetadataFieldSerializer
+    PageViewSerializer
 )
 from django_countries import countries
 from django.db.models import Q
@@ -64,57 +59,78 @@ from django.conf import settings
 import os
 
 
+class FilePagination(PageNumberPagination):
+    page_size = 5
+    page_size_query_param = "page_size"
+    max_page_size = 100
+
+
 class CountryAPIView(APIView):
     def get(self, *arg, **kwargs):
         country = countries
         return Response(country)
 
 
-class RepositoryViewSet(viewsets.ModelViewSet):
-    queryset = Repository.objects.all()
+class RepositoryAPIView(APIView):
     serializer_class = RepositorySerializer
 
+    def get(self, request, *args, **kwargs):
+        queryset = Repository.objects.all()
+        serializer = self.serializer_class(queryset, many=True)
+        return Response(serializer.data)
 
-class ReferenceViewSet(viewsets.ModelViewSet):
-    queryset = Reference.objects.all()
+
+class ReferenceAPIView(APIView):
     serializer_class = ReferenceSerializer
 
+    def get(self, request, *args, **kwargs):
+        queryset = Reference.objects.all()
+        serializer = self.serializer_class(queryset, many=True)
+        return Response(serializer.data)
 
-class LegacyUserViewSet(viewsets.ModelViewSet):
-    queryset = LegacyUser.objects.all()
+
+class LegacyUserAPIView(APIView):
     serializer_class = UserSerializer
 
+    def get(self, request, *args, **kwargs):
+        queryset = LegacyUser.objects.all()
+        serializer = self.serializer_class(queryset, many=True)
+        return Response(serializer.data)
 
-class UserProfileViewSet(viewsets.ModelViewSet):
-    queryset = UserProfile.objects.all()
+
+class UserProfileAPIView(APIView):
     serializer_class = UserProfileSerializer
 
-
-class SoftwareAPIView(APIView):
-    def get(self, *arg, **kwargs):
-        software = Software.objects.all()
-        serializer = SoftwareSerializer(software, many=True)
+    def get(self, request, *args, **kwargs):
+        queryset = UserProfile.objects.all()
+        serializer = self.serializer_class(queryset, many=True)
         return Response(serializer.data)
 
 
-class AcquisitionSoftwareAPIView(APIView):
-    def get(self, *arg, **kwargs):
-        software = Software.objects.filter(software_type="acquisition")
-        serializer = SoftwareSerializer(software, many=True)
+class SpeciesAPIView(APIView):
+    serializer_class = SpeciesSerializer
+
+    def get(self, request, *args, **kwargs):
+        queryset = Species.objects.all()
+        serializer = self.serializer_class(queryset, many=True)
         return Response(serializer.data)
 
 
-class AnalysisSoftwareAPIView(APIView):
-    def get(self, *arg, **kwargs):
-        software = Software.objects.filter(software_type="analysis")
-        serializer = SoftwareSerializer(software, many=True)
+class StrainAPIView(APIView):
+    serializer_class = StrainSerializer
+
+    def get(self, request, *args, **kwargs):
+        queryset = Strain.objects.all()
+        serializer = self.serializer_class(queryset, many=True)
         return Response(serializer.data)
 
 
-class AcquisitionAndAnalysisSoftwareAPIView(APIView):
-    def get(self, *arg, **kwargs):
-        software = Software.objects.filter(software_type="acquisition and analysis")
-        serializer = SoftwareSerializer(software, many=True)
+class MetadataAPIView(APIView):
+    serializer_class = MetadataSerializer
+
+    def get(self, request, *args, **kwargs):
+        queryset = Metadata.objects.all()
+        serializer = self.serializer_class(queryset, many=True)
         return Response(serializer.data)
 
 
@@ -123,65 +139,6 @@ class HardwareAPIView(APIView):
         hardware = Hardware.objects.all()
         serializer = HardwareSerializer(hardware, many=True)
         return Response(serializer.data)
-
-
-class SpeciesViewSet(viewsets.ModelViewSet):
-    queryset = Species.objects.all()
-    serializer_class = SpeciesSerializer
-
-
-class StrainViewSet(viewsets.ModelViewSet):
-    queryset = Strain.objects.all()
-    serializer_class = StrainSerializer
-
-
-class MetadataViewSet(viewsets.ModelViewSet):
-    queryset = Metadata.objects.all()
-    serializer_class = MetadataSerializer
-
-
-class ProtocolViewSet(viewsets.ModelViewSet):
-    queryset = Protocol.objects.all()
-    serializer_class = ProtocolSerializer
-
-
-class FileViewSet(viewsets.ModelViewSet):
-    queryset = File.objects.all()
-    serializer_class = FileSerializer
-
-
-class ProtocolMetadataViewSet(viewsets.ModelViewSet):
-    queryset = (
-        Metadata.objects.filter(metadata_field__metadata_category__name="protocol")
-        .prefetch_related("metadata_field__metadata_category")
-        .distinct()
-    )
-    serializer_class = ProtocolMetadataSerializer
-    #  https://dev.to/azayshrestha/understanding-djangos-prefetchrelated-and-prefetch-4i2o
-    serializer_class = ProtocolMetadataSerializer
-
-class FilePagination(PageNumberPagination):
-    page_size = 5
-    page_size_query_param = "page_size"
-    max_page_size = 100
-
-
-class LegacyUserAPIView(APIView):
-    serializer_class = UserSerializer
-
-    def get(self, *arg, **kwargs):
-        user = LegacyUser.objects.all()
-        serializer = self.serializer_class(user, many=True)
-        return Response(serializer.data)
-
-
-class StrainAPIView(APIView):
-    serializer_class = StrainSerializer
-
-    def get(self, *arg, **kwargs):
-        strain = Strain.objects.all()
-        serializers = self.serializer_class(strain, many=True)
-        return Response(serializers.data)
 
 
 class SubjectAPIView(APIView):
@@ -208,6 +165,14 @@ class RecordingSessionAPIView(APIView):
     def get(self, *arg, **kwargs):
         recording_session = RecordingSession.objects.all()
         serializers = self.serializer_class(recording_session, many=True)
+        return Response(serializers.data)
+    
+class SubjectSessionAPIView(APIView):   
+    serializer_class = SubjectSessionSerializer
+
+    def get(self, *arg, **kwargs):
+        subject_session = SubjectSession.objects.all()
+        serializers = self.serializer_class(subject_session, many=True)
         return Response(serializers.data)
 
 

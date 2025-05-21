@@ -23,57 +23,45 @@ Including another URLconf
 """
 
 from django.contrib import admin
-from django.urls import path, include
+from django.urls import path
 from django.conf.urls.static import static
-from rest_framework.routers import DefaultRouter
 from .views import (
-    RepositoryViewSet,
-    ReferenceViewSet,
-    LegacyUserViewSet,
-    UserProfileViewSet,
-    SpeciesViewSet,
-    StrainViewSet,
-    MetadataViewSet,
-    ProtocolViewSet,
-    FileViewSet,
-    ProtocolMetadataViewSet,
+    RepositoryAPIView,
+    ReferenceAPIView,
+    LegacyUserAPIView,
+    UserProfileAPIView,
+    SpeciesAPIView,
+    StrainAPIView,
+    MetadataAPIView,
+    ProtocolAPIView,
+    FileAPIView,
     SoftwareAPIView,
-    AcquisitionSoftwareAPIView,
-    AnalysisSoftwareAPIView,
-    AcquisitionAndAnalysisSoftwareAPIView,
     HardwareAPIView,
     CountryAPIView,
+    ReferenceAPIView,
+    SubjectAPIView,
+    RecordingSessionAPIView,
+    SubjectSessionAPIView
 )
 from django.conf import settings
 
-router = DefaultRouter()
-# router.register('country', CountryViewSet, basename='country')
-router.register("repository", RepositoryViewSet, basename="repository")
-router.register("reference", ReferenceViewSet, basename="reference")
-router.register("legacy_user", LegacyUserViewSet, basename="legacy_user")
-router.register("user_profile", UserProfileViewSet, basename="user_profile")
-router.register("species", SpeciesViewSet, basename="species")
-router.register("strain", StrainViewSet, basename="strain")
-router.register("metadata", MetadataViewSet, basename="metadata")
-router.register("protocol", ProtocolViewSet, basename="protocol")
-router.register("file", FileViewSet, basename="file")
-router.register(
-    "protocol_metadata", ProtocolMetadataViewSet, basename="protocol_metadata"
-)
-# router.register('software', SoftwareViewSet, basename='software')
-
 urlpatterns = [
     path("admin/", admin.site.urls),
-    path("api/", include(router.urls)),
-    path("api/software/", SoftwareAPIView.as_view()),
-    path("api/acquisition_software/", AcquisitionSoftwareAPIView.as_view()),
-    path("api/analysis_software/", AnalysisSoftwareAPIView.as_view()),
-    path(
-        "api/acquisition_and_analysis_software/",
-        AcquisitionAndAnalysisSoftwareAPIView.as_view(),
-    ),
-    path("api/hardware/", HardwareAPIView.as_view()),
+    path("api/repository/", RepositoryAPIView.as_view(), name="repository"),
+    path("api/reference/", ReferenceAPIView.as_view(), name="reference"),
+    path("api/legacy_user/", LegacyUserAPIView.as_view(), name="legacy_user"),
+    path("api/user_profile/", UserProfileAPIView.as_view(), name="user_profile"),
+    path("api/species/", SpeciesAPIView.as_view(), name="species"),
+    path("api/strain/", StrainAPIView.as_view(), name="strain"),
+    path("api/metadata/", MetadataAPIView.as_view(), name="metadata"),
+    path("api/protocol/", ProtocolAPIView.as_view(), name="protocol"),
+    path("api/file/", FileAPIView.as_view(), name="file"),
+    path("api/software/", SoftwareAPIView.as_view(), name="software"),
+    path("api/hardware/", HardwareAPIView.as_view(), name="hardware"),
     path("api/country/", CountryAPIView.as_view(), name="country"),
+    path("api/subject/", SubjectAPIView.as_view(), name="subject"),
+    path("api/recording_session/", RecordingSessionAPIView.as_view(), name="recording_session"),
+    path("api/subject_session/", SubjectSessionAPIView.as_view(), name="subject_session"),
 ]
 
 if settings.DEBUG:
