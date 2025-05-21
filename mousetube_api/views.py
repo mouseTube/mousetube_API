@@ -10,7 +10,6 @@ Code under GPL v3.0 licence
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.pagination import PageNumberPagination
-from rest_framework import viewsets
 from .models import (
     Repository,
     Reference,
