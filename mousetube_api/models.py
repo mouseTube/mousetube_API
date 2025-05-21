@@ -98,23 +98,15 @@ class MetadataCategory(models.Model):
     Fields:
         name (CharField): Name of the category.
         description (TextField): Optional description of the category.
+        source (CharField): Source of the metadata category.
         parents (ManyToManyField): Parent categories for nested structure.
-        created_at (DateTimeField): Timestamp when the category was created.
-        modified_at (DateTimeField): Last modification timestamp.
-        created_by (ForeignKey): User who created the category.
     """
 
-    name = models.CharField(max_length=255, unique=True)
+    name = models.CharField(max_length=255)
     description = models.TextField(blank=True, null=True)
+    source = models.CharField(max_length=50, null=True, blank=True)
     parents = models.ManyToManyField("self", symmetrical=False, related_name="children")
-    created_at = models.DateTimeField(auto_now_add=True)
-    modified_at = models.DateTimeField(auto_now=True)
-    created_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        null=True,
-        related_name="metadata_category_created_by",
-        on_delete=models.SET_NULL,
-    )
+    
 
     def __str__(self):
         return self.name
@@ -122,6 +114,7 @@ class MetadataCategory(models.Model):
     class Meta:
         verbose_name = "Metadata category"
         verbose_name_plural = "Metadata categories"
+        unique_together = ("name", "source")
 
 
 class MetadataField(models.Model):
@@ -131,24 +124,15 @@ class MetadataField(models.Model):
     Fields:
         name (CharField): Name of the metadata field.
         description (TextField): Optional description of the field.
+        source (CharField): Source of the metadata field.
         metadata_category (ManyToManyField): Categories this field belongs to.
-        created_at (DateTimeField): Timestamp when the field was created.
-        modified_at (DateTimeField): Last modification timestamp.
-        created_by (ForeignKey): User who created the field.
     """
 
-    name = models.CharField(max_length=255, unique=True)
+    name = models.CharField(max_length=255)
     description = models.TextField(blank=True, null=True)
+    source = models.CharField(max_length=50, null=True, blank=True)
     metadata_category = models.ManyToManyField(
         MetadataCategory, blank=True, related_name="metadatafield_categories"
-    )
-    created_at = models.DateTimeField(auto_now_add=True)
-    modified_at = models.DateTimeField(auto_now=True)
-    created_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        null=True,
-        related_name="metadata_field_created_by",
-        on_delete=models.SET_NULL,
     )
 
     def __str__(self):
@@ -157,6 +141,7 @@ class MetadataField(models.Model):
     class Meta:
         verbose_name = "Metadata Field"
         verbose_name_plural = "Metadata Fields"
+        unique_together = ("name", "source")
 
 
 class Metadata(models.Model):
@@ -178,14 +163,6 @@ class Metadata(models.Model):
         on_delete=models.CASCADE,
     )
     value = models.JSONField(blank=True, null=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    modified_at = models.DateTimeField(auto_now=True)
-    created_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        null=True,
-        related_name="metadata_created_by",
-        on_delete=models.SET_NULL,
-    )
 
     def __str__(self):
         return self.value
