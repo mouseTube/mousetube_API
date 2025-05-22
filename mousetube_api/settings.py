@@ -137,6 +137,7 @@ TEMPLATES = [
     },
 ]
 
+ADMIN_BASE_TEMPLATE = "admin/base_site.html"
 WSGI_APPLICATION = "mousetube_api.wsgi.application"
 
 
