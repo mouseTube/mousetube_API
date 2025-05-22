@@ -339,6 +339,7 @@ class RecordingSession(models.Model):
 
     name = models.CharField(max_length=255, unique=True)
     protocol = models.ForeignKey(Protocol, on_delete=models.CASCADE)
+    group_subject = models.CharField(max_length=255, blank=True, null=True)
     date = models.DateField(blank=True, null=True)
     temperature = models.CharField(max_length=255, blank=True, null=True)
     light_cycle = models.CharField(max_length=255, blank=True, null=True)
@@ -359,8 +360,8 @@ class RecordingSession(models.Model):
         return self.name
 
     class Meta:
-        verbose_name = "Experiment"
-        verbose_name_plural = "Experiments"
+        verbose_name = "Recording Session"
+        verbose_name_plural = "Recording Sessions"
 
 
 class SubjectSession(models.Model):
@@ -376,8 +377,8 @@ class SubjectSession(models.Model):
     subject = models.ForeignKey(Subject, on_delete=models.CASCADE)
 
     class Meta:
-        verbose_name = "SessionSubject"
-        verbose_name_plural = "SessionSubjects"
+        verbose_name = "Session Subject"
+        verbose_name_plural = "Session Subjects"
 
 
 class Repository(models.Model):
@@ -443,6 +444,7 @@ class File(models.Model):
     subject = models.ForeignKey(
         Subject, on_delete=models.CASCADE, blank=True, null=True
     )
+    number = models.IntegerField(blank=True, null=True)
     link = models.URLField(blank=True, null=True)
     notes = models.TextField(blank=True, null=True)
     doi = models.CharField(max_length=255, blank=True, null=True)

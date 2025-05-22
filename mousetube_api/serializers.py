@@ -121,7 +121,7 @@ class StrainSerializer(serializers.ModelSerializer):
 
 
 class ProtocolSerializer(serializers.ModelSerializer):
-    user = UserSerializer(read_only=True)
+    user = LegacyUserSerializer(read_only=True)
     metadata = MetadataSerializer(many=True, required=False)
 
     class Meta:
@@ -139,7 +139,7 @@ class RecordingSessionSerializer(serializers.ModelSerializer):
 
 class FileSerializer(serializers.ModelSerializer):
     repository = RepositorySerializer(many=True, required=False)
-    recording_session = RecordingSessionSerializer(many=True, required=False)
+    recording_session = RecordingSessionSerializer()
     metadata = MetadataSerializer(many=True, required=False)
 
     class Meta:
