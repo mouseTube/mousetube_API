@@ -81,42 +81,11 @@
 							"enum": ["°C", "°F"]
 						}
 					}
-				}
-			}
-		},
-		"equipment": {
-			"description": "equipment specificities used for the recording",
-			"type": "object",
-			"properties": {
-				"microphone": {
-					"description": "Microphone model or type used in this protocol.",
-					"type": "string"
 				},
-				"acquisition_hardware": {
-					"description": "Hardware used for audio acquisition in this protocol.",
-					"type": "string"
-				},
-				"acquisition_software": {
-					"description": "Software used to record audio in this protocol.",
-					"type": "string"
-				},
-				"channels": {
-					"description": "number of microphones used for recording",
-					"type": "string",
-					"enum": [
-						"mono",
-						"stereo",
-						"more than 2"
-					]
-				},
-				"sound isolation": {
-					"description": "presence of a sound attenuating chamber",
-					"type": "string",
-					"enum": [
-						"soundproof room",
-						"soundproof cage",
-						"no specific sound isolation"
-					]
+				"brightness": {
+					"description": "brightness of the recording environment in Lux",
+					"type": "float",
+					"unit": "Lux"
 				}
 			}
 		}

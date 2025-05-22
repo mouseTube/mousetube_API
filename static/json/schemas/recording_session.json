@@ -1,0 +1,81 @@
+{
+	"title": "RecordingSession",
+	"description": "recording session description",
+	"type": "object",
+	"properties": {
+		"equipment": {
+			"description": "equipment specificities used for the recording",
+			"type": "object",
+			"properties": {
+				"microphone": {
+					"description": "Microphone model or type used in this protocol.",
+					"type": "string"
+				},
+				"acquisition_hardware": {
+					"description": "Hardware used for audio acquisition in this protocol.",
+					"type": "string"
+				},
+				"acquisition_software": {
+					"description": "Software used to record audio in this protocol.",
+					"type": "string"
+				},
+				"channels": {
+					"description": "number of microphones used for recording",
+					"type": "string",
+					"enum": [
+						"mono",
+						"stereo",
+						"more than 2"
+					]
+				},
+				"sound isolation": {
+					"description": "presence of a sound attenuating chamber",
+					"type": "string",
+					"enum": [
+						"soundproof room",
+						"soundproof cage",
+						"no specific sound isolation"
+					]
+				}
+			}
+		},
+        "context": {
+			"description": "behavioural context used for the recording session",
+			"type": "object",
+			"properties": {
+				"temperature": {
+					"properties": {
+						"value": {
+							"description": "value of the temperature",
+							"type": "float"
+						},
+						"unit": {
+							"description": "unit of the temperature",
+							"type": "string",
+							"enum": ["°C", "°F"]
+						}
+					}
+				},
+				"brightness": {
+					"description": "brightness of the recording environment in Lux",
+					"type": "float",
+					"unit": "Lux"
+				},
+                "datetime": {
+                    "description": "Date when the recording was made (YYY-MM-DD hh:mm:ss).",
+                    "type": "string",
+                    "format": "date-time"
+                },
+                "duration": {
+					"description": "duration of the recording in seconds",
+					"type": "integer",
+                    "unit": "seconds"
+				}
+			}
+		},
+        "laboratory": {
+            "description": "Name or identifier of the laboratory where the recording was performed.",
+            "type": "string"
+      }
+    }
+}

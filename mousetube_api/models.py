@@ -380,6 +380,45 @@ class SubjectSession(models.Model):
         verbose_name_plural = "SessionSubjects"
 
 
+class Repository(models.Model):
+    """
+    Represents an external or internal data repository.
+
+    Fields:
+        name (CharField): Repository name.
+        description (TextField): Optional description of the repository.
+        logo (ImageField): Optional logo image.
+        area (CountryField): Country or region associated with the repository.
+        url (URLField): Main URL of the repository.
+        url_api (URLField): URL to the repository's API endpoint.
+        created_at (DateTimeField): Timestamp when the repository was created.
+        modified_at (DateTimeField): Last modification timestamp.
+        created_by (ForeignKey): User who created the repository record.
+    """
+
+    name = models.CharField(max_length=255)
+    description = models.TextField(blank=True, null=True)
+    logo = models.ImageField(blank=True, null=True, upload_to="logo")
+    area = CountryField(blank=True, null=True)
+    url = models.URLField(blank=True, null=True)
+    url_api = models.URLField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True, null=True)
+    modified_at = models.DateTimeField(auto_now=True, null=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        related_name="repository_created_by",
+        on_delete=models.SET_NULL,
+    )
+
+    def __str__(self):
+        return self.name
+
+    class Meta:
+        verbose_name = "Repository"
+        verbose_name_plural = "Repositories"
+
+
 class File(models.Model):
     """
     Represents a file associated with an experiment or subject.
@@ -393,6 +432,8 @@ class File(models.Model):
         is_valid_link (bool): Whether the link is valid.
         downloads (int): The number of downloads for the file.
         spectrogram_image (str, optional): The path to the spectrogram image associated with the file.
+        metadata (GenericRelation): Metadata associated with the file.
+        repository (ForeignKey): Repositories associated with the file.
     """
 
     name = models.CharField(max_length=255, blank=True, null=True)
@@ -411,6 +452,9 @@ class File(models.Model):
         upload_to="audio_images/", null=True, blank=True
     )
     metadata = GenericRelation(Metadata)
+    repository = models.ForeignKey(
+        Repository, on_delete=models.SET_NULL, null=True, blank=True
+    )
 
     def __str__(self):
         """
@@ -545,45 +589,6 @@ class Hardware(models.Model):
     class Meta:
         verbose_name = "Hardware"
         verbose_name_plural = "Hardware"
-
-
-class Repository(models.Model):
-    """
-    Represents an external or internal data repository.
-
-    Fields:
-        name (CharField): Repository name.
-        description (TextField): Optional description of the repository.
-        logo (ImageField): Optional logo image.
-        area (CountryField): Country or region associated with the repository.
-        url (URLField): Main URL of the repository.
-        url_api (URLField): URL to the repository's API endpoint.
-        created_at (DateTimeField): Timestamp when the repository was created.
-        modified_at (DateTimeField): Last modification timestamp.
-        created_by (ForeignKey): User who created the repository record.
-    """
-
-    name = models.CharField(max_length=255)
-    description = models.TextField(blank=True, null=True)
-    logo = models.ImageField(blank=True, null=True, upload_to="logo")
-    area = CountryField(blank=True, null=True)
-    url = models.URLField(blank=True, null=True)
-    url_api = models.URLField(blank=True, null=True)
-    created_at = models.DateTimeField(auto_now_add=True, null=True)
-    modified_at = models.DateTimeField(auto_now=True, null=True)
-    created_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        null=True,
-        related_name="repository_created_by",
-        on_delete=models.SET_NULL,
-    )
-
-    def __str__(self):
-        return self.name
-
-    class Meta:
-        verbose_name = "Repository"
-        verbose_name_plural = "Repositories"
 
 
 class Dataset(models.Model):

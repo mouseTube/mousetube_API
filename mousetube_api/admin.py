@@ -87,9 +87,9 @@ class RecordingSessionAdmin(admin.ModelAdmin):
 class FileAdmin(admin.ModelAdmin):
     list_display = (
         "name",
-        "experiment",
+        "recording_session",
+        "repository",
         "subject",
-        "number",
         "link",
         "doi",
         "is_valid_link",
@@ -98,10 +98,10 @@ class FileAdmin(admin.ModelAdmin):
         "name",
         "link",
         "doi",
-        "experiment__name",
+        "recording_session__name",
         "subject__name",
     )
-    list_filter = ("is_valid_link", "experiment", "subject")
+    list_filter = ("is_valid_link", "recording_session", "subject")
 
 
 class SoftwareAdmin(admin.ModelAdmin):
@@ -156,4 +156,4 @@ admin.site.register(SubjectSession)
 admin.site.register(Subject, SubjectAdmin)
 admin.site.site_header = "Mousetube Admin"
 admin.site.site_title = "Mousetube Admin"
-admin.site.index_title = "Mousetube Admin"
+admin.site.index_title = "Mousetube Database"

@@ -22,11 +22,6 @@
         "type": "number",
         "enum": [8, 16, 24, 32]
       },
-      "laboratory": {
-        "description": "Name or identifier of the laboratory where the recording was performed.",
-        "type": "string"
-      },
-      
       "notes": {
         "description": "Optional notes about this specific file.",
         "type": "string"

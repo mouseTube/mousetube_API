@@ -34,6 +34,7 @@ from .views import (
     MetadataAPIView,
     ProtocolAPIView,
     FileAPIView,
+    FileDetailAPIView,
     SoftwareAPIView,
     HardwareAPIView,
     CountryAPIView,
@@ -42,6 +43,11 @@ from .views import (
     RecordingSessionAPIView,
     SubjectSessionAPIView,
 )
+from .views import TrackPageView
+from django.views.static import serve
+from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
+from django.contrib.admin.views.decorators import staff_member_required
+import os
 from django.conf import settings
 
 urlpatterns = [
@@ -66,6 +72,21 @@ urlpatterns = [
     ),
     path(
         "api/subject_session/", SubjectSessionAPIView.as_view(), name="subject_session"
+    ),
+    path("api/file/<int:pk>/", FileDetailAPIView.as_view(), name="file-detail"),
+    path("api/track-page/", TrackPageView.as_view(), name="track-page"),
+    path("schema/", SpectacularAPIView.as_view(), name="schema"),
+    path(
+        "swagger/", SpectacularSwaggerView.as_view(url_name="schema"), name="swagger-ui"
+    ),
+    path(
+        "admin/stats/",
+        staff_member_required(serve),
+        {
+            "document_root": os.path.join(settings.BASE_DIR, "logs"),
+            "path": "latest.html",
+        },
+        name="admin-stats",
     ),
 ]
 
