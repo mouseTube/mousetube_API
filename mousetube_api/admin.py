@@ -66,7 +66,7 @@ class SubjectAdmin(admin.ModelAdmin):
 
 
 class ProtocolAdmin(admin.ModelAdmin):
-    list_display = ("name", "number_files", "user")
+    list_display = ("name", "user")
     search_fields = ("name", "user__first_name_user")
     list_filter = ("user",)
 

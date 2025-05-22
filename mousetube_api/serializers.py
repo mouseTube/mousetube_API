@@ -137,22 +137,23 @@ class RecordingSessionSerializer(serializers.ModelSerializer):
         fields = "__all__"
 
 
-class FileSerializer(serializers.ModelSerializer):
-    repository = RepositorySerializer(many=True, required=False)
-    recording_session = RecordingSessionSerializer()
-    metadata = MetadataSerializer(many=True, required=False)
-
-    class Meta:
-        model = File
-        fields = "__all__"
-
-
 class SubjectSerializer(serializers.ModelSerializer):
-    user = UserSerializer(read_only=True)
+    user = LegacyUserSerializer(read_only=True)
     strain = StrainSerializer(read_only=True)
 
     class Meta:
         model = Subject
+        fields = "__all__"
+
+
+class FileSerializer(serializers.ModelSerializer):
+    repository = RepositorySerializer(many=True, required=False)
+    recording_session = RecordingSessionSerializer()
+    metadata = MetadataSerializer(many=True, required=False)
+    subject = SubjectSerializer(required=False)
+
+    class Meta:
+        model = File
         fields = "__all__"
 
 

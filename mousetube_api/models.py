@@ -307,7 +307,6 @@ class Protocol(models.Model):
     """
 
     name = models.CharField(max_length=255)
-    number_files = models.IntegerField(blank=True, null=True)
     description = models.TextField(default="")
     user = models.ForeignKey(LegacyUser, on_delete=models.CASCADE)
     metadata = GenericRelation(Metadata)
@@ -432,7 +431,6 @@ class File(models.Model):
         doi (str, optional): The DOI of the file.
         is_valid_link (bool): Whether the link is valid.
         downloads (int): The number of downloads for the file.
-        spectrogram_image (str, optional): The path to the spectrogram image associated with the file.
         metadata (GenericRelation): Metadata associated with the file.
         repository (ForeignKey): Repositories associated with the file.
     """
@@ -450,9 +448,6 @@ class File(models.Model):
     doi = models.CharField(max_length=255, blank=True, null=True)
     is_valid_link = models.BooleanField(default=False)
     downloads = models.IntegerField(default=0)
-    spectrogram_image = models.ImageField(
-        upload_to="audio_images/", null=True, blank=True
-    )
     metadata = GenericRelation(Metadata)
     repository = models.ForeignKey(
         Repository, on_delete=models.SET_NULL, null=True, blank=True

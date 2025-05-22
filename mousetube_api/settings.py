@@ -240,8 +240,8 @@ CELERY_IMPORTS = "mousetube_api.tasks"
 CELERY_RESULT_BACKEND = "django-db"
 CACHE_BACKEND = "memcached://127.0.0.1:11211/"
 
-LOG_DIR = Path(BASE_DIR) / "logs"
-LOG_DIR.mkdir(exist_ok=True)
+LOGS_DIR = Path(BASE_DIR) / "logs"
+LOGS_DIR.mkdir(exist_ok=True)
 
 LOGGING = {
     "version": 1,

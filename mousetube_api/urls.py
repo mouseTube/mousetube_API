@@ -51,6 +51,15 @@ import os
 from django.conf import settings
 
 urlpatterns = [
+    path(
+        "admin/stats/",
+        staff_member_required(serve),
+        {
+            "document_root": os.path.join(settings.BASE_DIR, "logs"),
+            "path": "latest.html",
+        },
+        name="admin-stats",
+    ),
     path("admin/", admin.site.urls),
     path("api/repository/", RepositoryAPIView.as_view(), name="repository"),
     path("api/reference/", ReferenceAPIView.as_view(), name="reference"),
@@ -78,15 +87,6 @@ urlpatterns = [
     path("schema/", SpectacularAPIView.as_view(), name="schema"),
     path(
         "swagger/", SpectacularSwaggerView.as_view(url_name="schema"), name="swagger-ui"
-    ),
-    path(
-        "admin/stats/",
-        staff_member_required(serve),
-        {
-            "document_root": os.path.join(settings.BASE_DIR, "logs"),
-            "path": "latest.html",
-        },
-        name="admin-stats",
     ),
 ]
 
