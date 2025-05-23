@@ -170,6 +170,14 @@ class Metadata(models.Model):
     )
     object_id = models.PositiveIntegerField(blank=True, null=True)
     content_object = GenericForeignKey("content_type", "object_id")
+    created_at = models.DateTimeField(auto_now_add=True, null=True)
+    modified_at = models.DateTimeField(auto_now=True, null=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        related_name="metadata_created_by",
+        on_delete=models.SET_NULL,
+    )
 
     def __str__(self):
         return f"{self.metadata_field.name}: {self.value}"
