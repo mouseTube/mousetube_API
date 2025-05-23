@@ -68,7 +68,7 @@ else
     exit 1
 fi
 
-# ✅ Loading fixtures conditionnel si la table est vide
+# ✅ Loading fixtures if the table is empty
 if [ -n "$FIXTURE_FILE" ] && [ -f "$FIXTURE_FILE" ]; then
     echo "🔍 Checking if the corresponding table is empty before loading fixture..."
 
