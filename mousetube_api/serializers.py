@@ -33,9 +33,15 @@ from django.contrib.auth.models import User
 
 
 class MetadataCategorySerializer(serializers.ModelSerializer):
+    parents = serializers.SlugRelatedField(
+        many=True,
+        read_only=True,
+        slug_field='name'
+    )
+
     class Meta:
         model = MetadataCategory
-        fields = "__all__"
+        fields = ['id', 'name', 'description', 'source', 'parents']
 
 
 class MetadataFieldSerializer(serializers.ModelSerializer):

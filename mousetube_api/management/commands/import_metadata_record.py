@@ -1,0 +1,102 @@
+from django.core.management.base import BaseCommand
+from mousetube_api.models import RecordingSession, Metadata, MetadataField, Protocol, File
+from django.contrib.contenttypes.models import ContentType
+
+class Command(BaseCommand):
+    help = "Create or update Metadata for each RecordingSession (e.g., temperature, microphone)"
+
+    def handle(self, *args, **options):
+        # Get content types for the models involved
+        ct_rec = ContentType.objects.get_for_model(RecordingSession)
+        ct_pro = ContentType.objects.get_for_model(Protocol)
+        ct_file = ContentType.objects.get_for_model(File)
+
+        sessions = RecordingSession.objects.all()
+        count = 0  # Counter for how many metadata entries are created or updated
+
+        for session in sessions:
+            # --- Temperature metadata (applied to both RecordingSession and Protocol) ---
+            if session.temperature:
+                # RecordingSession-level temperature
+                Metadata.objects.update_or_create(
+                    content_type=ct_rec,
+                    object_id=session.id,
+                    metadata_field=MetadataField.objects.get(name="temperature", source="recording_session"),
+                    defaults={"value": {"value": session.temperature, "unit": "°C"}},
+                )
+                count += 1
+
+                # Protocol-level temperature
+                Metadata.objects.update_or_create(
+                    content_type=ct_pro,
+                    object_id=session.protocol.id,
+                    metadata_field=MetadataField.objects.get(name="temperature", source="protocol"),
+                    defaults={"value": {"value": session.temperature, "unit": "°C"}},
+                )
+                count += 1
+
+            # --- Microphone metadata ---
+            if session.microphone:
+                Metadata.objects.update_or_create(
+                    content_type=ct_rec,
+                    object_id=session.id,
+                    metadata_field=MetadataField.objects.get(name="microphone", source="recording_session"),
+                    defaults={"value": session.microphone},
+                )
+                count += 1
+
+            # --- Acquisition hardware metadata ---
+            if session.acquisition_hardware:
+                Metadata.objects.update_or_create(
+                    content_type=ct_rec,
+                    object_id=session.id,
+                    metadata_field=MetadataField.objects.get(name="acquisition_hardware", source="recording_session"),
+                    defaults={"value": session.acquisition_hardware},
+                )
+                count += 1
+
+            # --- Acquisition software metadata ---
+            if session.acquisition_software:
+                Metadata.objects.update_or_create(
+                    content_type=ct_rec,
+                    object_id=session.id,
+                    metadata_field=MetadataField.objects.get(name="acquisition_software", source="recording_session"),
+                    defaults={"value": session.acquisition_software},
+                )
+                count += 1
+
+            # --- Sampling rate metadata ---
+            if session.sampling_rate:
+                files = File.objects.filter(recording_session=session)
+                for file in files:
+                    Metadata.objects.update_or_create(
+                        content_type=ct_file,
+                        object_id=file.id,
+                        metadata_field=MetadataField.objects.get(name="sampling_rate", source="file"),
+                        defaults={"value": session.sampling_rate},
+                    )
+                count += 1
+
+            # --- Bit depth metadata ---
+            if session.bit_depth:
+                files = File.objects.filter(recording_session=session)
+                for file in files:
+                    Metadata.objects.update_or_create(
+                        content_type=ct_file,
+                        object_id=file.id,
+                        metadata_field=MetadataField.objects.get(name="bit_depth", source="file"),
+                        defaults={"value": session.bit_depth},
+                    )
+                count += 1
+
+            # --- Laboratory metadata ---
+            if session.laboratory:
+                Metadata.objects.update_or_create(
+                    content_type=ct_rec,
+                    object_id=session.id,
+                    metadata_field=MetadataField.objects.get(name="laboratory", source="recording_session"),
+                    defaults={"value": session.laboratory},
+                )
+                count += 1
+
+        self.stdout.write(self.style.SUCCESS(f"{count} metadata entries created/updated for RecordingSession."))
