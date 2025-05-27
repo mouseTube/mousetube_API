@@ -1,6 +1,13 @@
 from django.core.management.base import BaseCommand
-from mousetube_api.models import RecordingSession, Metadata, MetadataField, Protocol, File
+from mousetube_api.models import (
+    RecordingSession,
+    Metadata,
+    MetadataField,
+    Protocol,
+    File,
+)
 from django.contrib.contenttypes.models import ContentType
+
 
 class Command(BaseCommand):
     help = "Create or update Metadata for each RecordingSession (e.g., temperature, microphone)"
@@ -22,7 +29,9 @@ class Command(BaseCommand):
                 Metadata.objects.update_or_create(
                     content_type=ct_rec,
                     object_id=session.id,
-                    metadata_field=MetadataField.objects.get(name="temperature", source="recording_session"),
+                    metadata_field=MetadataField.objects.get(
+                        name="temperature", source="recording_session"
+                    ),
                     defaults={"value": {"value": session.temperature, "unit": "°C"}},
                 )
                 count += 1
@@ -31,7 +40,9 @@ class Command(BaseCommand):
                 Metadata.objects.update_or_create(
                     content_type=ct_pro,
                     object_id=session.protocol.id,
-                    metadata_field=MetadataField.objects.get(name="temperature", source="protocol"),
+                    metadata_field=MetadataField.objects.get(
+                        name="temperature", source="protocol"
+                    ),
                     defaults={"value": {"value": session.temperature, "unit": "°C"}},
                 )
                 count += 1
@@ -41,7 +52,9 @@ class Command(BaseCommand):
                 Metadata.objects.update_or_create(
                     content_type=ct_rec,
                     object_id=session.id,
-                    metadata_field=MetadataField.objects.get(name="microphone", source="recording_session"),
+                    metadata_field=MetadataField.objects.get(
+                        name="microphone", source="recording_session"
+                    ),
                     defaults={"value": session.microphone},
                 )
                 count += 1
@@ -51,7 +64,9 @@ class Command(BaseCommand):
                 Metadata.objects.update_or_create(
                     content_type=ct_rec,
                     object_id=session.id,
-                    metadata_field=MetadataField.objects.get(name="acquisition_hardware", source="recording_session"),
+                    metadata_field=MetadataField.objects.get(
+                        name="acquisition_hardware", source="recording_session"
+                    ),
                     defaults={"value": session.acquisition_hardware},
                 )
                 count += 1
@@ -61,7 +76,9 @@ class Command(BaseCommand):
                 Metadata.objects.update_or_create(
                     content_type=ct_rec,
                     object_id=session.id,
-                    metadata_field=MetadataField.objects.get(name="acquisition_software", source="recording_session"),
+                    metadata_field=MetadataField.objects.get(
+                        name="acquisition_software", source="recording_session"
+                    ),
                     defaults={"value": session.acquisition_software},
                 )
                 count += 1
@@ -73,7 +90,9 @@ class Command(BaseCommand):
                     Metadata.objects.update_or_create(
                         content_type=ct_file,
                         object_id=file.id,
-                        metadata_field=MetadataField.objects.get(name="sampling_rate", source="file"),
+                        metadata_field=MetadataField.objects.get(
+                            name="sampling_rate", source="file"
+                        ),
                         defaults={"value": session.sampling_rate},
                     )
                 count_files += 1
@@ -85,7 +104,9 @@ class Command(BaseCommand):
                     Metadata.objects.update_or_create(
                         content_type=ct_file,
                         object_id=file.id,
-                        metadata_field=MetadataField.objects.get(name="bit_depth", source="file"),
+                        metadata_field=MetadataField.objects.get(
+                            name="bit_depth", source="file"
+                        ),
                         defaults={"value": session.bit_depth},
                     )
                 count_files += 1
@@ -95,22 +116,33 @@ class Command(BaseCommand):
                 Metadata.objects.update_or_create(
                     content_type=ct_rec,
                     object_id=session.id,
-                    metadata_field=MetadataField.objects.get(name="laboratory", source="recording_session"),
+                    metadata_field=MetadataField.objects.get(
+                        name="laboratory", source="recording_session"
+                    ),
                     defaults={"value": session.laboratory},
                 )
                 count += 1
-            
-        
-        #--- File metadata --- #
+
+        # --- File metadata --- #
         for file in File.objects.all():
             if file.name:
                 Metadata.objects.update_or_create(
                     content_type=ct_file,
                     object_id=file.id,
-                    metadata_field=MetadataField.objects.get(name="filename", source="file"),
+                    metadata_field=MetadataField.objects.get(
+                        name="filename", source="file"
+                    ),
                     defaults={"value": file.name},
                 )
                 count_files += 1
-        self.stdout.write(self.style.SUCCESS(f"{count_files} metadata entries created/updated for Files."))
+        self.stdout.write(
+            self.style.SUCCESS(
+                f"{count_files} metadata entries created/updated for Files."
+            )
+        )
 
-        self.stdout.write(self.style.SUCCESS(f"{count} metadata entries created/updated for RecordingSession."))
+        self.stdout.write(
+            self.style.SUCCESS(
+                f"{count} metadata entries created/updated for RecordingSession."
+            )
+        )

@@ -2,13 +2,12 @@ from django.core.management.base import BaseCommand
 from django.contrib.contenttypes.models import ContentType
 from mousetube_api.models import Subject, Metadata, MetadataField
 
+
 class Command(BaseCommand):
     help = "Create metadata for subjects"
 
     def handle(self, *args, **kwargs):
-        fields_to_include = [
-            "name", "origin", "sex", "group", "genotype", "treatment"
-        ]
+        fields_to_include = ["name", "origin", "sex", "group", "genotype", "treatment"]
 
         content_type = ContentType.objects.get_for_model(Subject)
         created_count = 0
@@ -24,11 +23,15 @@ class Command(BaseCommand):
                     continue
 
                 try:
-                    metadata_field = MetadataField.objects.get(name=field_name, source="subject")
+                    metadata_field = MetadataField.objects.get(
+                        name=field_name, source="subject"
+                    )
                 except MetadataField.DoesNotExist:
-                    self.stdout.write(self.style.WARNING(
-                        f"Champ MetadataField '{field_name}' introuvable. Ignoré."
-                    ))
+                    self.stdout.write(
+                        self.style.WARNING(
+                            f"Champ MetadataField '{field_name}' introuvable. Ignoré."
+                        )
+                    )
                     continue
 
                 # Check if metadata already exists
@@ -53,6 +56,8 @@ class Command(BaseCommand):
                 )
                 created_count += 1
 
-        self.stdout.write(self.style.SUCCESS(
-            f"Métadonnées créées : {created_count}, déjà existantes : {skipped_count}"
-        ))
+        self.stdout.write(
+            self.style.SUCCESS(
+                f"Métadonnées créées : {created_count}, déjà existantes : {skipped_count}"
+            )
+        )

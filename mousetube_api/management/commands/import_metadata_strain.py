@@ -2,13 +2,12 @@ from django.core.management.base import BaseCommand
 from django.contrib.contenttypes.models import ContentType
 from mousetube_api.models import Strain, Metadata, MetadataField
 
+
 class Command(BaseCommand):
     help = "Create metadata for strains"
 
     def handle(self, *args, **kwargs):
-        fields_to_include = [
-            "name", "background", "bibliography"
-        ]
+        fields_to_include = ["name", "background", "bibliography"]
 
         content_type = ContentType.objects.get_for_model(Strain)
         created_count = 0
@@ -24,11 +23,15 @@ class Command(BaseCommand):
                     continue
 
                 try:
-                    metadata_field = MetadataField.objects.get(name=field_name, source="strain")
+                    metadata_field = MetadataField.objects.get(
+                        name=field_name, source="strain"
+                    )
                 except MetadataField.DoesNotExist:
-                    self.stdout.write(self.style.WARNING(
-                        f"Field MetadataField '{field_name}' not found. Skip."
-                    ))
+                    self.stdout.write(
+                        self.style.WARNING(
+                            f"Field MetadataField '{field_name}' not found. Skip."
+                        )
+                    )
                     continue
 
                 existing = Metadata.objects.filter(
@@ -49,6 +52,8 @@ class Command(BaseCommand):
                 )
                 created_count += 1
 
-        self.stdout.write(self.style.SUCCESS(
-            f"Metadata created : {created_count}, already exist : {skipped_count}"
-        ))
+        self.stdout.write(
+            self.style.SUCCESS(
+                f"Metadata created : {created_count}, already exist : {skipped_count}"
+            )
+        )
