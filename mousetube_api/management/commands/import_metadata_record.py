@@ -13,6 +13,7 @@ class Command(BaseCommand):
 
         sessions = RecordingSession.objects.all()
         count = 0  # Counter for how many metadata entries are created or updated
+        count_files = 0  # Counter for file metadata entries
 
         for session in sessions:
             # --- Temperature metadata (applied to both RecordingSession and Protocol) ---
@@ -75,7 +76,7 @@ class Command(BaseCommand):
                         metadata_field=MetadataField.objects.get(name="sampling_rate", source="file"),
                         defaults={"value": session.sampling_rate},
                     )
-                count += 1
+                count_files += 1
 
             # --- Bit depth metadata ---
             if session.bit_depth:
@@ -87,7 +88,7 @@ class Command(BaseCommand):
                         metadata_field=MetadataField.objects.get(name="bit_depth", source="file"),
                         defaults={"value": session.bit_depth},
                     )
-                count += 1
+                count_files += 1
 
             # --- Laboratory metadata ---
             if session.laboratory:
@@ -98,5 +99,18 @@ class Command(BaseCommand):
                     defaults={"value": session.laboratory},
                 )
                 count += 1
+            
+        
+        #--- File metadata --- #
+        for file in File.objects.all():
+            if file.name:
+                Metadata.objects.update_or_create(
+                    content_type=ct_file,
+                    object_id=file.id,
+                    metadata_field=MetadataField.objects.get(name="filename", source="file"),
+                    defaults={"value": file.name},
+                )
+                count_files += 1
+        self.stdout.write(self.style.SUCCESS(f"{count_files} metadata entries created/updated for Files."))
 
         self.stdout.write(self.style.SUCCESS(f"{count} metadata entries created/updated for RecordingSession."))
