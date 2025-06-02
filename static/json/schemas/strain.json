@@ -1,6 +1,6 @@
 {
     "title": "Strain",
-    "description": "Represents a mouse strain.",
+    "description": "Represents a rodent strain.",
     "type": "object",
     "required": ["name", "background", "species"],
     "properties": {

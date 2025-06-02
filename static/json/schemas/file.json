@@ -1,10 +1,10 @@
 {
     "title": "File",
-    "description": "Metadata for a single audio recording file.",
+    "description": "Metadata for a single recording file.",
     "type": "object",
     "properties": {
       "filename": {
-        "description": "Name of the audio file.",
+        "description": "Name of the file.",
         "type": "string"
       },
       "date": {
@@ -13,7 +13,7 @@
         "format": "date"
       },
       "sampling_rate": {
-        "description": "Sampling rate of the recording in Hz (e.g., 250000).",
+        "description": "Sampling rate of the recording in Hz (e.g., 300000).",
         "type": "number",
         "minimum": 1
       },

@@ -47,6 +47,18 @@ class Command(BaseCommand):
                 )
                 count += 1
 
+            # --- Protocol level light-cycle metadata ---
+            if session.light_cycle:
+                Metadata.objects.update_or_create(
+                    content_type=ct_pro,
+                    object_id=session.protocol.id,
+                    metadata_field=MetadataField.objects.get(
+                        name="light_cycle", source="protocol"
+                    ),
+                    defaults={"value": session.light_cycle},
+                )
+                count += 1
+
             # --- Microphone metadata ---
             if session.microphone:
                 Metadata.objects.update_or_create(
@@ -111,6 +123,20 @@ class Command(BaseCommand):
                     )
                 count_files += 1
 
+            # --- Date metadata ---
+            if session.date:
+                files = File.objects.filter(recording_session=session)
+                for file in files:
+                    Metadata.objects.update_or_create(
+                        content_type=ct_file,
+                        object_id=file.id,
+                        metadata_field=MetadataField.objects.get(
+                            name="date", source="file"
+                        ),
+                        defaults={"value": session.date.isoformat()},
+                    )
+                count += 1
+
             # --- Laboratory metadata ---
             if session.laboratory:
                 Metadata.objects.update_or_create(
@@ -134,7 +160,7 @@ class Command(BaseCommand):
                     ),
                     defaults={"value": file.name},
                 )
-                count_files += 1
+            count_files += 1
         self.stdout.write(
             self.style.SUCCESS(
                 f"{count_files} metadata entries created/updated for Files."

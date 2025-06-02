@@ -41,13 +41,13 @@
 			}
 		},
 		"context": {
-			"description": "behavioural context used for the recording",
+			"description": "experimental context used for the recording",
 			"type": "object",
 			"properties": {
 				"number of animals": {
 					"description": "number of animals present during recording",
-					"type": "string",
-					"enum": ["single", "dyad", "group (>2)"]
+					"type": "integer",
+					"minimum": 1
 				},
 				"duration": {
 					"description": "duration of the recording",
@@ -67,7 +67,7 @@
 				"light_cycle": {
 					"description": "time of the day or night (for the animal) during recording",
 					"type": "string",
-					"enum": ["day cycle", "night cycle"]
+					"enum": ["day", "night"]
 				},
 				"temperature": {
 					"properties": {

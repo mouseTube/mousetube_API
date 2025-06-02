@@ -4,7 +4,7 @@
 	"type": "object",
 	"properties": {
 		"equipment": {
-			"description": "equipment specificities used for the recording",
+			"description": "equipment used for the recording",
 			"type": "object",
 			"properties": {
 				"microphone": {
@@ -39,8 +39,53 @@
 				}
 			}
 		},
+		"animals": {
+		"description": "Details about the animal(s) involved in the recording session.",
+		"type": "object",
+		"properties": {
+			"id": {
+				"description": "Unique identifier assigned to the animal(s), used for tracking and referencing within the experiment.",
+				"type": "string"
+			},
+			"name": {
+				"description": "Common or given name used to refer to the animal(s) during the study.",
+				"type": "string"
+			},
+			"cohort": {
+				"description": "Group or batch to which the animal(s) belongs.",					
+				"type": "string"
+			},
+			"origin": {
+				"description": "Source from which the animal(s) were obtained.",
+				"type": "string"
+			},
+			"animal_type": {
+				"description": "Detailed information about the biological characteristics of the animal(s).",
+				"type": "object",
+				"properties": {
+					"strain": {
+						"description": "Strain designation of the animal(s), e.g., C57BL/6J.",
+						"type": "string"
+					},
+					"sex": {
+						"description": "Sex of the animal(s).",
+						"type": "string",
+						"enum": ["male", "female"]
+					},
+					"genotype": {
+						"description": "Genotype or genetic modification status of the animal(s), e.g., WT, KO.",
+						"type": "string"
+					},
+					"treatment": {
+						"description": "Experimental treatment applied to the animal(s), such as drug exposure or behavioral protocol.",
+						"type": "string"
+					}
+				}
+			}
+		}
+		},
         "context": {
-			"description": "behavioural context used for the recording session",
+			"description": "experimental context used for the recording session",
 			"type": "object",
 			"properties": {
 				"temperature": {
