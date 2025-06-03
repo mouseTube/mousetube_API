@@ -94,99 +94,6 @@ class LegacyUser(models.Model):
         return f"{self.first_name_user} {self.name_user}"
 
 
-class MetadataCategory(models.Model):
-    """
-    Category used to organize metadata fields hierarchically.
-
-    Fields:
-        name (CharField): Name of the category.
-        description (TextField): Optional description of the category.
-        source (CharField): Source of the metadata category.
-        parents (ManyToManyField): Parent categories for nested structure.
-    """
-
-    name = models.CharField(max_length=255)
-    description = models.TextField(blank=True, null=True)
-    source = models.CharField(max_length=50, null=True, blank=True)
-    parents = models.ManyToManyField("self", symmetrical=False, related_name="children")
-
-    def __str__(self):
-        return self.name
-
-    class Meta:
-        verbose_name = "Metadata category"
-        verbose_name_plural = "Metadata categories"
-        unique_together = ("name", "source")
-
-
-class MetadataField(models.Model):
-    """
-    Field used to store a single metadata attribute.
-
-    Fields:
-        name (CharField): Name of the metadata field.
-        description (TextField): Optional description of the field.
-        source (CharField): Source of the metadata field.
-        metadata_category (ManyToManyField): Categories this field belongs to.
-    """
-
-    name = models.CharField(max_length=255)
-    description = models.TextField(blank=True, null=True)
-    source = models.CharField(max_length=50, null=True, blank=True)
-    metadata_category = models.ManyToManyField(
-        MetadataCategory, blank=True, related_name="metadatafield_categories"
-    )
-
-    def __str__(self):
-        return self.name
-
-    class Meta:
-        verbose_name = "Metadata Field"
-        verbose_name_plural = "Metadata Fields"
-        unique_together = ("name", "source")
-
-
-class Metadata(models.Model):
-    """
-    A set of metadata fields grouped under a name.
-
-    Fields:
-        metadata_field (ForeignKey): Fields included in this metadata.
-        value (JSONField): JSON representation of the metadata values.
-        created_at (DateTimeField): Timestamp when the metadata was created.
-        modified_at (DateTimeField): Last modification timestamp.
-        created_by (ForeignKey): User who created the metadata.
-    """
-
-    metadata_field = models.ForeignKey(
-        MetadataField,
-        null=True,
-        related_name="metadata_field",
-        on_delete=models.CASCADE,
-    )
-    value = models.JSONField(blank=True, null=True)
-    content_type = models.ForeignKey(
-        ContentType, blank=True, null=True, on_delete=models.CASCADE
-    )
-    object_id = models.PositiveIntegerField(blank=True, null=True)
-    content_object = GenericForeignKey("content_type", "object_id")
-    created_at = models.DateTimeField(auto_now_add=True, null=True)
-    modified_at = models.DateTimeField(auto_now=True, null=True)
-    created_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        null=True,
-        related_name="metadata_created_by",
-        on_delete=models.SET_NULL,
-    )
-
-    def __str__(self):
-        return f"{self.metadata_field.name}: {self.value}"
-
-    class Meta:
-        verbose_name = "Metadata"
-        verbose_name_plural = "Metadata"
-
-
 class Species(models.Model):
     """
     Represents a biological species relevant to the data.
@@ -199,7 +106,6 @@ class Species(models.Model):
     """
 
     name = models.CharField(max_length=255, unique=True)
-    metadata = GenericRelation(Metadata)
     created_at = models.DateTimeField(auto_now_add=True)
     modified_at = models.DateTimeField(auto_now=True)
     created_by = models.ForeignKey(
@@ -235,7 +141,6 @@ class Strain(models.Model):
     background = models.CharField(max_length=255)
     species = models.ForeignKey(Species, on_delete=models.CASCADE, null=True)
     bibliography = models.TextField(blank=True, null=True)
-    metadata = GenericRelation(Metadata)
     created_at = models.DateTimeField(auto_now_add=True, null=True)
     modified_at = models.DateTimeField(auto_now=True, null=True)
     created_by = models.ForeignKey(
@@ -259,19 +164,20 @@ class Strain(models.Model):
         verbose_name_plural = "Strains"
 
 
-class Subject(models.Model):
+class AnimalProfile(models.Model):
     """
-    Represents a subject (mouse) in the system.
+    Represents the profile of animal used in experiments.
 
     Attributes:
-        name (str): The name of the subject.
-        strain (Strain): The strain associated with the subject.
-        origin (str, optional): The origin of the subject.
+        name (str): The name of the animal profil.
+        description (str, optional): A description of the animal profil.
+        strain (Strain): The strain associated with the animal profil.
         sex (str, optional): The sex of the subject.
-        group (str, optional): The group the subject belongs to.
-        genotype (str, optional): The genotype of the subject.
-        treatment (str, optional): The treatment applied to the subject.
-        user (LegacyUser): The user associated with the subject.
+        genotype (str, optional): The genotype of the animal.
+        treatment (str, optional): The treatment applied to the animal.
+        created_at (DateTimeField): Timestamp when the animal profil was created.
+        modified_at (DateTimeField): Last modification timestamp.
+        created_by (ForeignKey): User who created the animal profil entry.
     """
 
     SEX_CHOICES = [
@@ -280,14 +186,61 @@ class Subject(models.Model):
     ]
 
     name = models.CharField(max_length=255, unique=True)
+    description = models.TextField(blank=True, null=True)
     strain = models.ForeignKey(Strain, on_delete=models.CASCADE)
-    origin = models.CharField(max_length=255, blank=True, null=True)
     sex = models.CharField(max_length=6, choices=SEX_CHOICES, blank=True, null=True)
-    group = models.CharField(max_length=255, blank=True, null=True)
     genotype = models.CharField(max_length=255, blank=True, null=True)
     treatment = models.CharField(max_length=255, blank=True, null=True)
-    metadata = GenericRelation(Metadata)
+    created_at = models.DateTimeField(auto_now_add=True, null=True)
+    modified_at = models.DateTimeField(auto_now=True, null=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        related_name="animaltype_created_by",
+        on_delete=models.SET_NULL,
+    )
+
+    def __str__(self):
+        return self.name
+
+    class Meta:
+        verbose_name = "Animal Profile"
+        verbose_name_plural = "Animal Profiles"
+
+
+class Subject(models.Model):
+    """
+    Represents a subject (mouse) in the system.
+
+    Attributes:
+        name (str): The name of the subject.
+        origin (str, optional): The origin of the subject.
+        cohort (str, optional): The group the subject belongs to.
+        animal_profile (AnimalProfile, optional): The profil of the animals used.
+        user (LegacyUser): The user associated with the subject.
+        created_at (DateTimeField): Timestamp when the animal profil was created.
+        modified_at (DateTimeField): Last modification timestamp.
+        created_by (ForeignKey): User who created the animal profil entry.
+    """
+
+    SEX_CHOICES = [
+        ("male", "Male"),
+        ("female", "Female"),
+    ]
+
+    name = models.CharField(max_length=255, unique=True)
+    origin = models.CharField(max_length=255, blank=True, null=True)
+    cohort = models.CharField(max_length=255, blank=True, null=True)
+    animal_profil = models.ForeignKey(AnimalProfile, on_delete=models.CASCADE, null=True, blank=True)
     user = models.ForeignKey(LegacyUser, on_delete=models.CASCADE)
+    created_at = models.DateTimeField(auto_now_add=True, null=True)
+    modified_at = models.DateTimeField(auto_now=True, null=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        related_name="subject_created_by",
+        on_delete=models.SET_NULL,
+    )
 
     def __str__(self):
         """
@@ -317,7 +270,50 @@ class Protocol(models.Model):
     name = models.CharField(max_length=255)
     description = models.TextField(default="")
     user = models.ForeignKey(LegacyUser, on_delete=models.CASCADE)
-    metadata = GenericRelation(Metadata)
+    # Animals
+    animals_sex = models.CharField(max_length=32, choices=[
+        ("male(s)", "male(s)"),
+        ("female(s)", "female(s)"),
+        ("male(s) & female(s)", "male(s) & female(s)")
+    ], blank=True, null=True)
+    animals_age = models.CharField(max_length=32, choices=[
+        ("pup", "pup"),
+        ("juvenile", "juvenile"),
+        ("adult", "adult")
+    ],blank=True, null=True)
+    animals_housing = models.CharField(max_length=32, choices=[
+        ("grouped", "grouped"),
+        ("isolated", "isolated"),
+        ("grouped & isolated", "grouped & isolated")
+    ],blank=True, null=True)
+    animals_species = models.CharField(max_length=255, blank=True, null=True)
+
+    # Context
+    context_number_of_animals = models.PositiveIntegerField(blank=True, null=True)
+    context_duration = models.CharField(max_length=32, choices=[
+        ("short term (<1h)", "short term (<1h)"),
+        ("mid term (<1day)", "mid term (<1day)"),
+        ("long term (>=1day)", "long term (>=1day)")
+    ], blank=True, null=True)
+    context_cage = models.CharField(max_length=64, choices=[
+        ("unfamiliar test cage", "unfamiliar test cage"),
+        ("familiar test cage", "familiar test cage"),
+        ("home cage", "home cage")
+    ], blank=True, null=True)
+    context_bedding = models.CharField(max_length=16, choices=[
+        ("bedding", "bedding"),
+        ("no bedding", "no bedding")
+    ], blank=True, null=True)
+    context_light_cycle = models.CharField(max_length=8, choices=[
+        ("day", "day"),
+        ("night", "night")
+    ], blank=True, null=True)
+    context_temperature_value = models.CharField(max_length=16, blank=True, null=True)
+    context_temperature_unit = models.CharField(max_length=4, choices=[
+        ("°C", "°C"),
+        ("°F", "°F")
+    ],blank=True, null=True)
+    context_brightness = models.FloatField(help_text="in Lux", blank=True, null=True)
 
     def __str__(self):
         """
@@ -341,21 +337,40 @@ class RecordingSession(models.Model):
         name (str): The name of the experiment.
         protocol (Protocol): The protocol associated with the experiment.
         date (date, optional): The date of the experiment.
+        temperature (str, optional): The temperature during the experiment.
+        microphone (str, optional): The microphone used during the experiment.
+        acquisition_hardware (str, optional): The hardware used for data acquisition.
+        acquisition_software (str, optional): The software used for data acquisition.
+        animal_profiles (ManyToManyField): The animal profiles used in the experiment.
         laboratory (str, optional): The laboratory where the experiment was conducted.
+        created_at (DateTimeField): Timestamp when the experiment was created.
+        modified_at (DateTimeField): Last modification timestamp.
+        created_by (ForeignKey): User who created the experiment record.
     """
 
     name = models.CharField(max_length=255, unique=True)
     protocol = models.ForeignKey(Protocol, on_delete=models.CASCADE)
-    group_subject = models.CharField(max_length=255, blank=True, null=True)
     date = models.DateField(blank=True, null=True)
-    temperature = models.CharField(max_length=255, blank=True, null=True)
-    light_cycle = models.CharField(max_length=255, blank=True, null=True)
+    temperature_value = models.CharField(max_length=255, blank=True, null=True)
+    temperature_unit = models.CharField(max_length=4, choices=[
+        ("°C", "°C"),
+        ("°F", "°F")
+    ],blank=True, null=True, default="°C")
     microphone = models.CharField(max_length=255, blank=True, null=True)
     acquisition_hardware = models.CharField(max_length=255, blank=True, null=True)
     acquisition_software = models.CharField(max_length=255, blank=True, null=True)
-    sampling_rate = models.FloatField(blank=True, null=True)
-    bit_depth = models.FloatField(blank=True, null=True)
     laboratory = models.CharField(max_length=255, blank=True, null=True)
+    animal_profiles = models.ManyToManyField(
+        AnimalProfile, blank=True, related_name="animal_profiles"
+    )
+    created_at = models.DateTimeField(auto_now_add=True, null=True)
+    modified_at = models.DateTimeField(auto_now=True, null=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        related_name="recording_session_created_by",
+        on_delete=models.SET_NULL,
+    )
 
     def __str__(self):
         """
@@ -369,23 +384,6 @@ class RecordingSession(models.Model):
     class Meta:
         verbose_name = "Recording Session"
         verbose_name_plural = "Recording Sessions"
-
-
-class SubjectSession(models.Model):
-    """
-    Represents a Session subjects in the system.
-
-    Attributes:
-        session (str): The recording Session.
-        subject (Strain): The subjects used during the selected recording session.
-    """
-
-    recording_session = models.ForeignKey(RecordingSession, on_delete=models.CASCADE)
-    subject = models.ForeignKey(Subject, on_delete=models.CASCADE)
-
-    class Meta:
-        verbose_name = "Session Subject"
-        verbose_name_plural = "Session Subjects"
 
 
 class Repository(models.Model):
@@ -429,18 +427,22 @@ class Repository(models.Model):
 
 class File(models.Model):
     """
-    Represents a file associated with an experiment or subject.
+    Represents a file associated with an recording session or a subject.
 
     Attributes:
-        experiment (Experiment, optional): The experiment associated with the file.
+        recording_session (RecordingSession, optional): The experiment associated with the file.
         subject (Subject, optional): The subject associated with the file.
+        number (int, optional): The number of vocalizations in a file.
         link (str, optional): The URL link to the file.
         notes (str, optional): Notes about the file.
         doi (str, optional): The DOI of the file.
         is_valid_link (bool): Whether the link is valid.
         downloads (int): The number of downloads for the file.
-        metadata (GenericRelation): Metadata associated with the file.
         repository (ForeignKey): Repositories associated with the file.
+        date (date): The date of the file.
+        sampling_rate (int): The sampling rate of the file.
+        bit_depth (int): The bit depth of the file.
+        size (int): The size of the file in bytes.
     """
 
     name = models.CharField(max_length=255, blank=True, null=True)
@@ -456,10 +458,15 @@ class File(models.Model):
     doi = models.CharField(max_length=255, blank=True, null=True)
     is_valid_link = models.BooleanField(default=False)
     downloads = models.IntegerField(default=0)
-    metadata = GenericRelation(Metadata)
     repository = models.ForeignKey(
         Repository, on_delete=models.SET_NULL, null=True, blank=True
     )
+    date = models.DateField(blank=True, null=True)
+    sampling_rate = models.PositiveIntegerField(blank=True, null=True)
+    bit_depth = models.PositiveSmallIntegerField(
+        choices=[(8, "8"), (16, "16"), (24, "24"), (32, "32")], blank=True, null=True
+    )
+    size = models.PositiveBigIntegerField(help_text="File size in bytes", blank=True, null=True)
 
     def __str__(self):
         """
@@ -619,7 +626,7 @@ class Dataset(models.Model):
     link = models.CharField(max_length=255)
     doi = models.CharField(max_length=255, null=True, blank=True)
     metadata_json = models.JSONField(blank=True, null=True)
-    metadata = GenericRelation(Metadata)
+    # metadata = GenericRelation(Metadata)
     created_at = models.DateTimeField(auto_now_add=True)
     modified_at = models.DateTimeField(auto_now=True)
     created_by = models.ForeignKey(

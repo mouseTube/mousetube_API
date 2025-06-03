@@ -19,18 +19,15 @@ from .models import (
     Hardware,
     Species,
     Strain,
-    Metadata,
     Protocol,
     File,
     Subject,
     RecordingSession,
-    SubjectSession,
     PageView,
 )
 from .serializers import (
     SpeciesSerializer,
     StrainSerializer,
-    MetadataSerializer,
     ProtocolSerializer,
     FileSerializer,
     HardwareSerializer,
@@ -42,7 +39,6 @@ from .serializers import (
     TrackPageSerializer,
     SubjectSerializer,
     RecordingSessionSerializer,
-    SubjectSessionSerializer,
     PageViewSerializer,
 )
 from django_countries import countries
@@ -124,15 +120,6 @@ class StrainAPIView(APIView):
         return Response(serializer.data)
 
 
-class MetadataAPIView(APIView):
-    serializer_class = MetadataSerializer
-
-    def get(self, request, *args, **kwargs):
-        queryset = Metadata.objects.all()
-        serializer = self.serializer_class(queryset, many=True)
-        return Response(serializer.data)
-
-
 class HardwareAPIView(APIView):
     def get(self, *arg, **kwargs):
         hardware = Hardware.objects.all()
@@ -164,15 +151,6 @@ class RecordingSessionAPIView(APIView):
     def get(self, *arg, **kwargs):
         recording_session = RecordingSession.objects.all()
         serializers = self.serializer_class(recording_session, many=True)
-        return Response(serializers.data)
-
-
-class SubjectSessionAPIView(APIView):
-    serializer_class = SubjectSessionSerializer
-
-    def get(self, *arg, **kwargs):
-        subject_session = SubjectSession.objects.all()
-        serializers = self.serializer_class(subject_session, many=True)
         return Response(serializers.data)
 
 

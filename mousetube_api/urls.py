@@ -31,7 +31,6 @@ from .views import (
     UserProfileAPIView,
     SpeciesAPIView,
     StrainAPIView,
-    MetadataAPIView,
     ProtocolAPIView,
     FileAPIView,
     FileDetailAPIView,
@@ -41,7 +40,6 @@ from .views import (
     ReferenceAPIView,
     SubjectAPIView,
     RecordingSessionAPIView,
-    SubjectSessionAPIView,
 )
 from .views import TrackPageView
 from django.views.static import serve
@@ -67,7 +65,6 @@ urlpatterns = [
     path("api/user_profile/", UserProfileAPIView.as_view(), name="user_profile"),
     path("api/species/", SpeciesAPIView.as_view(), name="species"),
     path("api/strain/", StrainAPIView.as_view(), name="strain"),
-    path("api/metadata/", MetadataAPIView.as_view(), name="metadata"),
     path("api/protocol/", ProtocolAPIView.as_view(), name="protocol"),
     path("api/file/", FileAPIView.as_view(), name="file"),
     path("api/software/", SoftwareAPIView.as_view(), name="software"),
@@ -78,9 +75,6 @@ urlpatterns = [
         "api/recording_session/",
         RecordingSessionAPIView.as_view(),
         name="recording_session",
-    ),
-    path(
-        "api/subject_session/", SubjectSessionAPIView.as_view(), name="subject_session"
     ),
     path("api/file/<int:pk>/", FileDetailAPIView.as_view(), name="file-detail"),
     path("api/track-page/", TrackPageView.as_view(), name="track-page"),

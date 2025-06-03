@@ -1,0 +1,24 @@
+{
+  "title": "Animal type",
+  "description": "Detailed information about the biological characteristics of the animal(s).",
+  "type": "object",
+  "properties": {
+    "strain": {
+      "description": "Strain designation of the animal(s), e.g., C57BL/6J.",
+      "type": "string"
+    },
+    "sex": {
+      "description": "Sex of the animal(s).",
+      "type": "string",
+      "enum": ["male", "female"]
+    },
+    "genotype": {
+      "description": "Genotype or genetic modification status of the animal(s), e.g., WT, KO.",
+      "type": "string"
+    },
+    "treatment": {
+      "description": "Experimental treatment applied to the animal(s), such as drug exposure or behavioral protocol.",
+      "type": "string"
+    }
+  }
+}

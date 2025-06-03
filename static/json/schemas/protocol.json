@@ -73,7 +73,7 @@
 					"properties": {
 						"value": {
 							"description": "value of the temperature",
-							"type": "float"
+							"type": "string"
 						},
 						"unit": {
 							"description": "unit of the temperature",

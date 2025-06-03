@@ -16,17 +16,14 @@ from .models import (
     Reference,
     Species,
     Strain,
-    MetadataCategory,
-    MetadataField,
-    Metadata,
     Protocol,
     File,
     Dataset,
     Software,
     Hardware,
     RecordingSession,
-    SubjectSession,
     Subject,
+    AnimalProfile
 )
 
 
@@ -52,17 +49,13 @@ class StrainAdmin(admin.ModelAdmin):
 class SubjectAdmin(admin.ModelAdmin):
     list_display = (
         "name",
-        "strain",
         "user",
-        "sex",
-        "genotype",
     )
     search_fields = (
         "name",
-        "strain__name",
         "user__first_name_user",
     )
-    list_filter = ("strain", "sex", "user")
+    list_filter = ("user",)
 
 
 class ProtocolAdmin(admin.ModelAdmin):
@@ -76,9 +69,8 @@ class RecordingSessionAdmin(admin.ModelAdmin):
         "name",
         "protocol",
         "date",
-        "temperature",
-        "light_cycle",
-        "sampling_rate",
+        "temperature_value",
+        "temperature_unit",
     )
     search_fields = ("name", "protocol__name")
     list_filter = ("protocol", "date")
@@ -143,17 +135,14 @@ admin.site.register(Repository)
 admin.site.register(Reference, ReferenceAdmin)
 admin.site.register(Species)
 admin.site.register(Strain, StrainAdmin)
-admin.site.register(MetadataCategory)
-admin.site.register(MetadataField)
-admin.site.register(Metadata)
 admin.site.register(Protocol, ProtocolAdmin)
 admin.site.register(File, FileAdmin)
 admin.site.register(Dataset)
 admin.site.register(Software, SoftwareAdmin)
 admin.site.register(Hardware)
 admin.site.register(RecordingSession, RecordingSessionAdmin)
-admin.site.register(SubjectSession)
 admin.site.register(Subject, SubjectAdmin)
+admin.site.register(AnimalProfile)
 admin.site.site_header = "Mousetube Admin"
 admin.site.site_title = "Mousetube Admin"
 admin.site.index_title = "Mousetube Database"

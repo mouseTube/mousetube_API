@@ -1,33 +1,46 @@
 {
-    "title": "Subject",
-    "description": "Metadata schema describing an experimental subject (e.g., mouse).",
-    "type": "object",
-    "required": ["name", "strain"],
-    "properties": {
-      "name": {
-        "description": "Unique name or identifier for the subject.",
-        "type": "string"
-      },
-      "origin": {
-        "description": "Origin of the subject (e.g., vendor, lab).",
-        "type": "string"
-      },
-      "sex": {
-        "description": "Sex of the subject.",
-        "type": "string",
-        "enum": ["male", "female"]
-      },
-      "group": {
-        "description": "Experimental group or cohort the subject belongs to.",
-        "type": "string"
-      },
-      "genotype": {
-        "description": "Genotype information for the subject.",
-        "type": "string"
-      },
-      "treatment": {
-        "description": "Treatment(s) applied to the subject, if any.",
-        "type": "string"
+  "title": "Subject",
+  "description": "Metadata schema describing an experimental subject (e.g., mouse).",
+  "type": "object",
+  "properties": {
+    "name": {
+      "description": "Common or given name used to refer to the animal(s) during the study.",
+      "type": "string"
+    },
+    "identifier": {
+      "description": "Unique identifier assigned to the animal(s), used for tracking and referencing within the experiment.",
+      "type": "string"
+    },
+    "cohort": {
+      "description": "Group or batch to which the animal(s) belongs.",					
+      "type": "string"
+    },
+    "origin": {
+      "description": "Source from which the animal(s) were obtained.",
+      "type": "string"
+    },
+    "animal_type": {
+      "description": "Detailed information about the biological characteristics of the animal(s).",
+      "type": "object",
+      "properties": {
+        "strain": {
+          "description": "Strain designation of the animal(s), e.g., C57BL/6J.",
+          "type": "string"
+        },
+        "sex": {
+          "description": "Sex of the animal(s).",
+          "type": "string",
+          "enum": ["male", "female"]
+        },
+        "genotype": {
+          "description": "Genotype or genetic modification status of the animal(s), e.g., WT, KO.",
+          "type": "string"
+        },
+        "treatment": {
+          "description": "Experimental treatment applied to the animal(s), such as drug exposure or behavioral protocol.",
+          "type": "string"
+        }
       }
     }
   }
+}

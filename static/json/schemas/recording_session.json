@@ -43,12 +43,12 @@
 		"description": "Details about the animal(s) involved in the recording session.",
 		"type": "object",
 		"properties": {
-			"id": {
-				"description": "Unique identifier assigned to the animal(s), used for tracking and referencing within the experiment.",
-				"type": "string"
-			},
 			"name": {
 				"description": "Common or given name used to refer to the animal(s) during the study.",
+				"type": "string"
+			},
+			"identifier": {
+				"description": "Unique identifier assigned to the animal(s), used for tracking and referencing within the experiment.",
 				"type": "string"
 			},
 			"cohort": {
@@ -89,6 +89,8 @@
 			"type": "object",
 			"properties": {
 				"temperature": {
+					"description": "Temperature during the recording",
+  					"type": "string",
 					"properties": {
 						"value": {
 							"description": "value of the temperature",
@@ -99,7 +101,8 @@
 							"type": "string",
 							"enum": ["°C", "°F"]
 						}
-					}
+					},
+					"required": ["value", "unit"]
 				},
 				"brightness": {
 					"description": "brightness of the recording environment in Lux",

@@ -3,7 +3,7 @@
     "description": "Metadata for a single recording file.",
     "type": "object",
     "properties": {
-      "filename": {
+      "name": {
         "description": "Name of the file.",
         "type": "string"
       },
@@ -30,7 +30,17 @@
         "description": "Size of the file in bytes.",
         "type": "integer",
         "minimum": 0
+      },
+      "doi": {
+        "description": "Digital Object Identifier (DOI) for the file, if applicable.",
+        "type": "string",
+        "format": "uri"
+      },
+      "number": {
+        "description": "Number of vocalization in the recording, if applicable.",
+        "type": "integer",
+        "minimum": 1
       }
     },
-    "required": ["sampling_rate", "bit_depth", "date", "laboratory", "filename"]
+    "required": ["sampling_rate", "bit_depth", "date", "name"]
   }

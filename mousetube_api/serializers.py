@@ -18,13 +18,9 @@ from .models import (
     Software,
     Species,
     Strain,
-    MetadataCategory,
-    MetadataField,
-    Metadata,
     Protocol,
     File,
     RecordingSession,
-    SubjectSession,
     Subject,
     PageView,
 )
@@ -32,28 +28,6 @@ from .models import (
 from django.contrib.auth.models import User
 
 
-class MetadataCategorySerializer(serializers.ModelSerializer):
-    parents = serializers.SlugRelatedField(many=True, read_only=True, slug_field="name")
-
-    class Meta:
-        model = MetadataCategory
-        fields = ["id", "name", "description", "source", "parents"]
-
-
-class MetadataFieldSerializer(serializers.ModelSerializer):
-    metadata_category = MetadataCategorySerializer(read_only=True)
-
-    class Meta:
-        model = MetadataField
-        fields = "__all__"
-
-
-class MetadataSerializer(serializers.ModelSerializer):
-    metadata_field = MetadataFieldSerializer(read_only=True)
-
-    class Meta:
-        model = Metadata
-        fields = "__all__"
 
 
 class RepositorySerializer(serializers.ModelSerializer):
@@ -107,7 +81,6 @@ class SoftwareSerializer(serializers.ModelSerializer):
 
 
 class SpeciesSerializer(serializers.ModelSerializer):
-    metadata = MetadataSerializer(many=True, required=False)
 
     class Meta:
         model = Species
@@ -115,7 +88,6 @@ class SpeciesSerializer(serializers.ModelSerializer):
 
 
 class StrainSerializer(serializers.ModelSerializer):
-    metadata = MetadataSerializer(many=True, required=False)
 
     class Meta:
         model = Strain
@@ -124,7 +96,6 @@ class StrainSerializer(serializers.ModelSerializer):
 
 class ProtocolSerializer(serializers.ModelSerializer):
     user = LegacyUserSerializer(read_only=True)
-    metadata = MetadataSerializer(many=True, required=False)
 
     class Meta:
         model = Protocol
@@ -151,20 +122,10 @@ class SubjectSerializer(serializers.ModelSerializer):
 class FileSerializer(serializers.ModelSerializer):
     repository = RepositorySerializer(many=True, required=False)
     recording_session = RecordingSessionSerializer()
-    metadata = MetadataSerializer(many=True, required=False)
     subject = SubjectSerializer(required=False)
 
     class Meta:
         model = File
-        fields = "__all__"
-
-
-class SubjectSessionSerializer(serializers.ModelSerializer):
-    recording_session = RecordingSessionSerializer(read_only=True)
-    subject = SubjectSerializer(read_only=True)
-
-    class Meta:
-        model = SubjectSession
         fields = "__all__"
 
 
