@@ -81,7 +81,7 @@ class FileAdmin(admin.ModelAdmin):
         "name",
         "recording_session",
         "repository",
-        "subject",
+        "display_subjects",
         "link",
         "doi",
         "is_valid_link",
@@ -91,9 +91,13 @@ class FileAdmin(admin.ModelAdmin):
         "link",
         "doi",
         "recording_session__name",
-        "subject__name",
+        "subjects__name",
     )
-    list_filter = ("is_valid_link", "recording_session", "subject")
+    list_filter = ("is_valid_link", "recording_session", "subjects")
+
+    @admin.display(description="Subjects")
+    def display_subjects(self, obj):
+        return ", ".join([str(s) for s in obj.subjects.all()])
 
 
 class SoftwareAdmin(admin.ModelAdmin):

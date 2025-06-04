@@ -26,8 +26,12 @@
             "description": "Name or identifier of the laboratory where the recording was performed.",
             "type": "string"
         },
-		"animal_profile": {
-			"$ref": "animal_profile.json"
+		"animal_profiles": {
+			"type": "array",
+			"items": {
+				"$ref": "animal_profile.json"
+			},
+			"description": "List of animal profiles involved in the session"
 		},
 		"equipment": {
 			"description": "equipment used for the recording",

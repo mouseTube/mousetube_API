@@ -548,8 +548,11 @@ class File(models.Model):
     recording_session = models.ForeignKey(
         RecordingSession, on_delete=models.CASCADE, blank=True, null=True
     )
-    subject = models.ForeignKey(
-        Subject, on_delete=models.CASCADE, blank=True, null=True
+    subjects = models.ManyToManyField(
+    Subject,
+    blank=True,
+    related_name="files_m2m_temp",
+    help_text="Temporary field to migrate subject relations"
     )
     date = models.DateField(blank=True, null=True)
     duration = models.FloatField(blank=True, null=True, help_text="Duration in seconds")
