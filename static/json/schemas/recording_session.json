@@ -1,8 +1,34 @@
 {
+	"$schema": "http://json-schema.org/draft-07/schema#",
 	"title": "RecordingSession",
 	"description": "recording session description",
 	"type": "object",
 	"properties": {
+		"name": {
+			"description": "name of the recording session",
+			"type": "string"
+		},
+		"description": {
+			"description": "description of the recording session",
+			"type": "string"
+		},
+		"date": {
+			"description": "Date and time when the recording was made (YYY-MM-DD hh:mm:ss).",
+			"type": "string",
+			"format": "date-time"
+		},
+		"duration": {
+					"description": "duration of the recording in seconds",
+					"type": "integer",
+                    "unit": "seconds"
+		},
+		"laboratory": {
+            "description": "Name or identifier of the laboratory where the recording was performed.",
+            "type": "string"
+        },
+		"animal_profile": {
+			"$ref": "animal_profile.json"
+		},
 		"equipment": {
 			"description": "equipment used for the recording",
 			"type": "object",
@@ -39,62 +65,17 @@
 				}
 			}
 		},
-		"animals": {
-		"description": "Details about the animal(s) involved in the recording session.",
-		"type": "object",
-		"properties": {
-			"name": {
-				"description": "Common or given name used to refer to the animal(s) during the study.",
-				"type": "string"
-			},
-			"identifier": {
-				"description": "Unique identifier assigned to the animal(s), used for tracking and referencing within the experiment.",
-				"type": "string"
-			},
-			"cohort": {
-				"description": "Group or batch to which the animal(s) belongs.",					
-				"type": "string"
-			},
-			"origin": {
-				"description": "Source from which the animal(s) were obtained.",
-				"type": "string"
-			},
-			"animal_type": {
-				"description": "Detailed information about the biological characteristics of the animal(s).",
-				"type": "object",
-				"properties": {
-					"strain": {
-						"description": "Strain designation of the animal(s), e.g., C57BL/6J.",
-						"type": "string"
-					},
-					"sex": {
-						"description": "Sex of the animal(s).",
-						"type": "string",
-						"enum": ["male", "female"]
-					},
-					"genotype": {
-						"description": "Genotype or genetic modification status of the animal(s), e.g., WT, KO.",
-						"type": "string"
-					},
-					"treatment": {
-						"description": "Experimental treatment applied to the animal(s), such as drug exposure or behavioral protocol.",
-						"type": "string"
-					}
-				}
-			}
-		}
-		},
         "context": {
 			"description": "experimental context used for the recording session",
 			"type": "object",
 			"properties": {
 				"temperature": {
 					"description": "Temperature during the recording",
-  					"type": "string",
+  					"type": "object",
 					"properties": {
 						"value": {
 							"description": "value of the temperature",
-							"type": "float"
+							"type": "integer"
 						},
 						"unit": {
 							"description": "unit of the temperature",
@@ -106,24 +87,10 @@
 				},
 				"brightness": {
 					"description": "brightness of the recording environment in Lux",
-					"type": "float",
-					"unit": "Lux"
-				},
-                "datetime": {
-                    "description": "Date when the recording was made (YYY-MM-DD hh:mm:ss).",
-                    "type": "string",
-                    "format": "date-time"
-                },
-                "duration": {
-					"description": "duration of the recording in seconds",
 					"type": "integer",
-                    "unit": "seconds"
+					"unit": "Lux"
 				}
 			}
-		},
-        "laboratory": {
-            "description": "Name or identifier of the laboratory where the recording was performed.",
-            "type": "string"
-      }
+		}
     }
 }

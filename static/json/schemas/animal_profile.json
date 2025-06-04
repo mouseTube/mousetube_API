@@ -1,5 +1,6 @@
 {
-  "title": "Animal type",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Animal profile",
   "description": "Detailed information about the biological characteristics of the animal(s).",
   "type": "object",
   "properties": {

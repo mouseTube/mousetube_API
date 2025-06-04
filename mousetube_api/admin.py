@@ -69,8 +69,8 @@ class RecordingSessionAdmin(admin.ModelAdmin):
         "name",
         "protocol",
         "date",
-        "temperature_value",
-        "temperature_unit",
+        "context_temperature_value",
+        "context_temperature_unit",
     )
     search_fields = ("name", "protocol__name")
     list_filter = ("protocol", "date")

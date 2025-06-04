@@ -201,7 +201,7 @@ class AnimalProfile(models.Model):
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         null=True,
-        related_name="animaltype_created_by",
+        related_name="animalprofile_created_by",
         on_delete=models.SET_NULL,
     )
 
@@ -234,8 +234,9 @@ class Subject(models.Model):
     ]
 
     name = models.CharField(max_length=255, unique=True)
-    origin = models.CharField(max_length=255, blank=True, null=True)
+    identifier = models.CharField(max_length=255, blank=True, null=True)
     cohort = models.CharField(max_length=255, blank=True, null=True)
+    origin = models.CharField(max_length=255, blank=True, null=True)
     animal_profile = models.ForeignKey(
         AnimalProfile, on_delete=models.CASCADE, null=True, blank=True
     )
@@ -269,7 +270,6 @@ class Protocol(models.Model):
 
     Attributes:
         name (str): The name of the protocol.
-        number_files (int, optional): The number of files associated with the protocol.
         description (str): A description of the protocol.
         user (LegacyUser): The user associated with the protocol.
         animals_sex (str, optional): The sex of the animals used in the protocol.
@@ -402,23 +402,50 @@ class RecordingSession(models.Model):
         created_by (ForeignKey): User who created the experiment record.
     """
 
+    CHANNEL_CHOICES = [
+        ('mono', 'Mono'),
+        ('stereo', 'Stereo'),
+        ('more than 2', 'More than 2'),
+    ]
+
+    SOUND_ISOLATION_CHOICES = [
+        ('soundproof room', 'Soundproof room'),
+        ('soundproof cage', 'Soundproof cage'),
+        ('no specific sound isolation', 'No specific sound isolation'),
+    ]
+
     name = models.CharField(max_length=255, unique=True)
     protocol = models.ForeignKey(Protocol, on_delete=models.CASCADE)
+    description = models.TextField(blank=True, null=True)
     date = models.DateField(blank=True, null=True)
-    temperature_value = models.CharField(max_length=255, blank=True, null=True)
-    temperature_unit = models.CharField(
+    laboratory = models.CharField(max_length=255, blank=True, null=True)
+    animal_profiles = models.ManyToManyField(
+        AnimalProfile, blank=True, related_name="animal_profiles"
+    )
+    context_temperature_value = models.CharField(max_length=255, blank=True, null=True)
+    context_temperature_unit = models.CharField(
         max_length=4,
         choices=[("°C", "°C"), ("°F", "°F")],
         blank=True,
         null=True,
         default="°C",
     )
-    microphone = models.CharField(max_length=255, blank=True, null=True)
-    acquisition_hardware = models.CharField(max_length=255, blank=True, null=True)
-    acquisition_software = models.CharField(max_length=255, blank=True, null=True)
-    laboratory = models.CharField(max_length=255, blank=True, null=True)
-    animal_profiles = models.ManyToManyField(
-        AnimalProfile, blank=True, related_name="animal_profiles"
+    context_brightness = models.FloatField(blank=True, null=True)
+    equipment_microphone = models.CharField(max_length=255, blank=True, null=True)
+    equipment_acquisition_hardware = models.CharField(max_length=255, blank=True, null=True)
+    equipment_acquisition_software = models.CharField(max_length=255, blank=True, null=True)
+    equipment_channels = models.CharField(
+        max_length=20,
+        choices=CHANNEL_CHOICES,
+        help_text="Number of microphones used for recording",
+        blank=True, null=True
+    )
+
+    equipment_sound_isolation = models.CharField(
+        max_length=30,
+        choices=SOUND_ISOLATION_CHOICES,
+        help_text="Presence of a sound attenuating chamber",
+        blank=True, null=True
     )
     created_at = models.DateTimeField(auto_now_add=True, null=True)
     modified_at = models.DateTimeField(auto_now=True, null=True)
@@ -517,20 +544,12 @@ class File(models.Model):
         ("MKV", "MKV"),
     ]
     name = models.CharField(max_length=255, blank=True, null=True)
+    link = models.URLField(blank=True, null=True)
     recording_session = models.ForeignKey(
         RecordingSession, on_delete=models.CASCADE, blank=True, null=True
     )
     subject = models.ForeignKey(
         Subject, on_delete=models.CASCADE, blank=True, null=True
-    )
-    number = models.IntegerField(blank=True, null=True)
-    link = models.URLField(blank=True, null=True)
-    notes = models.TextField(blank=True, null=True)
-    doi = models.CharField(max_length=255, blank=True, null=True)
-    is_valid_link = models.BooleanField(default=False)
-    downloads = models.IntegerField(default=0)
-    repository = models.ForeignKey(
-        Repository, on_delete=models.SET_NULL, null=True, blank=True
     )
     date = models.DateField(blank=True, null=True)
     duration = models.FloatField(blank=True, null=True, help_text="Duration in seconds")
@@ -545,8 +564,16 @@ class File(models.Model):
     bit_depth = models.PositiveSmallIntegerField(
         choices=[(8, "8"), (16, "16"), (24, "24"), (32, "32")], blank=True, null=True
     )
+    notes = models.TextField(blank=True, null=True)
     size = models.PositiveBigIntegerField(
         help_text="File size in bytes", blank=True, null=True
+    )
+    doi = models.CharField(max_length=255, blank=True, null=True)
+    number = models.IntegerField(blank=True, null=True)
+    is_valid_link = models.BooleanField(default=False)
+    downloads = models.IntegerField(default=0)
+    repository = models.ForeignKey(
+        Repository, on_delete=models.SET_NULL, null=True, blank=True
     )
     created_at = models.DateTimeField(auto_now_add=True, null=True)
     modified_at = models.DateTimeField(auto_now=True, null=True)

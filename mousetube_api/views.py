@@ -429,11 +429,11 @@ def stats_view(request):
 
 class SchemaDetailView(APIView):
     """
-    Return the content of a JSON schema file from static/json/schema/
+    Return the content of a JSON schema file from static/json/schemas/,
+    with local $ref resolved (non-recursively).
     """
 
     def get(self, request, filename):
-        # Path to the static JSON schema directory
         schema_dir = os.path.join(settings.BASE_DIR, "static", "json", "schemas")
         file_path = os.path.join(schema_dir, filename)
 
@@ -441,11 +441,36 @@ class SchemaDetailView(APIView):
             raise Http404("Schema file not found")
 
         try:
-            with open(file_path, "r", encoding="utf-8") as json_file:
-                data = json.load(json_file)
-            return Response(data)
+            with open(file_path, "r", encoding="utf-8") as f:
+                schema = json.load(f)
+
+            # Inline local $ref files (basic version, non-recursive)
+            schema = self.resolve_refs(schema, schema_dir)
+
+            return Response(schema)
+
         except json.JSONDecodeError:
             return Response(
                 {"error": "Invalid JSON format."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+
+    def resolve_refs(self, schema, schema_dir):
+        """
+        Resolve local $ref keys pointing to other .json files (non-recursive).
+        """
+        if isinstance(schema, dict):
+            for key, value in list(schema.items()):
+                if key == "$ref" and isinstance(value, str) and value.endswith(".json"):
+                    ref_path = os.path.join(schema_dir, value)
+                    if os.path.isfile(ref_path):
+                        with open(ref_path, "r", encoding="utf-8") as ref_file:
+                            ref_content = json.load(ref_file)
+                        return self.resolve_refs(ref_content, schema_dir)
+                else:
+                    schema[key] = self.resolve_refs(value, schema_dir)
+
+        elif isinstance(schema, list):
+            return [self.resolve_refs(item, schema_dir) for item in schema]
+
+        return schema

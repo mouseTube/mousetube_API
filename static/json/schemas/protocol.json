@@ -1,8 +1,17 @@
 {
+	"$schema": "http://json-schema.org/draft-07/schema#",
 	"title": "Protocol",
 	"description": "protocol description",
 	"type": "object",
 	"properties": {
+		"name": {
+			"type": "string",
+			"description": "The name of the protocol"
+		},
+		"description": {
+			"type": "string",
+			"description": "A description of the protocol"
+		},
 		"animals":{
 			"description": "information about animals",
 			"type": "object",
@@ -84,7 +93,7 @@
 				},
 				"brightness": {
 					"description": "brightness of the recording environment in Lux",
-					"type": "float",
+					"type": "integer",
 					"unit": "Lux"
 				}
 			}
