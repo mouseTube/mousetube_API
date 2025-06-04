@@ -403,15 +403,15 @@ class RecordingSession(models.Model):
     """
 
     CHANNEL_CHOICES = [
-        ('mono', 'Mono'),
-        ('stereo', 'Stereo'),
-        ('more than 2', 'More than 2'),
+        ("mono", "Mono"),
+        ("stereo", "Stereo"),
+        ("more than 2", "More than 2"),
     ]
 
     SOUND_ISOLATION_CHOICES = [
-        ('soundproof room', 'Soundproof room'),
-        ('soundproof cage', 'Soundproof cage'),
-        ('no specific sound isolation', 'No specific sound isolation'),
+        ("soundproof room", "Soundproof room"),
+        ("soundproof cage", "Soundproof cage"),
+        ("no specific sound isolation", "No specific sound isolation"),
     ]
 
     name = models.CharField(max_length=255, unique=True)
@@ -432,20 +432,26 @@ class RecordingSession(models.Model):
     )
     context_brightness = models.FloatField(blank=True, null=True)
     equipment_microphone = models.CharField(max_length=255, blank=True, null=True)
-    equipment_acquisition_hardware = models.CharField(max_length=255, blank=True, null=True)
-    equipment_acquisition_software = models.CharField(max_length=255, blank=True, null=True)
+    equipment_acquisition_hardware = models.CharField(
+        max_length=255, blank=True, null=True
+    )
+    equipment_acquisition_software = models.CharField(
+        max_length=255, blank=True, null=True
+    )
     equipment_channels = models.CharField(
         max_length=20,
         choices=CHANNEL_CHOICES,
         help_text="Number of microphones used for recording",
-        blank=True, null=True
+        blank=True,
+        null=True,
     )
 
     equipment_sound_isolation = models.CharField(
         max_length=30,
         choices=SOUND_ISOLATION_CHOICES,
         help_text="Presence of a sound attenuating chamber",
-        blank=True, null=True
+        blank=True,
+        null=True,
     )
     created_at = models.DateTimeField(auto_now_add=True, null=True)
     modified_at = models.DateTimeField(auto_now=True, null=True)
@@ -549,10 +555,10 @@ class File(models.Model):
         RecordingSession, on_delete=models.CASCADE, blank=True, null=True
     )
     subjects = models.ManyToManyField(
-    Subject,
-    blank=True,
-    related_name="files_m2m_temp",
-    help_text="Temporary field to migrate subject relations"
+        Subject,
+        blank=True,
+        related_name="files_m2m_temp",
+        help_text="Temporary field to migrate subject relations",
     )
     date = models.DateField(blank=True, null=True)
     duration = models.FloatField(blank=True, null=True, help_text="Duration in seconds")

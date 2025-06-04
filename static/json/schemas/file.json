@@ -51,6 +51,13 @@
         "description": "Number of vocalization in the recording, if applicable.",
         "type": "integer",
         "minimum": 1
+      },
+      "subjects": {
+        "description": "List of subjects (e.g., animals) involved in the recording.",
+        "type": "array",
+        "items": {
+				  "$ref": "subjects.json"
+			  }
       }
     },
     "required": ["sampling_rate", "bit_depth", "date", "name"]
