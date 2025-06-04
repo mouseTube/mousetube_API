@@ -59,7 +59,11 @@ class UserProfile(models.Model):
     )  # who entered the info in the database
 
     def __str__(self):
-        return self.user.username
+        return self.user.username if self.user else "No user"
+    
+    class Meta:
+        verbose_name = "UserProfile"
+        verbose_name_plural = "UserProfiles"
 
 
 class LegacyUser(models.Model):
@@ -92,6 +96,10 @@ class LegacyUser(models.Model):
             str: The full name of the user.
         """
         return f"{self.first_name_user} {self.name_user}"
+    
+    class Meta:
+        verbose_name = "LegacyUser"
+        verbose_name_plural = "LegacyUsers"
 
 
 class Species(models.Model):
@@ -231,7 +239,7 @@ class Subject(models.Model):
     name = models.CharField(max_length=255, unique=True)
     origin = models.CharField(max_length=255, blank=True, null=True)
     cohort = models.CharField(max_length=255, blank=True, null=True)
-    animal_profil = models.ForeignKey(AnimalProfile, on_delete=models.CASCADE, null=True, blank=True)
+    animal_profile = models.ForeignKey(AnimalProfile, on_delete=models.CASCADE, null=True, blank=True)
     user = models.ForeignKey(LegacyUser, on_delete=models.CASCADE)
     created_at = models.DateTimeField(auto_now_add=True, null=True)
     modified_at = models.DateTimeField(auto_now=True, null=True)
@@ -660,6 +668,8 @@ class PageView(models.Model):
 
     class Meta:
         unique_together = ("path", "date")
+        verbose_name = "PageView"
+        verbose_name_plural = "PageViews"
 
     def __str__(self):
         """
