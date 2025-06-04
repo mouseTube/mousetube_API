@@ -10,6 +10,9 @@ Code under GPL v3.0 licence
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.pagination import PageNumberPagination
+import json
+from rest_framework import status
+from django.http import Http404
 from .models import (
     Repository,
     Reference,
@@ -43,7 +46,6 @@ from .serializers import (
 )
 from django_countries import countries
 from django.db.models import Q
-from rest_framework import status
 from django.utils.timezone import now
 from django.db.models import F
 from django.core.cache import cache
@@ -423,3 +425,24 @@ def stats_view(request):
         content = f.read()
 
     return render(request, "stats_view.html", {"content": content})
+
+
+class SchemaDetailView(APIView):
+    """
+    Return the content of a JSON schema file from static/json/schema/
+    """
+
+    def get(self, request, filename):
+        # Path to the static JSON schema directory
+        schema_dir = os.path.join(settings.BASE_DIR, 'static', 'json', 'schemas')
+        file_path = os.path.join(schema_dir, filename)
+
+        if not os.path.isfile(file_path):
+            raise Http404("Schema file not found")
+
+        try:
+            with open(file_path, 'r', encoding='utf-8') as json_file:
+                data = json.load(json_file)
+            return Response(data)
+        except json.JSONDecodeError:
+            return Response({"error": "Invalid JSON format."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

@@ -40,6 +40,7 @@ from .views import (
     ReferenceAPIView,
     SubjectAPIView,
     RecordingSessionAPIView,
+    SchemaDetailView,
 )
 from .views import TrackPageView
 from django.views.static import serve
@@ -78,6 +79,7 @@ urlpatterns = [
     ),
     path("api/file/<int:pk>/", FileDetailAPIView.as_view(), name="file-detail"),
     path("api/track-page/", TrackPageView.as_view(), name="track-page"),
+    path('api/schema/<str:filename>/', SchemaDetailView.as_view(), name='schema-detail'),
     path("schema/", SpectacularAPIView.as_view(), name="schema"),
     path(
         "swagger/", SpectacularSwaggerView.as_view(url_name="schema"), name="swagger-ui"
