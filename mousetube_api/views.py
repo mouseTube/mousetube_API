@@ -434,15 +434,18 @@ class SchemaDetailView(APIView):
 
     def get(self, request, filename):
         # Path to the static JSON schema directory
-        schema_dir = os.path.join(settings.BASE_DIR, 'static', 'json', 'schemas')
+        schema_dir = os.path.join(settings.BASE_DIR, "static", "json", "schemas")
         file_path = os.path.join(schema_dir, filename)
 
         if not os.path.isfile(file_path):
             raise Http404("Schema file not found")
 
         try:
-            with open(file_path, 'r', encoding='utf-8') as json_file:
+            with open(file_path, "r", encoding="utf-8") as json_file:
                 data = json.load(json_file)
             return Response(data)
         except json.JSONDecodeError:
-            return Response({"error": "Invalid JSON format."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response(
+                {"error": "Invalid JSON format."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
