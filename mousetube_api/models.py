@@ -496,7 +496,7 @@ class File(models.Model):
         is_valid_link (bool): Whether the link is valid.
         downloads (int): The number of downloads for the file.
         repository (ForeignKey): Repositories associated with the file.
-        date (date): The date of the file.
+        date (date): The date of the file creation.
         sampling_rate (int): The sampling rate of the file.
         bit_depth (int): The bit depth of the file.
         size (int): The size of the file in bytes.
