@@ -53,7 +53,7 @@ class UserProfile(models.Model):
         null=True,
         related_name="userprofile_created_by",
         on_delete=models.SET_NULL,
-    )  # who entered the info in the database
+    )
 
     def __str__(self):
         return self.user.username if self.user else "No user"
@@ -272,6 +272,21 @@ class Protocol(models.Model):
         number_files (int, optional): The number of files associated with the protocol.
         description (str): A description of the protocol.
         user (LegacyUser): The user associated with the protocol.
+        animals_sex (str, optional): The sex of the animals used in the protocol.
+        animals_age (str, optional): The age of the animals used in the protocol.
+        animals_housing (str, optional): The housing conditions of the animals.
+        animals_species (str, optional): The species of the animals used in the protocol.
+        context_number_of_animals (int, optional): The number of animals in the context.
+        context_duration (str, optional): The duration of the context.
+        context_cage (str, optional): The type of cage used in the context.
+        context_bedding (str, optional): Whether bedding is used in the context.
+        context_light_cycle (str, optional): The light cycle during the experiment.
+        context_temperature_value (str, optional): The temperature value during the experiment.
+        context_temperature_unit (str, optional): The unit of temperature measurement.
+        context_brightness (float, optional): The brightness level during the experiment.
+        created_at (DateTimeField): Timestamp when the protocol was created.
+        modified_at (DateTimeField): Last modification timestamp.
+        created_by (ForeignKey): User who created the protocol entry.
     """
 
     name = models.CharField(max_length=255)
@@ -345,6 +360,14 @@ class Protocol(models.Model):
         max_length=4, choices=[("°C", "°C"), ("°F", "°F")], blank=True, null=True
     )
     context_brightness = models.FloatField(help_text="in Lux", blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True, null=True)
+    modified_at = models.DateTimeField(auto_now=True, null=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        related_name="protocol_created_by",
+        on_delete=models.SET_NULL,
+    )
 
     def __str__(self):
         """
@@ -477,6 +500,9 @@ class File(models.Model):
         sampling_rate (int): The sampling rate of the file.
         bit_depth (int): The bit depth of the file.
         size (int): The size of the file in bytes.
+        created_at (DateTimeField): Timestamp when the file was created.
+        modified_at (DateTimeField): Last modification timestamp.
+        created_by (ForeignKey): User who created the file record.
     """
 
     name = models.CharField(max_length=255, blank=True, null=True)
@@ -503,6 +529,14 @@ class File(models.Model):
     size = models.PositiveBigIntegerField(
         help_text="File size in bytes", blank=True, null=True
     )
+    created_at = models.DateTimeField(auto_now_add=True, null=True)
+    modified_at = models.DateTimeField(auto_now=True, null=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        related_name="file_created_by",
+        on_delete=models.SET_NULL,
+    )
 
     def __str__(self):
         """
@@ -527,6 +561,9 @@ class Reference(models.Model):
         description (str): A detailed description of the reference.
         url (str): The URL pointing to the reference, if available.
         doi (str): The DOI (Digital Object Identifier) of the reference, if applicable.
+        created_at (DateTimeField): Timestamp when the reference was created.
+        modified_at (DateTimeField): Last modification timestamp.
+        created_by (ForeignKey): User who created the reference entry.
 
     Meta:
         verbose_name (str): Human-readable name for the model.
@@ -537,6 +574,14 @@ class Reference(models.Model):
     description = models.TextField(blank=True, null=True)
     url = models.URLField(max_length=255, blank=True, null=True)
     doi = models.CharField(max_length=255, blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True, null=True)
+    modified_at = models.DateTimeField(auto_now=True, null=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        related_name="reference_created_by",
+        on_delete=models.SET_NULL,
+    )
 
     def __str__(self):
         return self.name
@@ -558,6 +603,9 @@ class Software(models.Model):
         technical_requirements (str): The technical requirements for using the software.
         references (ManyToManyField): A list of references and tutorials related to the software.
         users (ManyToManyField): A list of users who are associated with the software.
+        created_at (DateTimeField): Timestamp when the software record was created.
+        modified_at (DateTimeField): Last modification timestamp.
+        created_by (ForeignKey): User who created the software record.
 
     Meta:
         verbose_name (str): Human-readable name for the model.
@@ -580,6 +628,14 @@ class Software(models.Model):
     references = models.ManyToManyField(Reference, related_name="software", blank=True)
     users = models.ManyToManyField(
         LegacyUser, related_name="software_to_user", blank=True
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    modified_at = models.DateTimeField(auto_now=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        related_name="software_created_by",
+        on_delete=models.SET_NULL,
     )
 
     def __str__(self):
