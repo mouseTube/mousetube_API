@@ -12,6 +12,16 @@
         "type": "string",
         "format": "date"
       },
+      "duration": {
+        "description": "Duration of the recording in seconds.",
+        "type": "integer",
+        "minimum": 0
+      },
+      "format": {
+        "description": "File format of the recording (e.g., WAV, AVI).",
+        "type": "string",
+        "enum": ["WAV", "MP3", "FLAC", "OGG", "AIFF", "AVI", "MP4", "MOV", "MKV"]
+      },
       "sampling_rate": {
         "description": "Sampling rate of the recording in Hz (e.g., 300000).",
         "type": "number",

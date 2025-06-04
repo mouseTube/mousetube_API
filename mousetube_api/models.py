@@ -505,6 +505,17 @@ class File(models.Model):
         created_by (ForeignKey): User who created the file record.
     """
 
+    FORMAT_CHOICES = [
+        ("WAV", "WAV"),
+        ("MP3", "MP3"),
+        ("FLAC", "FLAC"),
+        ("OGG", "OGG"),
+        ("AIFF", "AIFF"),
+        ("AVI", "AVI"),
+        ("MP4", "MP4"),
+        ("MOV", "MOV"),
+        ("MKV", "MKV"),
+    ]
     name = models.CharField(max_length=255, blank=True, null=True)
     recording_session = models.ForeignKey(
         RecordingSession, on_delete=models.CASCADE, blank=True, null=True
@@ -522,6 +533,14 @@ class File(models.Model):
         Repository, on_delete=models.SET_NULL, null=True, blank=True
     )
     date = models.DateField(blank=True, null=True)
+    duration = models.FloatField(blank=True, null=True, help_text="Duration in seconds")
+    format = models.CharField(
+        max_length=10,
+        choices=FORMAT_CHOICES,
+        blank=True,
+        null=True,
+        help_text="File format (e.g., WAV, MP3)",
+    )
     sampling_rate = models.PositiveIntegerField(blank=True, null=True)
     bit_depth = models.PositiveSmallIntegerField(
         choices=[(8, "8"), (16, "16"), (24, "24"), (32, "32")], blank=True, null=True
