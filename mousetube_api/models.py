@@ -10,9 +10,6 @@
 from django.db import models
 from django.conf import settings
 from django_countries.fields import CountryField
-from django.contrib.contenttypes.models import ContentType
-from django.contrib.contenttypes.fields import GenericForeignKey
-from django.contrib.contenttypes.fields import GenericRelation
 
 
 class UserProfile(models.Model):
@@ -60,7 +57,7 @@ class UserProfile(models.Model):
 
     def __str__(self):
         return self.user.username if self.user else "No user"
-    
+
     class Meta:
         verbose_name = "UserProfile"
         verbose_name_plural = "UserProfiles"
@@ -96,7 +93,7 @@ class LegacyUser(models.Model):
             str: The full name of the user.
         """
         return f"{self.first_name_user} {self.name_user}"
-    
+
     class Meta:
         verbose_name = "LegacyUser"
         verbose_name_plural = "LegacyUsers"
@@ -239,7 +236,9 @@ class Subject(models.Model):
     name = models.CharField(max_length=255, unique=True)
     origin = models.CharField(max_length=255, blank=True, null=True)
     cohort = models.CharField(max_length=255, blank=True, null=True)
-    animal_profile = models.ForeignKey(AnimalProfile, on_delete=models.CASCADE, null=True, blank=True)
+    animal_profile = models.ForeignKey(
+        AnimalProfile, on_delete=models.CASCADE, null=True, blank=True
+    )
     user = models.ForeignKey(LegacyUser, on_delete=models.CASCADE)
     created_at = models.DateTimeField(auto_now_add=True, null=True)
     modified_at = models.DateTimeField(auto_now=True, null=True)
@@ -279,48 +278,72 @@ class Protocol(models.Model):
     description = models.TextField(default="")
     user = models.ForeignKey(LegacyUser, on_delete=models.CASCADE)
     # Animals
-    animals_sex = models.CharField(max_length=32, choices=[
-        ("male(s)", "male(s)"),
-        ("female(s)", "female(s)"),
-        ("male(s) & female(s)", "male(s) & female(s)")
-    ], blank=True, null=True)
-    animals_age = models.CharField(max_length=32, choices=[
-        ("pup", "pup"),
-        ("juvenile", "juvenile"),
-        ("adult", "adult")
-    ],blank=True, null=True)
-    animals_housing = models.CharField(max_length=32, choices=[
-        ("grouped", "grouped"),
-        ("isolated", "isolated"),
-        ("grouped & isolated", "grouped & isolated")
-    ],blank=True, null=True)
+    animals_sex = models.CharField(
+        max_length=32,
+        choices=[
+            ("male(s)", "male(s)"),
+            ("female(s)", "female(s)"),
+            ("male(s) & female(s)", "male(s) & female(s)"),
+        ],
+        blank=True,
+        null=True,
+    )
+    animals_age = models.CharField(
+        max_length=32,
+        choices=[("pup", "pup"), ("juvenile", "juvenile"), ("adult", "adult")],
+        blank=True,
+        null=True,
+    )
+    animals_housing = models.CharField(
+        max_length=32,
+        choices=[
+            ("grouped", "grouped"),
+            ("isolated", "isolated"),
+            ("grouped & isolated", "grouped & isolated"),
+        ],
+        blank=True,
+        null=True,
+    )
     animals_species = models.CharField(max_length=255, blank=True, null=True)
 
     # Context
     context_number_of_animals = models.PositiveIntegerField(blank=True, null=True)
-    context_duration = models.CharField(max_length=32, choices=[
-        ("short term (<1h)", "short term (<1h)"),
-        ("mid term (<1day)", "mid term (<1day)"),
-        ("long term (>=1day)", "long term (>=1day)")
-    ], blank=True, null=True)
-    context_cage = models.CharField(max_length=64, choices=[
-        ("unfamiliar test cage", "unfamiliar test cage"),
-        ("familiar test cage", "familiar test cage"),
-        ("home cage", "home cage")
-    ], blank=True, null=True)
-    context_bedding = models.CharField(max_length=16, choices=[
-        ("bedding", "bedding"),
-        ("no bedding", "no bedding")
-    ], blank=True, null=True)
-    context_light_cycle = models.CharField(max_length=8, choices=[
-        ("day", "day"),
-        ("night", "night")
-    ], blank=True, null=True)
+    context_duration = models.CharField(
+        max_length=32,
+        choices=[
+            ("short term (<1h)", "short term (<1h)"),
+            ("mid term (<1day)", "mid term (<1day)"),
+            ("long term (>=1day)", "long term (>=1day)"),
+        ],
+        blank=True,
+        null=True,
+    )
+    context_cage = models.CharField(
+        max_length=64,
+        choices=[
+            ("unfamiliar test cage", "unfamiliar test cage"),
+            ("familiar test cage", "familiar test cage"),
+            ("home cage", "home cage"),
+        ],
+        blank=True,
+        null=True,
+    )
+    context_bedding = models.CharField(
+        max_length=16,
+        choices=[("bedding", "bedding"), ("no bedding", "no bedding")],
+        blank=True,
+        null=True,
+    )
+    context_light_cycle = models.CharField(
+        max_length=8,
+        choices=[("day", "day"), ("night", "night")],
+        blank=True,
+        null=True,
+    )
     context_temperature_value = models.CharField(max_length=16, blank=True, null=True)
-    context_temperature_unit = models.CharField(max_length=4, choices=[
-        ("°C", "°C"),
-        ("°F", "°F")
-    ],blank=True, null=True)
+    context_temperature_unit = models.CharField(
+        max_length=4, choices=[("°C", "°C"), ("°F", "°F")], blank=True, null=True
+    )
     context_brightness = models.FloatField(help_text="in Lux", blank=True, null=True)
 
     def __str__(self):
@@ -360,10 +383,13 @@ class RecordingSession(models.Model):
     protocol = models.ForeignKey(Protocol, on_delete=models.CASCADE)
     date = models.DateField(blank=True, null=True)
     temperature_value = models.CharField(max_length=255, blank=True, null=True)
-    temperature_unit = models.CharField(max_length=4, choices=[
-        ("°C", "°C"),
-        ("°F", "°F")
-    ],blank=True, null=True, default="°C")
+    temperature_unit = models.CharField(
+        max_length=4,
+        choices=[("°C", "°C"), ("°F", "°F")],
+        blank=True,
+        null=True,
+        default="°C",
+    )
     microphone = models.CharField(max_length=255, blank=True, null=True)
     acquisition_hardware = models.CharField(max_length=255, blank=True, null=True)
     acquisition_software = models.CharField(max_length=255, blank=True, null=True)
@@ -474,7 +500,9 @@ class File(models.Model):
     bit_depth = models.PositiveSmallIntegerField(
         choices=[(8, "8"), (16, "16"), (24, "24"), (32, "32")], blank=True, null=True
     )
-    size = models.PositiveBigIntegerField(help_text="File size in bytes", blank=True, null=True)
+    size = models.PositiveBigIntegerField(
+        help_text="File size in bytes", blank=True, null=True
+    )
 
     def __str__(self):
         """

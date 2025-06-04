@@ -23,7 +23,7 @@ from .models import (
     Hardware,
     RecordingSession,
     Subject,
-    AnimalProfile
+    AnimalProfile,
 )
 
 

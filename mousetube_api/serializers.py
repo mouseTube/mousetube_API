@@ -28,8 +28,6 @@ from .models import (
 from django.contrib.auth.models import User
 
 
-
-
 class RepositorySerializer(serializers.ModelSerializer):
     class Meta:
         model = Repository
@@ -81,14 +79,12 @@ class SoftwareSerializer(serializers.ModelSerializer):
 
 
 class SpeciesSerializer(serializers.ModelSerializer):
-
     class Meta:
         model = Species
         fields = "__all__"
 
 
 class StrainSerializer(serializers.ModelSerializer):
-
     class Meta:
         model = Strain
         fields = "__all__"

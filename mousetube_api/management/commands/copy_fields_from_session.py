@@ -1,5 +1,6 @@
 from django.core.management.base import BaseCommand
-from mousetube_api.models import File, RecordingSession, Protocol
+from mousetube_api.models import File
+
 
 class Command(BaseCommand):
     help = "Copy fields from RecordingSession to File and Protocol if not already set."
@@ -9,7 +10,7 @@ class Command(BaseCommand):
         updated_protocols = set()
 
         # Iterate over all files with their related recording session
-        for file in File.objects.select_related('recording_session').all():
+        for file in File.objects.select_related("recording_session").all():
             rs = file.recording_session
             if rs:
                 file_modified = False
@@ -30,9 +31,11 @@ class Command(BaseCommand):
                         file.bit_depth = int(rs.bit_depth)
                         file_modified = True
                     except ValueError:
-                        self.stdout.write(self.style.WARNING(
-                            f"Invalid bit_depth for File ID {file.id}"
-                        ))
+                        self.stdout.write(
+                            self.style.WARNING(
+                                f"Invalid bit_depth for File ID {file.id}"
+                            )
+                        )
 
                 # Save file if any field was updated
                 if file_modified:
@@ -50,9 +53,11 @@ class Command(BaseCommand):
                         protocol.context_temperature_unit = "°C"
                         protocol_modified = True
                     except ValueError:
-                        self.stdout.write(self.style.WARNING(
-                            f"Invalid temperature for RecordingSession ID {rs.id}"
-                        ))
+                        self.stdout.write(
+                            self.style.WARNING(
+                                f"Invalid temperature for RecordingSession ID {rs.id}"
+                            )
+                        )
 
                 # Copy light cycle if not already set and value is valid
                 if rs.light_cycle and not protocol.context_light_cycle:
@@ -66,6 +71,8 @@ class Command(BaseCommand):
                     updated_protocols.add(protocol.id)
 
         # Print summary
-        self.stdout.write(self.style.SUCCESS(
-            f"{updated_files} file(s) updated, {len(updated_protocols)} protocol(s) updated."
-        ))
+        self.stdout.write(
+            self.style.SUCCESS(
+                f"{updated_files} file(s) updated, {len(updated_protocols)} protocol(s) updated."
+            )
+        )
