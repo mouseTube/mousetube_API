@@ -22,77 +22,85 @@
 		},
 		"duration": {
 					"description": "duration of the recording in seconds",
-					"type": "integer",
-                    "unit": "seconds"
+					"type": "integer"
 		},
 		"laboratory": {
             "description": "Name or identifier of the laboratory where the recording was performed.",
             "type": "string"
         },
 		"animal_profiles": {
+			"description": "List of animal profiles involved in the session",
 			"type": "array",
 			"items": {
 				"$ref": "animal_profile.json"
-			},
-			"description": "List of animal profiles involved in the session"
+			}
 		},
 		"equipment": {
 			"description": "equipment used for the recording",
 			"type": "object",
 			"properties": {
 				"soundcards": {
-				"type": "array",
-				"items": {
-					"$ref": "hardware.json"
-				},
-				"description": "List of soundcards used for acquisition"
+					"description": "List of soundcards used for acquisition",
+					"type": "array",
+					"items": {
+						"$ref": "hardware.json"
+					}
 				},
 				"microphones": {
-				"type": "array",
-				"items": {
-					"$ref": "hardware.json"
-				},
-				"description": "List of microphones used for acquisition"
+					"description": "List of microphones used for acquisition",
+					"type": "array",
+					"items": {
+						"$ref": "hardware.json"
+					}
 				},
 				"amplifiers": {
-				"type": "array",
-				"items": {
-					"$ref": "hardware.json"
-				},
-				"description": "List of amplifiers used for acquisition"
+					"description": "List of amplifiers used for acquisition",
+					"type": "array",
+					"items": {
+						"$ref": "hardware.json"
+					}
 				},
 				"speakers": {
-				"type": "array",
-				"items": {
-					"$ref": "hardware.json"
+					"description": "List of speakers used for acquisition",
+					"type": "array",
+					"items": {
+						"$ref": "hardware.json"
+					}
 				},
-				"description": "List of speakers used for acquisition"
-				},
-				
 				"acquisition_software": {
-				"type": "array",
-				"items": {
-					"$ref": "software.json"
-				},
-				"description": "Software used to record audio"
-				},
+					"description": "Software and their versions used to record audio",
+					"type": "array",
+					"items": {
+						"type": "object",
+						"properties": {
+						"software": {
+							"$ref": "software.json"
+						},
+						"version": {
+							"$ref": "software_version.json"
+						}
+						},
+						"required": ["software"],
+						"additionalProperties": false
+					}
+					},
 				"channels": {
-				"type": "string",
-				"enum": [
-					"mono",
-					"stereo",
-					"more than 2"
-				],
-				"description": "Number of microphones used for recording"
+					"description": "Number of microphones used for recording",
+					"type": "string",
+					"enum": [
+						"mono",
+						"stereo",
+						"more than 2"
+					]
 				},
-				"sound isolation": {
-				"type": "string",
-				"enum": [
-					"soundproof room",
-					"soundproof cage",
-					"no specific sound isolation"
-				],
-				"description": "Presence of a sound attenuating chamber"
+				"sound_isolation": {
+					"description": "Presence of a sound attenuating chamber",
+					"type": "string",
+					"enum": [
+						"soundproof room",
+						"soundproof cage",
+						"no specific sound isolation"
+					]
 				}
 			}
 		},
@@ -118,8 +126,7 @@
 				},
 				"brightness": {
 					"description": "brightness of the recording environment in Lux",
-					"type": "integer",
-					"unit": "Lux"
+					"type": "integer"
 				}
 			}
 		}

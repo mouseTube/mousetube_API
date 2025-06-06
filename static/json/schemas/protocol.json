@@ -93,8 +93,7 @@
 				},
 				"brightness": {
 					"description": "brightness of the recording environment in Lux",
-					"type": "integer",
-					"unit": "Lux"
+					"type": "integer"
 				}
 			}
 		}
