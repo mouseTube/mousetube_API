@@ -24,6 +24,7 @@ from .models import (
     RecordingSession,
     Subject,
     AnimalProfile,
+    SoftwareVersion,
 )
 
 
@@ -50,10 +51,12 @@ class SubjectAdmin(admin.ModelAdmin):
     list_display = (
         "name",
         "user",
+        "animal_profile",
     )
     search_fields = (
         "name",
         "user__first_name_user",
+        "animal_profile__name",
     )
     list_filter = ("user",)
 
@@ -147,6 +150,7 @@ admin.site.register(Hardware)
 admin.site.register(RecordingSession, RecordingSessionAdmin)
 admin.site.register(Subject, SubjectAdmin)
 admin.site.register(AnimalProfile)
+admin.site.register(SoftwareVersion)
 admin.site.site_header = "Mousetube Admin"
 admin.site.site_title = "Mousetube Admin"
 admin.site.index_title = "Mousetube Database"

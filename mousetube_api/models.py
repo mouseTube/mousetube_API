@@ -10,6 +10,7 @@
 from django.db import models
 from django.conf import settings
 from django_countries.fields import CountryField
+from django.core.exceptions import ValidationError
 
 
 class UserProfile(models.Model):
@@ -383,6 +384,183 @@ class Protocol(models.Model):
         verbose_name_plural = "Protocols"
 
 
+class Reference(models.Model):
+    """
+    Model representing a reference (e.g., research paper, article, or website).
+
+    Attributes:
+        name_reference (str): The name of the reference (e.g., title of a paper).
+        description (str): A detailed description of the reference.
+        url (str): The URL pointing to the reference, if available.
+        doi (str): The DOI (Digital Object Identifier) of the reference, if applicable.
+        created_at (DateTimeField): Timestamp when the reference was created.
+        modified_at (DateTimeField): Last modification timestamp.
+        created_by (ForeignKey): User who created the reference entry.
+
+    Meta:
+        verbose_name (str): Human-readable name for the model.
+        verbose_name_plural (str): Plural version of the human-readable name.
+    """
+
+    name = models.CharField(max_length=255)
+    description = models.TextField(blank=True, null=True)
+    url = models.URLField(max_length=255, blank=True, null=True)
+    doi = models.CharField(max_length=255, blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True, null=True)
+    modified_at = models.DateTimeField(auto_now=True, null=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        related_name="reference_created_by",
+        on_delete=models.SET_NULL,
+    )
+
+    def __str__(self):
+        return self.name
+
+    class Meta:
+        verbose_name = "Reference"
+        verbose_name_plural = "References"
+
+
+class Software(models.Model):
+    """
+    Model representing a software tool, which can be used for acquisition, analysis, or both.
+
+    Attributes:
+        software_name (str): The name of the software tool.
+        software_type (str): The type of the software, categorized as 'acquisition', 'analysis', or both.
+        made_by (str): The entity or individual who created the software.
+        description (str): A description of the software, including its functionality.
+        technical_requirements (str): The technical requirements for using the software.
+        references (ManyToManyField): A list of references and tutorials related to the software.
+        users (ManyToManyField): A list of users who are associated with the software.
+        created_at (DateTimeField): Timestamp when the software record was created.
+        modified_at (DateTimeField): Last modification timestamp.
+        created_by (ForeignKey): User who created the software record.
+
+    Meta:
+        verbose_name (str): Human-readable name for the model.
+        verbose_name_plural (str): Plural version of the human-readable name.
+    """
+
+    CHOICES_SOFTWARE = (
+        ("acquisition", "acquisition"),
+        ("analysis", "analysis"),
+        ("acquisition and analysis", "acquisition and analysis"),
+    )
+
+    name = models.CharField(max_length=255)
+    type = models.CharField(
+        max_length=255, null=True, default="acquisition", choices=CHOICES_SOFTWARE
+    )
+    made_by = models.TextField(default="", blank=True)
+    description = models.TextField(default="", blank=True)
+    technical_requirements = models.TextField(default="", blank=True)
+    references = models.ManyToManyField(Reference, related_name="software", blank=True)
+    users = models.ManyToManyField(
+        LegacyUser, related_name="software_to_user", blank=True
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    modified_at = models.DateTimeField(auto_now=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        related_name="software_created_by",
+        on_delete=models.SET_NULL,
+    )
+
+    def __str__(self):
+        return self.name
+
+    class Meta:
+        verbose_name = "Software"
+        verbose_name_plural = "Software"
+
+
+class SoftwareVersion(models.Model):
+    """
+    Represents a specific version of a software tool.
+
+    Attributes:
+        software (Software): The software to which this version belongs.
+        version (str): The version number or identifier of the software.
+        release_date (DateField): The date when this version was released.
+        created_at (DateTimeField): Timestamp when the software version was created.
+        modified_at (DateTimeField): Last modification timestamp.
+        created_by (ForeignKey): User who created the software version entry.
+    """
+
+    software = models.ForeignKey(Software, on_delete=models.CASCADE)
+    version = models.CharField(max_length=255)
+    release_date = models.DateField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True, null=True)
+    modified_at = models.DateTimeField(auto_now=True, null=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        related_name="software_version_created_by",
+        on_delete=models.SET_NULL,
+    )
+
+    def __str__(self):
+        return f"{self.software.name} - {self.version}"
+
+
+    class Meta:
+        verbose_name = "Software Version"
+        verbose_name_plural = "Software Versions"
+
+
+class Hardware(models.Model):
+    """
+    Describes a hardware component used in data collection or playback.
+
+    Fields:
+        name (CharField): Name of the hardware.
+        type (CharField): Type of hardware (microphone, speaker, etc.).
+        made_by (TextField): Manufacturer or source of the hardware.
+        description (TextField): Optional details about the hardware.
+        references (ManyToManyField): References or publications related to the hardware.
+        created_at (DateTimeField): Timestamp when the hardware record was created.
+        modified_at (DateTimeField): Last modification timestamp.
+        created_by (ForeignKey): User who created the hardware record.
+    """
+
+    CHOICES_HARDWARE = (
+        ("soundcard", "soundcard"),
+        ("microphone", "microphone"),
+        ("speaker", "speaker"),
+        ("amplifier", "amplifier"),
+    )
+
+    name = models.CharField(max_length=255)
+    type = models.CharField(
+        max_length=255, null=True, default="", choices=CHOICES_HARDWARE
+    )
+    made_by = models.TextField(default="", blank=True)
+    description = models.TextField(default="", blank=True)
+    references = models.ManyToManyField(
+        Reference, related_name="harware_reference", blank=True
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    modified_at = models.DateTimeField(auto_now=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        related_name="hardware_created_by",
+        on_delete=models.SET_NULL,
+    )
+
+    def __str__(self):
+        return self.name
+
+    class Meta:
+        verbose_name = "Hardware"
+        verbose_name_plural = "Hardware"
+
+
 class RecordingSession(models.Model):
     """
     Represents an experiment.
@@ -391,11 +569,17 @@ class RecordingSession(models.Model):
         name (str): The name of the experiment.
         protocol (Protocol): The protocol associated with the experiment.
         date (date, optional): The date of the experiment.
+        duration (int, optional): The duration of the experiment in seconds.
         temperature (str, optional): The temperature during the experiment.
-        microphone (str, optional): The microphone used during the experiment.
-        acquisition_hardware (str, optional): The hardware used for data acquisition.
-        acquisition_software (str, optional): The software used for data acquisition.
+        equipment_acquisition_hardware_soundcard (ManyToManyField): Soundcards used for data acquisition.
+        equipment_acquisition_hardware_speaker (ManyToManyField): Speakers used for data acquisition.
+        equipment_acquisition_hardware_amplifier (ManyToManyField): Amplifiers used for data acquisition.
+        equipment_acquisition_hardware_microphone (ManyToManyField): Microphones used for data acquisition.
+        equipment_acquisition_software_version (ManyToManyField): Versions of software tools used for data acquisition.
+        equipment_acquisition_software (str, optional): The software used for data acquisition.
         animal_profiles (ManyToManyField): The animal profiles used in the experiment.
+        equipment_channels (str, optional): The number of microphones used for recording.
+        equipment_sound_isolation (str, optional): The presence of a sound attenuating chamber.
         laboratory (str, optional): The laboratory where the experiment was conducted.
         created_at (DateTimeField): Timestamp when the experiment was created.
         modified_at (DateTimeField): Last modification timestamp.
@@ -417,12 +601,13 @@ class RecordingSession(models.Model):
     name = models.CharField(max_length=255, unique=True)
     protocol = models.ForeignKey(Protocol, on_delete=models.CASCADE)
     description = models.TextField(blank=True, null=True)
-    date = models.DateField(blank=True, null=True)
+    date = models.DateTimeField(blank=True, null=True)
+    duration = models.PositiveIntegerField(blank=True, null=True, help_text="Duration in seconds")
     laboratory = models.CharField(max_length=255, blank=True, null=True)
     animal_profiles = models.ManyToManyField(
         AnimalProfile, blank=True, related_name="animal_profiles"
     )
-    context_temperature_value = models.CharField(max_length=255, blank=True, null=True)
+    context_temperature_value = models.CharField(blank=True, null=True, max_length=16)
     context_temperature_unit = models.CharField(
         max_length=4,
         choices=[("°C", "°C"), ("°F", "°F")],
@@ -431,12 +616,46 @@ class RecordingSession(models.Model):
         default="°C",
     )
     context_brightness = models.FloatField(blank=True, null=True)
-    equipment_microphone = models.CharField(max_length=255, blank=True, null=True)
-    equipment_acquisition_hardware = models.CharField(
-        max_length=255, blank=True, null=True
+    equipment_acquisition_software_version = models.ManyToManyField(
+        SoftwareVersion,
+        blank=True,
+        related_name="recording_sessions_acquisition_software_version",
+        help_text="Versions of software tools used for acquisition.",
     )
-    equipment_acquisition_software = models.CharField(
-        max_length=255, blank=True, null=True
+    equipment_acquisition_software = models.ManyToManyField(
+        Software,
+        blank=True,
+        related_name="recording_sessions_acquisition",
+        limit_choices_to={"type__in": ["acquisition", "acquisition and analysis"]},
+        help_text="Software tools used for acquisition."
+    )
+    equipment_acquisition_hardware_soundcards = models.ManyToManyField(
+        Hardware,
+        blank=True,
+        related_name="recording_sessions_acquisition_hardware_soundcard",
+        limit_choices_to={"type": "soundcard"},
+        help_text="Soundcards used for acquisition.",
+    )
+    equipment_acquisition_hardware_speakers = models.ManyToManyField(
+        Hardware,
+        blank=True,
+        related_name="recording_sessions_acquisition_hardware_speaker",
+        limit_choices_to={"type": "speaker"},
+        help_text="Speaker used for acquisition.",
+    )
+    equipment_acquisition_hardware_amplifiers = models.ManyToManyField(
+        Hardware,
+        blank=True,
+        related_name="recording_sessions_acquisition_hardware_amplifier",
+        limit_choices_to={"type": "amplifier"},
+        help_text="Amplifier used for acquisition.",
+    )
+    equipment_acquisition_hardware_microphones = models.ManyToManyField(
+        Hardware,
+        blank=True,
+        related_name="recording_sessions_acquisition_hardware_microphone",
+        limit_choices_to={"type": "microphone"},
+        help_text="Microphones used for acquisition.",
     )
     equipment_channels = models.CharField(
         max_length=20,
@@ -470,6 +689,24 @@ class RecordingSession(models.Model):
             str: The name of the experiment.
         """
         return self.name
+    
+    def clean(self):
+        # Check if the software is valid for acquisition
+        for software in self.acquisition_softwares.all():
+            if software.type not in ["acquisition", "acquisition and analysis"]:
+                raise ValidationError(f"Software {software.name} is not valid for acquisition.")
+
+        # Check if the software versions correspond to the selected software
+        for sv in self.equipment_acquisition_software_version.all():
+            if sv.software not in self.acquisition_softwares.all():
+                raise ValidationError(
+                    f"The version {sv.version} does not correspond to the following software : {sv.software.name}"
+                )
+
+        # Check if the hardware is valid for acquisition
+        for hardware in self.acquisition_hardwares.all():
+            if hardware.type not in ["soundcard", "microphone", "amplifier"]:
+                raise ValidationError(f"Hardware {hardware.name} is not valid for acquisition.")
 
     class Meta:
         verbose_name = "Recording Session"
@@ -605,149 +842,6 @@ class File(models.Model):
     class Meta:
         verbose_name = "File"
         verbose_name_plural = "Files"
-
-
-class Reference(models.Model):
-    """
-    Model representing a reference (e.g., research paper, article, or website).
-
-    Attributes:
-        name_reference (str): The name of the reference (e.g., title of a paper).
-        description (str): A detailed description of the reference.
-        url (str): The URL pointing to the reference, if available.
-        doi (str): The DOI (Digital Object Identifier) of the reference, if applicable.
-        created_at (DateTimeField): Timestamp when the reference was created.
-        modified_at (DateTimeField): Last modification timestamp.
-        created_by (ForeignKey): User who created the reference entry.
-
-    Meta:
-        verbose_name (str): Human-readable name for the model.
-        verbose_name_plural (str): Plural version of the human-readable name.
-    """
-
-    name = models.CharField(max_length=255)
-    description = models.TextField(blank=True, null=True)
-    url = models.URLField(max_length=255, blank=True, null=True)
-    doi = models.CharField(max_length=255, blank=True, null=True)
-    created_at = models.DateTimeField(auto_now_add=True, null=True)
-    modified_at = models.DateTimeField(auto_now=True, null=True)
-    created_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        null=True,
-        related_name="reference_created_by",
-        on_delete=models.SET_NULL,
-    )
-
-    def __str__(self):
-        return self.name
-
-    class Meta:
-        verbose_name = "Reference"
-        verbose_name_plural = "References"
-
-
-class Software(models.Model):
-    """
-    Model representing a software tool, which can be used for acquisition, analysis, or both.
-
-    Attributes:
-        software_name (str): The name of the software tool.
-        software_type (str): The type of the software, categorized as 'acquisition', 'analysis', or both.
-        made_by (str): The entity or individual who created the software.
-        description (str): A description of the software, including its functionality.
-        technical_requirements (str): The technical requirements for using the software.
-        references (ManyToManyField): A list of references and tutorials related to the software.
-        users (ManyToManyField): A list of users who are associated with the software.
-        created_at (DateTimeField): Timestamp when the software record was created.
-        modified_at (DateTimeField): Last modification timestamp.
-        created_by (ForeignKey): User who created the software record.
-
-    Meta:
-        verbose_name (str): Human-readable name for the model.
-        verbose_name_plural (str): Plural version of the human-readable name.
-    """
-
-    CHOICES_SOFTWARE = (
-        ("acquisition", "acquisition"),
-        ("analysis", "analysis"),
-        ("acquisition and analysis", "acquisition and analysis"),
-    )
-
-    name = models.CharField(max_length=255)
-    type = models.CharField(
-        max_length=255, null=True, default="acquisition", choices=CHOICES_SOFTWARE
-    )
-    made_by = models.TextField(default="", blank=True)
-    description = models.TextField(default="", blank=True)
-    technical_requirements = models.TextField(default="", blank=True)
-    references = models.ManyToManyField(Reference, related_name="software", blank=True)
-    users = models.ManyToManyField(
-        LegacyUser, related_name="software_to_user", blank=True
-    )
-    created_at = models.DateTimeField(auto_now_add=True)
-    modified_at = models.DateTimeField(auto_now=True)
-    created_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        null=True,
-        related_name="software_created_by",
-        on_delete=models.SET_NULL,
-    )
-
-    def __str__(self):
-        return self.name
-
-    class Meta:
-        verbose_name = "Software"
-        verbose_name_plural = "Software"
-
-
-class Hardware(models.Model):
-    """
-    Describes a hardware component used in data collection or playback.
-
-    Fields:
-        name (CharField): Name of the hardware.
-        type (CharField): Type of hardware (microphone, speaker, etc.).
-        made_by (TextField): Manufacturer or source of the hardware.
-        description (TextField): Optional details about the hardware.
-        references (ManyToManyField): References or publications related to the hardware.
-        created_at (DateTimeField): Timestamp when the hardware record was created.
-        modified_at (DateTimeField): Last modification timestamp.
-        created_by (ForeignKey): User who created the hardware record.
-    """
-
-    CHOICES_HARDWARE = (
-        ("soundcard", "soundcard"),
-        ("microphone", "microphone"),
-        ("speaker", "speaker"),
-        ("amplifier", "amplifier"),
-    )
-
-    name = models.CharField(max_length=255)
-    type = models.CharField(
-        max_length=255, null=True, default="", choices=CHOICES_HARDWARE
-    )
-    made_by = models.TextField(default="", blank=True)
-    description = models.TextField(default="", blank=True)
-    references = models.ManyToManyField(
-        Reference, related_name="harware_reference", blank=True
-    )
-
-    created_at = models.DateTimeField(auto_now_add=True)
-    modified_at = models.DateTimeField(auto_now=True)
-    created_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        null=True,
-        related_name="hardware_created_by",
-        on_delete=models.SET_NULL,
-    )
-
-    def __str__(self):
-        return self.name
-
-    class Meta:
-        verbose_name = "Hardware"
-        verbose_name_plural = "Hardware"
 
 
 class Dataset(models.Model):

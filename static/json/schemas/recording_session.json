@@ -13,7 +13,7 @@
 			"type": "string"
 		},
 		"date": {
-			"description": "Date and time when the recording was made (YYY-MM-DD hh:mm:ss).",
+			"description": "Date when the recording was made (YYY-MM-DD hh:mm:ss).",
 			"type": "string",
 			"format": "date-time"
 		},
@@ -37,35 +37,59 @@
 			"description": "equipment used for the recording",
 			"type": "object",
 			"properties": {
-				"microphone": {
-					"description": "Microphone model or type used in this protocol.",
-					"type": "string"
+				"soundcards": {
+				"type": "array",
+				"items": {
+					"$ref": "hardware.json"
 				},
-				"acquisition_hardware": {
-					"description": "Hardware used for audio acquisition in this protocol.",
-					"type": "string"
+				"description": "List of soundcards used for acquisition"
 				},
+				"microphones": {
+				"type": "array",
+				"items": {
+					"$ref": "hardware.json"
+				},
+				"description": "List of microphones used for acquisition"
+				},
+				"amplifiers": {
+				"type": "array",
+				"items": {
+					"$ref": "hardware.json"
+				},
+				"description": "List of amplifiers used for acquisition"
+				},
+				"speakers": {
+				"type": "array",
+				"items": {
+					"$ref": "hardware.json"
+				},
+				"description": "List of speakers used for acquisition"
+				},
+				
 				"acquisition_software": {
-					"description": "Software used to record audio in this protocol.",
-					"type": "string"
+				"type": "array",
+				"items": {
+					"$ref": "software.json"
+				},
+				"description": "Software used to record audio"
 				},
 				"channels": {
-					"description": "number of microphones used for recording",
-					"type": "string",
-					"enum": [
-						"mono",
-						"stereo",
-						"more than 2"
-					]
+				"type": "string",
+				"enum": [
+					"mono",
+					"stereo",
+					"more than 2"
+				],
+				"description": "Number of microphones used for recording"
 				},
 				"sound isolation": {
-					"description": "presence of a sound attenuating chamber",
-					"type": "string",
-					"enum": [
-						"soundproof room",
-						"soundproof cage",
-						"no specific sound isolation"
-					]
+				"type": "string",
+				"enum": [
+					"soundproof room",
+					"soundproof cage",
+					"no specific sound isolation"
+				],
+				"description": "Presence of a sound attenuating chamber"
 				}
 			}
 		},
