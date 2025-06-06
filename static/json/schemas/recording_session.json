@@ -12,6 +12,9 @@
 			"description": "description of the recording session",
 			"type": "string"
 		},
+		"protocol": {
+			"$ref": "protocol.json"
+		},
 		"date": {
 			"description": "Date when the recording was made (YYY-MM-DD hh:mm:ss).",
 			"type": "string",
