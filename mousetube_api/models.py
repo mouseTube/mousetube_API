@@ -618,7 +618,7 @@ class RecordingSession(models.Model):
     equipment_acquisition_software = models.ManyToManyField(
         SoftwareVersion,
         blank=True,
-        related_name="recording_sessions_acquisition_software_version",
+        related_name="recording_sessions_as_software",
         limit_choices_to={
             "software__type__in": ["acquisition", "acquisition and analysis"]
         },
@@ -627,28 +627,28 @@ class RecordingSession(models.Model):
     equipment_acquisition_hardware_soundcards = models.ManyToManyField(
         Hardware,
         blank=True,
-        related_name="recording_sessions_acquisition_hardware_soundcard",
+        related_name="recording_sessions_as_soundcard",
         limit_choices_to={"type": "soundcard"},
         help_text="Soundcards used for acquisition.",
     )
     equipment_acquisition_hardware_speakers = models.ManyToManyField(
         Hardware,
         blank=True,
-        related_name="recording_sessions_acquisition_hardware_speaker",
+        related_name="recording_sessions_as_speaker",
         limit_choices_to={"type": "speaker"},
         help_text="Speaker used for acquisition.",
     )
     equipment_acquisition_hardware_amplifiers = models.ManyToManyField(
         Hardware,
         blank=True,
-        related_name="recording_sessions_acquisition_hardware_amplifier",
+        related_name="recording_sessions_as_amplifier",
         limit_choices_to={"type": "amplifier"},
         help_text="Amplifier used for acquisition.",
     )
     equipment_acquisition_hardware_microphones = models.ManyToManyField(
         Hardware,
         blank=True,
-        related_name="recording_sessions_acquisition_hardware_microphone",
+        related_name="recording_sessions_as_microphone",
         limit_choices_to={"type": "microphone"},
         help_text="Microphones used for acquisition.",
     )
@@ -691,13 +691,6 @@ class RecordingSession(models.Model):
             if software.type not in ["acquisition", "acquisition and analysis"]:
                 raise ValidationError(
                     f"Software {software.name} is not valid for acquisition."
-                )
-
-        # Check if the software versions correspond to the selected software
-        for sv in self.equipment_acquisition_software_version.all():
-            if sv.software not in self.acquisition_softwares.all():
-                raise ValidationError(
-                    f"The version {sv.version} does not correspond to the following software : {sv.software.name}"
                 )
 
         # Check if the hardware is valid for acquisition
