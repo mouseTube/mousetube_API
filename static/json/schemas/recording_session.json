@@ -87,9 +87,10 @@
 								"format": "date"
 							}
 						},
-					"required": ["software"],
-					"additionalProperties": false
-					},
+						"required": ["software"],
+						"additionalProperties": false
+					}
+				},
 				"channels": {
 					"description": "Number of microphones used for recording",
 					"type": "string",
@@ -108,7 +109,8 @@
 						"no specific sound isolation"
 					]
 				}
-			}
+			},
+			"required": []
 		},
         "context": {
 			"description": "experimental context used for the recording session",
