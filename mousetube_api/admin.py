@@ -72,12 +72,16 @@ class RecordingSessionAdmin(admin.ModelAdmin):
         "name",
         "protocol",
         "date",
-        "context_temperature_value",
-        "context_temperature_unit",
+        "display_equipment_acquisition_software",
     )
     search_fields = ("name", "protocol__name")
     list_filter = ("protocol", "date")
 
+    @admin.display(description="Acquisition Software")
+    def display_equipment_acquisition_software(self, obj):
+        return ", ".join(
+            [str(soft) for soft in obj.equipment_acquisition_software.all()]
+        )
 
 class FileAdmin(admin.ModelAdmin):
     list_display = (

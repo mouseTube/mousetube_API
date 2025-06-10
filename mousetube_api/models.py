@@ -492,7 +492,7 @@ class SoftwareVersion(models.Model):
     software = models.ForeignKey(
         Software, on_delete=models.CASCADE, related_name="versions"
     )
-    version = models.CharField(max_length=255)
+    version = models.CharField(max_length=255, blank=True, null=True)
     release_date = models.DateField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True, null=True)
     modified_at = models.DateTimeField(auto_now=True, null=True)
@@ -687,15 +687,36 @@ class RecordingSession(models.Model):
 
     def clean(self):
         # Check if the software is valid for acquisition
-        for software in self.acquisition_softwares.all():
+        for software in self.equipment_acquisition_software.all():
             if software.type not in ["acquisition", "acquisition and analysis"]:
                 raise ValidationError(
                     f"Software {software.name} is not valid for acquisition."
                 )
 
-        # Check if the hardware is valid for acquisition
-        for hardware in self.acquisition_hardwares.all():
-            if hardware.type not in ["soundcard", "microphone", "amplifier"]:
+        # Check if the hardware soundcard is valid for acquisition
+        for hardware in self.equipment_acquisition_hardware_soundcards.all():
+            if hardware.type not in ["soundcard"]:
+                raise ValidationError(
+                    f"Hardware {hardware.name} is not valid for acquisition."
+                )
+            
+        # Check if the hardware speaker is valid for acquisition
+        for hardware in self.equipment_acquisition_hardware_speakers.all():
+            if hardware.type not in ["speaker"]:
+                raise ValidationError(
+                    f"Hardware {hardware.name} is not valid for acquisition."
+                )
+            
+        # Check if the hardware amplifier is valid for acquisition
+        for hardware in self.equipment_acquisition_hardware_amplifiers.all():
+            if hardware.type not in ["amplifier"]:
+                raise ValidationError(
+                    f"Hardware {hardware.name} is not valid for acquisition."
+                )
+            
+        # Check if the hardware microphone is valid for acquisition
+        for hardware in self.equipment_acquisition_hardware_microphones.all():
+            if hardware.type not in ["microphone"]:
                 raise ValidationError(
                     f"Hardware {hardware.name} is not valid for acquisition."
                 )
