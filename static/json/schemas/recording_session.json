@@ -109,8 +109,7 @@
 						"no specific sound isolation"
 					]
 				}
-			},
-			"required": []
+			}
 		},
         "context": {
 			"description": "experimental context used for the recording session",
