@@ -699,21 +699,21 @@ class RecordingSession(models.Model):
                 raise ValidationError(
                     f"Hardware {hardware.name} is not valid for acquisition."
                 )
-            
+
         # Check if the hardware speaker is valid for acquisition
         for hardware in self.equipment_acquisition_hardware_speakers.all():
             if hardware.type not in ["speaker"]:
                 raise ValidationError(
                     f"Hardware {hardware.name} is not valid for acquisition."
                 )
-            
+
         # Check if the hardware amplifier is valid for acquisition
         for hardware in self.equipment_acquisition_hardware_amplifiers.all():
             if hardware.type not in ["amplifier"]:
                 raise ValidationError(
                     f"Hardware {hardware.name} is not valid for acquisition."
                 )
-            
+
         # Check if the hardware microphone is valid for acquisition
         for hardware in self.equipment_acquisition_hardware_microphones.all():
             if hardware.type not in ["microphone"]:

@@ -83,6 +83,7 @@ class RecordingSessionAdmin(admin.ModelAdmin):
             [str(soft) for soft in obj.equipment_acquisition_software.all()]
         )
 
+
 class FileAdmin(admin.ModelAdmin):
     list_display = (
         "name",
