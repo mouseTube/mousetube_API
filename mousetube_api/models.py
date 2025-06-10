@@ -229,11 +229,6 @@ class Subject(models.Model):
         created_by (ForeignKey): User who created the animal profil entry.
     """
 
-    SEX_CHOICES = [
-        ("male", "Male"),
-        ("female", "Female"),
-    ]
-
     name = models.CharField(max_length=255, unique=True)
     identifier = models.CharField(max_length=255, blank=True, null=True)
     cohort = models.CharField(max_length=255, blank=True, null=True)
@@ -473,6 +468,9 @@ class Software(models.Model):
     def __str__(self):
         return self.name
 
+    def get_versions(self):
+        return self.versions.all()
+
     class Meta:
         verbose_name = "Software"
         verbose_name_plural = "Software"
@@ -491,7 +489,9 @@ class SoftwareVersion(models.Model):
         created_by (ForeignKey): User who created the software version entry.
     """
 
-    software = models.ForeignKey(Software, on_delete=models.CASCADE)
+    software = models.ForeignKey(
+        Software, on_delete=models.CASCADE, related_name="versions"
+    )
     version = models.CharField(max_length=255)
     release_date = models.DateField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True, null=True)
@@ -506,10 +506,36 @@ class SoftwareVersion(models.Model):
     def __str__(self):
         return f"{self.software.name} - {self.version}"
 
-
     class Meta:
         verbose_name = "Software Version"
         verbose_name_plural = "Software Versions"
+
+
+class AcquisitionSoftwareUsage(models.Model):
+    recording_session = models.ForeignKey(
+        "RecordingSession",
+        on_delete=models.CASCADE,
+        related_name="acquisition_software_usages",
+    )
+    software = models.ForeignKey(
+        Software,
+        on_delete=models.CASCADE,
+        limit_choices_to={"type__in": ["acquisition", "acquisition and analysis"]},
+    )
+    version = models.ForeignKey(
+        SoftwareVersion, on_delete=models.SET_NULL, null=True, blank=True
+    )
+
+    class Meta:
+        unique_together = ("recording_session", "software", "version")
+
+    @property
+    def acquisition_software(self):
+        return [asu.software for asu in self.acquisition_software_usages.all()]
+
+    def clean(self):
+        if self.version and self.version.software != self.software:
+            raise ValidationError("The version does not match the specified software.")
 
 
 class Hardware(models.Model):
@@ -575,8 +601,6 @@ class RecordingSession(models.Model):
         equipment_acquisition_hardware_speaker (ManyToManyField): Speakers used for data acquisition.
         equipment_acquisition_hardware_amplifier (ManyToManyField): Amplifiers used for data acquisition.
         equipment_acquisition_hardware_microphone (ManyToManyField): Microphones used for data acquisition.
-        equipment_acquisition_software_version (ManyToManyField): Versions of software tools used for data acquisition.
-        equipment_acquisition_software (str, optional): The software used for data acquisition.
         animal_profiles (ManyToManyField): The animal profiles used in the experiment.
         equipment_channels (str, optional): The number of microphones used for recording.
         equipment_sound_isolation (str, optional): The presence of a sound attenuating chamber.
@@ -602,7 +626,9 @@ class RecordingSession(models.Model):
     protocol = models.ForeignKey(Protocol, on_delete=models.CASCADE)
     description = models.TextField(blank=True, null=True)
     date = models.DateTimeField(blank=True, null=True)
-    duration = models.PositiveIntegerField(blank=True, null=True, help_text="Duration in seconds")
+    duration = models.PositiveIntegerField(
+        blank=True, null=True, help_text="Duration in seconds"
+    )
     laboratory = models.CharField(max_length=255, blank=True, null=True)
     animal_profiles = models.ManyToManyField(
         AnimalProfile, blank=True, related_name="animal_profiles"
@@ -616,19 +642,6 @@ class RecordingSession(models.Model):
         default="°C",
     )
     context_brightness = models.FloatField(blank=True, null=True)
-    equipment_acquisition_software_version = models.ManyToManyField(
-        SoftwareVersion,
-        blank=True,
-        related_name="recording_sessions_acquisition_software_version",
-        help_text="Versions of software tools used for acquisition.",
-    )
-    equipment_acquisition_software = models.ManyToManyField(
-        Software,
-        blank=True,
-        related_name="recording_sessions_acquisition",
-        limit_choices_to={"type__in": ["acquisition", "acquisition and analysis"]},
-        help_text="Software tools used for acquisition."
-    )
     equipment_acquisition_hardware_soundcards = models.ManyToManyField(
         Hardware,
         blank=True,
@@ -689,12 +702,14 @@ class RecordingSession(models.Model):
             str: The name of the experiment.
         """
         return self.name
-    
+
     def clean(self):
         # Check if the software is valid for acquisition
         for software in self.acquisition_softwares.all():
             if software.type not in ["acquisition", "acquisition and analysis"]:
-                raise ValidationError(f"Software {software.name} is not valid for acquisition.")
+                raise ValidationError(
+                    f"Software {software.name} is not valid for acquisition."
+                )
 
         # Check if the software versions correspond to the selected software
         for sv in self.equipment_acquisition_software_version.all():
@@ -706,7 +721,9 @@ class RecordingSession(models.Model):
         # Check if the hardware is valid for acquisition
         for hardware in self.acquisition_hardwares.all():
             if hardware.type not in ["soundcard", "microphone", "amplifier"]:
-                raise ValidationError(f"Hardware {hardware.name} is not valid for acquisition.")
+                raise ValidationError(
+                    f"Hardware {hardware.name} is not valid for acquisition."
+                )
 
     class Meta:
         verbose_name = "Recording Session"

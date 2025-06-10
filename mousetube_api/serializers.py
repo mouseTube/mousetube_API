@@ -23,6 +23,10 @@ from .models import (
     RecordingSession,
     Subject,
     PageView,
+    AcquisitionSoftwareUsage,
+    SoftwareVersion,
+    AnimalProfile,
+    Dataset,
 )
 
 from django.contrib.auth.models import User
@@ -98,8 +102,26 @@ class ProtocolSerializer(serializers.ModelSerializer):
         fields = "__all__"
 
 
+class SoftwareVersionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SoftwareVersion
+        fields = "__all__"
+
+
+class AcquisitionSoftwareUsageSerializer(serializers.ModelSerializer):
+    software = SoftwareSerializer(read_only=True)
+    version = SoftwareVersionSerializer(read_only=True)
+
+    class Meta:
+        model = AcquisitionSoftwareUsage
+        fields = ["software", "version"]
+
+
 class RecordingSessionSerializer(serializers.ModelSerializer):
     protocol = ProtocolSerializer(read_only=True)
+    acquisition_software = AcquisitionSoftwareUsageSerializer(
+        source="acquisition_software_usages", many=True, read_only=True
+    )
 
     class Meta:
         model = RecordingSession
@@ -115,6 +137,14 @@ class SubjectSerializer(serializers.ModelSerializer):
         fields = "__all__"
 
 
+class AnimalProfileSerializer(serializers.ModelSerializer):
+    subject = SubjectSerializer(read_only=True)
+
+    class Meta:
+        model = AnimalProfile
+        fields = "__all__"
+
+
 class FileSerializer(serializers.ModelSerializer):
     repository = RepositorySerializer(many=True, required=False)
     recording_session = RecordingSessionSerializer()
@@ -123,6 +153,15 @@ class FileSerializer(serializers.ModelSerializer):
     class Meta:
         model = File
         fields = "__all__"
+
+
+class DatasetSerializer(serializers.ModelSerializer):
+    files = FileSerializer(many=True, required=False)
+
+    class Meta:
+        model = Dataset
+        fields = "__all__"
+        read_only_fields = ("created_at", "updated_at")
 
 
 class PageViewSerializer(serializers.ModelSerializer):

@@ -1,18 +1,25 @@
 from django.core.management.base import BaseCommand
 from django.core.serializers import serialize
 import json
-from mousetube_api.models import Strain, Subject, Protocol, Experiment, File, User
+from mousetube_api.models import (
+    Strain,
+    Subject,
+    Protocol,
+    RecordingSession,
+    File,
+    LegacyUser,
+)
 
 
 class Command(BaseCommand):
     help = "Export data from User, Strain, Subject, Protocol, Experiment, and File models to a JSON fixture file"
 
     def handle(self, *args, **kwargs):
-        users = User.objects.all()
+        users = LegacyUser.objects.all()
         strains = Strain.objects.all()
         subjects = Subject.objects.select_related("strain").all()
         protocols = Protocol.objects.all()
-        experiments = Experiment.objects.select_related("protocol").all()
+        experiments = RecordingSession.objects.select_related("protocol").all()
         files = File.objects.select_related("experiment", "subject").all()
 
         users_json = serialize("json", users)

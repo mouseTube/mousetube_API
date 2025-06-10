@@ -25,6 +25,7 @@ from .models import (
     Subject,
     AnimalProfile,
     SoftwareVersion,
+    AcquisitionSoftwareUsage,
 )
 
 
@@ -136,6 +137,20 @@ class ReferenceAdmin(admin.ModelAdmin):
     )
 
 
+class AcquisitionSoftwareUsageAdmin(admin.ModelAdmin):
+    list_display = (
+        "recording_session",
+        "software",
+        "version",
+    )
+    search_fields = (
+        "recording_session__name",
+        "software__name",
+        "version__version",
+    )
+    list_filter = ("software", "version")
+
+
 admin.site.register(UserProfile)
 admin.site.register(LegacyUser, LegacyUserAdmin)
 admin.site.register(Repository)
@@ -151,6 +166,7 @@ admin.site.register(RecordingSession, RecordingSessionAdmin)
 admin.site.register(Subject, SubjectAdmin)
 admin.site.register(AnimalProfile)
 admin.site.register(SoftwareVersion)
+admin.site.register(AcquisitionSoftwareUsage, AcquisitionSoftwareUsageAdmin)
 admin.site.site_header = "Mousetube Admin"
 admin.site.site_title = "Mousetube Admin"
 admin.site.index_title = "Mousetube Database"
