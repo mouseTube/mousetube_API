@@ -73,16 +73,22 @@
 					"items": {
 						"type": "object",
 						"properties": {
-						"software": {
-							"$ref": "software.json"
+							"software": {
+								"$ref": "software.json"
+							},
+							"version": {
+								"description": "Version of the software used",
+								"type": "string",
+								"pattern": "^(\\d+\\.)?(\\d+\\.)?(\\*|\\d+)$"
+							},
+							"release_date": {
+								"description": "Release date of the software version",
+								"type": "string",
+								"format": "date"
+							}
 						},
-						"version": {
-							"$ref": "software_version.json"
-						}
-						},
-						"required": ["software"],
-						"additionalProperties": false
-					}
+					"required": ["software"],
+					"additionalProperties": false
 					},
 				"channels": {
 					"description": "Number of microphones used for recording",

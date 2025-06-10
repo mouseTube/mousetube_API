@@ -511,33 +511,6 @@ class SoftwareVersion(models.Model):
         verbose_name_plural = "Software Versions"
 
 
-class AcquisitionSoftwareUsage(models.Model):
-    recording_session = models.ForeignKey(
-        "RecordingSession",
-        on_delete=models.CASCADE,
-        related_name="acquisition_software_usages",
-    )
-    software = models.ForeignKey(
-        Software,
-        on_delete=models.CASCADE,
-        limit_choices_to={"type__in": ["acquisition", "acquisition and analysis"]},
-    )
-    version = models.ForeignKey(
-        SoftwareVersion, on_delete=models.SET_NULL, null=True, blank=True
-    )
-
-    class Meta:
-        unique_together = ("recording_session", "software", "version")
-
-    @property
-    def acquisition_software(self):
-        return [asu.software for asu in self.acquisition_software_usages.all()]
-
-    def clean(self):
-        if self.version and self.version.software != self.software:
-            raise ValidationError("The version does not match the specified software.")
-
-
 class Hardware(models.Model):
     """
     Describes a hardware component used in data collection or playback.
@@ -642,6 +615,15 @@ class RecordingSession(models.Model):
         default="°C",
     )
     context_brightness = models.FloatField(blank=True, null=True)
+    equipment_acquisition_software = models.ManyToManyField(
+        SoftwareVersion,
+        blank=True,
+        related_name="recording_sessions_acquisition_software_version",
+        limit_choices_to={
+            "software__type__in": ["acquisition", "acquisition and analysis"]
+        },
+        help_text="Software versions used for acquisition.",
+    )
     equipment_acquisition_hardware_soundcards = models.ManyToManyField(
         Hardware,
         blank=True,

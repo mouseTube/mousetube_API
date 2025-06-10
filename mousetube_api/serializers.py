@@ -23,7 +23,6 @@ from .models import (
     RecordingSession,
     Subject,
     PageView,
-    AcquisitionSoftwareUsage,
     SoftwareVersion,
     AnimalProfile,
     Dataset,
@@ -103,24 +102,17 @@ class ProtocolSerializer(serializers.ModelSerializer):
 
 
 class SoftwareVersionSerializer(serializers.ModelSerializer):
+    software = SoftwareSerializer(read_only=True)
+
     class Meta:
         model = SoftwareVersion
         fields = "__all__"
 
 
-class AcquisitionSoftwareUsageSerializer(serializers.ModelSerializer):
-    software = SoftwareSerializer(read_only=True)
-    version = SoftwareVersionSerializer(read_only=True)
-
-    class Meta:
-        model = AcquisitionSoftwareUsage
-        fields = ["software", "version"]
-
-
 class RecordingSessionSerializer(serializers.ModelSerializer):
     protocol = ProtocolSerializer(read_only=True)
-    acquisition_software = AcquisitionSoftwareUsageSerializer(
-        source="acquisition_software_usages", many=True, read_only=True
+    acquisition_software = SoftwareVersionSerializer(
+        source="equipment_acquisition_software", many=True, read_only=True
     )
 
     class Meta:
