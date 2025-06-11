@@ -639,8 +639,7 @@ class RecordingSession(models.Model):
     duration = models.PositiveIntegerField(
         blank=True, null=True, help_text="Duration in seconds"
     )
-    laboratory = models.CharField(max_length=255, blank=True, null=True)
-    lab = models.ForeignKey(
+    laboratory = models.ForeignKey(
     Laboratory, null=True, blank=True, on_delete=models.SET_NULL, related_name="recording_sessions_temp"
     )
     animal_profiles = models.ManyToManyField(
