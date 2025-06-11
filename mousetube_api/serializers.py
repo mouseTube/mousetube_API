@@ -110,10 +110,10 @@ class SoftwareVersionSerializer(serializers.ModelSerializer):
 
 
 class AnimalProfileSerializer(serializers.ModelSerializer):
-
     class Meta:
         model = AnimalProfile
         fields = "__all__"
+
 
 class SubjectSerializer(serializers.ModelSerializer):
     user = LegacyUserSerializer(read_only=True)
@@ -125,19 +125,24 @@ class SubjectSerializer(serializers.ModelSerializer):
         fields = "__all__"
 
 
-
-
 class RecordingSessionSerializer(serializers.ModelSerializer):
     protocol = ProtocolSerializer(read_only=True)
     animal_profiles = AnimalProfileSerializer(many=True, read_only=True)
     equipment_acquisition_software = SoftwareVersionSerializer(
         many=True, read_only=True
     )
-    equipment_acquisition_hardware_soundcards = HardwareSerializer(many=True, read_only=True)
-    equipment_acquisition_hardware_speakers = HardwareSerializer(many=True, read_only=True)
-    equipment_acquisition_hardware_amplifiers = HardwareSerializer(many=True, read_only=True)
-    equipment_acquisition_hardware_microphones = HardwareSerializer(many=True, read_only=True)
-
+    equipment_acquisition_hardware_soundcards = HardwareSerializer(
+        many=True, read_only=True
+    )
+    equipment_acquisition_hardware_speakers = HardwareSerializer(
+        many=True, read_only=True
+    )
+    equipment_acquisition_hardware_amplifiers = HardwareSerializer(
+        many=True, read_only=True
+    )
+    equipment_acquisition_hardware_microphones = HardwareSerializer(
+        many=True, read_only=True
+    )
 
     class Meta:
         model = RecordingSession
