@@ -78,7 +78,9 @@ class UserProfile(models.Model):
     )
     description = models.TextField(blank=True, null=True)
     phone = models.CharField(max_length=255, blank=True, null=True)
-    laboratory = models.ForeignKey(Laboratory, on_delete=models.CASCADE, null=True, blank=True)
+    laboratory = models.ForeignKey(
+        Laboratory, on_delete=models.CASCADE, null=True, blank=True
+    )
     address = models.CharField(max_length=255, blank=True, null=True)
     country = CountryField(blank=True, null=True)
     orcid = models.CharField(max_length=255, blank=True, null=True)
@@ -640,7 +642,11 @@ class RecordingSession(models.Model):
         blank=True, null=True, help_text="Duration in seconds"
     )
     laboratory = models.ForeignKey(
-    Laboratory, null=True, blank=True, on_delete=models.SET_NULL, related_name="recording_sessions_temp"
+        Laboratory,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="recording_sessions_temp",
     )
     animal_profiles = models.ManyToManyField(
         AnimalProfile, blank=True, related_name="animal_profiles"
