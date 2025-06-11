@@ -73,6 +73,7 @@ class RecordingSessionAdmin(admin.ModelAdmin):
         "name",
         "protocol",
         "date",
+        "laboratory",
         "display_equipment_acquisition_software",
     )
     search_fields = ("name", "protocol__name")

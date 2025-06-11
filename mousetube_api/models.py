@@ -732,10 +732,10 @@ class RecordingSession(models.Model):
 
     def clean(self):
         # Check if the software is valid for acquisition
-        for software in self.equipment_acquisition_software.all():
-            if software.type not in ["acquisition", "acquisition and analysis"]:
+        for software_version in self.equipment_acquisition_software.all():
+            if software_version.software.type not in ["acquisition", "acquisition and analysis"]:
                 raise ValidationError(
-                    f"Software {software.name} is not valid for acquisition."
+                    f"Software {software_version} is not valid for acquisition."
                 )
 
         # Check if the hardware soundcard is valid for acquisition
