@@ -26,6 +26,7 @@ from .models import (
     SoftwareVersion,
     AnimalProfile,
     Dataset,
+    Laboratory
 )
 
 from django.contrib.auth.models import User
@@ -125,8 +126,14 @@ class SubjectSerializer(serializers.ModelSerializer):
         fields = "__all__"
 
 
+class LaboratorySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Laboratory
+        fields = "__all__"
+
 class RecordingSessionSerializer(serializers.ModelSerializer):
     protocol = ProtocolSerializer(read_only=True)
+    laboratory = LaboratorySerializer(read_only=True)
     animal_profiles = AnimalProfileSerializer(many=True, read_only=True)
     equipment_acquisition_software = SoftwareVersionSerializer(
         many=True, read_only=True
