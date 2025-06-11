@@ -745,7 +745,7 @@ class Repository(models.Model):
     name = models.CharField(max_length=255)
     description = models.TextField(blank=True, null=True)
     logo = models.ImageField(blank=True, null=True, upload_to="logo")
-    area = CountryField(blank=True, null=True)
+    area = CountryField(blank=True, default="")
     url = models.URLField(blank=True, null=True)
     url_api = models.URLField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True, null=True)
