@@ -13,6 +13,45 @@ from django_countries.fields import CountryField
 from django.core.exceptions import ValidationError
 
 
+class Laboratory(models.Model):
+    """
+    Represents a laboratory or research unit.
+
+    Fields:
+        name (CharField): Name of the laboratory.
+        institution (CharField): Institution name (e.g., university, company).
+        unit (CharField): Organizational unit or department (optional).
+        address (CharField): Physical address of the laboratory.
+        country (CountryField): Country where the laboratory is located.
+        contact (CharField): Contact person or email (optional).
+        created_at (DateTimeField): Timestamp when the laboratory was created.
+        modified_at (DateTimeField): Last modification timestamp.
+        created_by (ForeignKey): User who created the laboratory record.
+    """
+
+    name = models.CharField(max_length=255)
+    institution = models.CharField(max_length=255, blank=True, null=True)
+    unit = models.CharField(max_length=255, blank=True, null=True)
+    address = models.CharField(max_length=255, blank=True, null=True)
+    country = CountryField(blank=True, null=True)
+    contact = models.CharField(max_length=255, blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True, null=True)
+    modified_at = models.DateTimeField(auto_now=True, null=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        related_name="laboratory_created_by",
+        on_delete=models.SET_NULL,
+    )
+
+    def __str__(self):
+        return self.name
+
+    class Meta:
+        verbose_name = "Laboratory"
+        verbose_name_plural = "Laboratories"
+
+
 class UserProfile(models.Model):
     """
     Extended profile information for a user.
@@ -21,8 +60,7 @@ class UserProfile(models.Model):
         user (OneToOneField): Linked user account.
         description (TextField): Optional textual description of the user.
         phone (CharField): Contact phone number.
-        unit (CharField): Organizational unit or department.
-        institution (CharField): Institution name (e.g., university, company).
+        laboratory (ForeignKey): The laboratory or research unit the user belongs to.
         address (CharField): Physical address of the user.
         country (CountryField): Country of the user.
         orcid (CharField): ORCID researcher identifier.
@@ -40,8 +78,7 @@ class UserProfile(models.Model):
     )
     description = models.TextField(blank=True, null=True)
     phone = models.CharField(max_length=255, blank=True, null=True)
-    unit = models.CharField(max_length=255, blank=True, null=True)
-    institution = models.CharField(max_length=255, blank=True, null=True)
+    laboratory = models.ForeignKey(Laboratory, on_delete=models.CASCADE, null=True, blank=True)
     address = models.CharField(max_length=255, blank=True, null=True)
     country = CountryField(blank=True, null=True)
     orcid = models.CharField(max_length=255, blank=True, null=True)
@@ -603,6 +640,9 @@ class RecordingSession(models.Model):
         blank=True, null=True, help_text="Duration in seconds"
     )
     laboratory = models.CharField(max_length=255, blank=True, null=True)
+    lab = models.ForeignKey(
+    Laboratory, null=True, blank=True, on_delete=models.SET_NULL, related_name="recording_sessions_temp"
+    )
     animal_profiles = models.ManyToManyField(
         AnimalProfile, blank=True, related_name="animal_profiles"
     )

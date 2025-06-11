@@ -25,6 +25,7 @@ from .models import (
     Subject,
     AnimalProfile,
     SoftwareVersion,
+    Laboratory,
 )
 
 
@@ -156,6 +157,7 @@ admin.site.register(RecordingSession, RecordingSessionAdmin)
 admin.site.register(Subject, SubjectAdmin)
 admin.site.register(AnimalProfile)
 admin.site.register(SoftwareVersion)
+admin.site.register(Laboratory)
 admin.site.site_header = "Mousetube Admin"
 admin.site.site_title = "Mousetube Admin"
 admin.site.index_title = "Mousetube Database"
