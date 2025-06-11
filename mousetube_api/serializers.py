@@ -140,7 +140,7 @@ class AnimalProfileSerializer(serializers.ModelSerializer):
 class FileSerializer(serializers.ModelSerializer):
     repository = RepositorySerializer(required=False)
     recording_session = RecordingSessionSerializer()
-    subject = SubjectSerializer(required=False)
+    subjects = SubjectSerializer(many=True, required=False)
 
     class Meta:
         model = File
