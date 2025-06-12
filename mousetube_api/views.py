@@ -27,6 +27,7 @@ from .models import (
     Subject,
     RecordingSession,
     PageView,
+    Study
 )
 from .serializers import (
     SpeciesSerializer,
@@ -43,6 +44,7 @@ from .serializers import (
     SubjectSerializer,
     RecordingSessionSerializer,
     PageViewSerializer,
+    StudySerializer
 )
 from django_countries import countries
 from django.db.models import Q
@@ -147,6 +149,15 @@ class ProtocolAPIView(APIView):
         return Response(serializers.data)
 
 
+class StudyAPIView(APIView):
+    serializer_class = StudySerializer
+
+    def get(self, request, *args, **kwargs):
+        queryset = Study.objects.all()
+        serializer = self.serializer_class(queryset, many=True)
+        return Response(serializer.data)
+
+
 class RecordingSessionAPIView(APIView):
     serializer_class = RecordingSessionSerializer
 
@@ -179,6 +190,7 @@ class FileAPIView(APIView):
             # Fields for RecordingSession model
             recording_session_fields = [
                 "name",
+                "studies",
                 "laboratory",
                 "group_subject",
                 "temperature",

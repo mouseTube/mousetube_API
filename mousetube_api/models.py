@@ -599,6 +599,46 @@ class Hardware(models.Model):
         verbose_name_plural = "Hardware"
 
 
+class Study(models.Model):
+    """ Represents a study or research project.
+
+    Attributes:
+        name (str): The name of the study.
+        description (str): A description of the study.
+        start_date (DateField, optional): The start date of the study.
+        end_date (DateField, optional): The end date of the study.
+        created_at (DateTimeField): Timestamp when the experiment was created.
+        modified_at (DateTimeField): Last modification timestamp.
+        created_by (ForeignKey): User who created the experiment record.
+    """
+
+    name = models.CharField(max_length=255)
+    description = models.TextField(blank=True, null=True)
+    start_date = models.DateField(blank=True, null=True)
+    end_date = models.DateField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True, null=True)
+    modified_at = models.DateTimeField(auto_now=True, null=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        related_name="study_created_by",
+        on_delete=models.SET_NULL,
+    )
+
+    def __str__(self):
+        """
+        Returns the name of the study.
+
+        Returns:
+            str: The name of the study.
+        """
+        return self.name
+    
+    class Meta:
+        verbose_name = "Study"
+        verbose_name_plural = "Studies"
+
+
 class RecordingSession(models.Model):
     """
     Represents an experiment.
@@ -606,6 +646,8 @@ class RecordingSession(models.Model):
     Attributes:
         name (str): The name of the experiment.
         protocol (Protocol): The protocol associated with the experiment.
+        studies (ManyToManyField): The studies associated with the experiment.
+        description (str, optional): A description of the experiment.
         date (date, optional): The date of the experiment.
         duration (int, optional): The duration of the experiment in seconds.
         temperature (str, optional): The temperature during the experiment.
@@ -636,6 +678,9 @@ class RecordingSession(models.Model):
 
     name = models.CharField(max_length=255, unique=True)
     protocol = models.ForeignKey(Protocol, on_delete=models.CASCADE)
+    studies = models.ManyToManyField(
+        Study, blank=True, related_name="recording_sessions"
+    )
     description = models.TextField(blank=True, null=True)
     date = models.DateTimeField(blank=True, null=True)
     duration = models.PositiveIntegerField(

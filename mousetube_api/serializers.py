@@ -26,7 +26,8 @@ from .models import (
     SoftwareVersion,
     AnimalProfile,
     Dataset,
-    Laboratory
+    Laboratory,
+    Study,
 )
 
 from django.contrib.auth.models import User
@@ -131,8 +132,16 @@ class LaboratorySerializer(serializers.ModelSerializer):
         model = Laboratory
         fields = "__all__"
 
+
+class StudyShortSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Study
+        fields = ("id", "name", "description")
+
+
 class RecordingSessionSerializer(serializers.ModelSerializer):
     protocol = ProtocolSerializer(read_only=True)
+    studies = StudyShortSerializer(many=True, read_only=True)
     laboratory = LaboratorySerializer(read_only=True)
     animal_profiles = AnimalProfileSerializer(many=True, read_only=True)
     equipment_acquisition_software = SoftwareVersionSerializer(
@@ -156,6 +165,14 @@ class RecordingSessionSerializer(serializers.ModelSerializer):
         fields = "__all__"
 
 
+class StudySerializer(serializers.ModelSerializer):
+    recording_sessions = RecordingSessionSerializer(many=True, required=False)
+
+    class Meta:
+        model = Study
+        fields = "__all__"
+
+
 class FileSerializer(serializers.ModelSerializer):
     repository = RepositorySerializer(required=False)
     recording_session = RecordingSessionSerializer()
@@ -172,7 +189,6 @@ class DatasetSerializer(serializers.ModelSerializer):
     class Meta:
         model = Dataset
         fields = "__all__"
-        read_only_fields = ("created_at", "updated_at")
 
 
 class PageViewSerializer(serializers.ModelSerializer):

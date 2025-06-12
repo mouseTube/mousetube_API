@@ -26,6 +26,7 @@ from .models import (
     AnimalProfile,
     SoftwareVersion,
     Laboratory,
+    Study,
 )
 
 
@@ -72,12 +73,19 @@ class RecordingSessionAdmin(admin.ModelAdmin):
     list_display = (
         "name",
         "protocol",
+        "display_studies",
         "date",
         "laboratory",
         "display_equipment_acquisition_software",
     )
     search_fields = ("name", "protocol__name")
     list_filter = ("protocol", "date")
+
+    @admin.display(description="Studies")
+    def display_studies(self, obj):
+        return ", ".join(
+            [str(study) for study in obj.studies.all()]
+        )
 
     @admin.display(description="Acquisition Software")
     def display_equipment_acquisition_software(self, obj):
@@ -159,6 +167,7 @@ admin.site.register(Subject, SubjectAdmin)
 admin.site.register(AnimalProfile)
 admin.site.register(SoftwareVersion)
 admin.site.register(Laboratory)
+admin.site.register(Study)
 admin.site.site_header = "Mousetube Admin"
 admin.site.site_title = "Mousetube Admin"
 admin.site.index_title = "Mousetube Database"
