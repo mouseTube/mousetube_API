@@ -27,7 +27,7 @@ from .models import (
     Subject,
     RecordingSession,
     PageView,
-    Study
+    Study,
 )
 from .serializers import (
     SpeciesSerializer,
@@ -44,7 +44,7 @@ from .serializers import (
     SubjectSerializer,
     RecordingSessionSerializer,
     PageViewSerializer,
-    StudySerializer
+    StudySerializer,
 )
 from django_countries import countries
 from django.db.models import Q
@@ -197,7 +197,7 @@ class FileAPIView(APIView):
                 "equipment_acquisition_hardware_microphones__name",
                 "description",
                 "date",
-                "duration"
+                "duration",
             ]
 
             # Fields for Subject model
@@ -263,10 +263,7 @@ class FileAPIView(APIView):
                 "contact",
             ]
 
-            study_fields = [
-                "name",
-                "description"
-            ]
+            study_fields = ["name", "description"]
 
             # Build dynamic Q objects for File fields
             file_query = Q()

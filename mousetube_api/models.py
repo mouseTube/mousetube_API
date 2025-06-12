@@ -600,7 +600,7 @@ class Hardware(models.Model):
 
 
 class Study(models.Model):
-    """ Represents a study or research project.
+    """Represents a study or research project.
 
     Attributes:
         name (str): The name of the study.
@@ -633,7 +633,7 @@ class Study(models.Model):
             str: The name of the study.
         """
         return self.name
-    
+
     class Meta:
         verbose_name = "Study"
         verbose_name_plural = "Studies"
@@ -778,7 +778,10 @@ class RecordingSession(models.Model):
     def clean(self):
         # Check if the software is valid for acquisition
         for software_version in self.equipment_acquisition_software.all():
-            if software_version.software.type not in ["acquisition", "acquisition and analysis"]:
+            if software_version.software.type not in [
+                "acquisition",
+                "acquisition and analysis",
+            ]:
                 raise ValidationError(
                     f"Software {software_version} is not valid for acquisition."
                 )

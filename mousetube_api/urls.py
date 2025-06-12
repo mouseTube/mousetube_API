@@ -78,7 +78,7 @@ urlpatterns = [
         RecordingSessionAPIView.as_view(),
         name="recording_session",
     ),
-    path('api/study/', StudyAPIView.as_view(), name='study-list'),
+    path("api/study/", StudyAPIView.as_view(), name="study-list"),
     path("api/file/<int:pk>/", FileDetailAPIView.as_view(), name="file-detail"),
     path("api/track-page/", TrackPageView.as_view(), name="track-page"),
     path(

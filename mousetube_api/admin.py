@@ -83,9 +83,7 @@ class RecordingSessionAdmin(admin.ModelAdmin):
 
     @admin.display(description="Studies")
     def display_studies(self, obj):
-        return ", ".join(
-            [str(study) for study in obj.studies.all()]
-        )
+        return ", ".join([str(study) for study in obj.studies.all()])
 
     @admin.display(description="Acquisition Software")
     def display_equipment_acquisition_software(self, obj):
