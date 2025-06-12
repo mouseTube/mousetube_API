@@ -1,0 +1,24 @@
+{
+	"$schema": "http://json-schema.org/draft-07/schema#",
+	"title": "Study",
+	"type": "object",
+	"properties": {
+		"name": {
+			"type": "string"
+		},
+		"description": {
+			"type": "string"
+		},
+        "start_date": {
+            "description": "Start date of the study (YYYY-MM-DD hh:mm:ss).",
+            "type": "string",
+            "format": "date-time"
+		},
+        "end_date": {
+            "description": "End date of the study (YYYY-MM-DD hh:mm:ss).",
+            "type": "string",
+            "format": "date-time"
+        }
+	},
+	"required": ["name", "start_date"]
+}

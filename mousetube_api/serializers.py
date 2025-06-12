@@ -164,9 +164,14 @@ class RecordingSessionSerializer(serializers.ModelSerializer):
         model = RecordingSession
         fields = "__all__"
 
+class RecordingSessionShortSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = RecordingSession
+        fields = ("id", "name")
+
 
 class StudySerializer(serializers.ModelSerializer):
-    recording_sessions = RecordingSessionSerializer(many=True, required=False)
+    recording_sessions = RecordingSessionShortSerializer(many=True, required=False)
 
     class Meta:
         model = Study

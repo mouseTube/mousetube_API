@@ -12,6 +12,13 @@
 			"description": "description of the recording session",
 			"type": "string"
 		},
+		"studies": {
+			"description": "List of studies associated with the recording session",
+			"type": "array",
+			"items": {
+				"$ref": "study.json"
+			}
+		},
 		"protocol": {
 			"$ref": "protocol.json"
 		},

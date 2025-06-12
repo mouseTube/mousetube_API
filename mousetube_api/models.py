@@ -462,8 +462,8 @@ class Software(models.Model):
     Model representing a software tool, which can be used for acquisition, analysis, or both.
 
     Attributes:
-        software_name (str): The name of the software tool.
-        software_type (str): The type of the software, categorized as 'acquisition', 'analysis', or both.
+        name (str): The name of the software tool.
+        type (str): The type of the software, categorized as 'acquisition', 'analysis', or both.
         made_by (str): The entity or individual who created the software.
         description (str): A description of the software, including its functionality.
         technical_requirements (str): The technical requirements for using the software.

@@ -190,27 +190,22 @@ class FileAPIView(APIView):
             # Fields for RecordingSession model
             recording_session_fields = [
                 "name",
-                "studies",
-                "laboratory",
-                "group_subject",
-                "temperature",
-                "light_cycle",
-                "microphone",
-                "acquisition_hardware",
-                "acquisition_software",
-                "sampling_rate",
-                "bit_depth",
+                "equipment_acquisition_software__software__name",
+                "equipment_acquisition_hardware_soundcards__name",
+                "equipment_acquisition_hardware_speakers__name",
+                "equipment_acquisition_hardware_amplifiers__name",
+                "equipment_acquisition_hardware_microphones__name",
+                "description",
                 "date",
+                "duration"
             ]
 
             # Fields for Subject model
             subject_fields = [
                 "name",
+                "identifier",
                 "origin",
-                "sex",
-                "group",
-                "genotype",
-                "treatment",
+                "cohort",
             ]
 
             # Fields for User model (related to Subject)
@@ -225,46 +220,107 @@ class FileAPIView(APIView):
             ]
 
             # Fields for Strain model (related to Subject)
-            strain_fields = ["name", "background", "bibliography"]
+            strain_fields = [
+                "animal_profile__strain__name",
+                "animal_profile__strain__background",
+                "animal_profile__strain__bibliography",
+                "animal_profile__strain__species__name",
+            ]
 
             # Fields for Protocol model (related to RecordingSession)
-            protocol_fields = ["name", "number_files", "description"]
+            protocol_fields = [
+                "name",
+                "description",
+                "user__name_user",
+                "animals_sex",
+                "animals_age",
+                "animals_housing",
+                "animals_species",
+                "context_number_of_animals",
+                "context_duration",
+                "context_cage",
+                "context_bedding",
+                "context_light_cycle",
+                "context_temperature_value",
+                "context_temperature_unit",
+                "context_brightness",
+            ]
+
+            animal_profile_fields = [
+                "name",
+                "description",
+                "sex",
+                "genotype",
+                "treatment",
+            ]
+
+            laboratory_fields = [
+                "name",
+                "institution",
+                "unit",
+                "address",
+                "country",
+                "contact",
+            ]
+
+            study_fields = [
+                "name",
+                "description"
+            ]
 
             # Build dynamic Q objects for File fields
             file_query = Q()
             for field in file_fields:
-                file_query |= Q(**{f"{field}__icontains": search_query})
+                lookup = f"{field}__icontains"
+                file_query |= Q(**{lookup: search_query})
 
             # Build dynamic Q objects for RecordingSession fields
             recording_session_query = Q()
             for field in recording_session_fields:
-                recording_session_query |= Q(
-                    **{f"recording_session__{field}__icontains": search_query}
-                )
+                lookup = f"recording_session__{field}__icontains"
+                recording_session_query |= Q(**{lookup: search_query})
 
             # Build dynamic Q objects for Subject fields
             subject_query = Q()
             for field in subject_fields:
-                subject_query |= Q(**{f"subject__{field}__icontains": search_query})
+                lookup = f"subjects__{field}__icontains"
+                subject_query |= Q(**{lookup: search_query})
 
             # Build dynamic Q objects for User fields (via Subject)
             user_query = Q()
             for field in user_fields:
-                user_query |= Q(**{f"subject__user__{field}__icontains": search_query})
+                lookup = f"subjects__user__{field}__icontains"
+                user_query |= Q(**{lookup: search_query})
 
             # Build dynamic Q objects for Strain fields (via Subject)
             strain_query = Q()
             for field in strain_fields:
-                strain_query |= Q(
-                    **{f"subject__strain__{field}__icontains": search_query}
-                )
+                lookup = f"subjects__{field}__icontains"
+                strain_query |= Q(**{lookup: search_query})
 
             # Build dynamic Q objects for Protocol fields (via RecordingSession)
             protocol_query = Q()
             for field in protocol_fields:
-                protocol_query |= Q(
-                    **{f"recording_session__protocol__{field}__icontains": search_query}
-                )
+                lookup = f"recording_session__protocol__{field}__icontains"
+                protocol_query |= Q(**{lookup: search_query})
+
+            # Build dynamic Q objects for AnimalProfile fields (via Subject)
+            animal_profile_query = Q()
+            for field in animal_profile_fields:
+                lookup = f"subjects__animal_profile__{field}__icontains"
+                animal_profile_query |= Q(**{lookup: search_query})
+
+            # Build dynamic Q objects for Laboratory fields (via RecordingSession)
+            laboratory_query = Q()
+            for field in laboratory_fields:
+                lookup = f"recording_session__laboratory__{field}__icontains"
+                laboratory_query |= Q(**{lookup: search_query})
+
+            # Build dynamic Q objects for Study fields (via RecordingSession)
+            study_query = Q()
+            for field in study_fields:
+                lookup = f"recording_session__studies__{field}__icontains"
+                study_query |= Q(**{lookup: search_query})
 
             # Combine all queries
             files = files.filter(
@@ -274,6 +330,9 @@ class FileAPIView(APIView):
                 | user_query
                 | strain_query
                 | protocol_query
+                | animal_profile_query
+                | laboratory_query
+                | study_query
             )
 
         ALLOWED_FILTERS = ["is_valid_link"]
