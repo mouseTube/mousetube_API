@@ -73,10 +73,35 @@ class CountryAPIView(APIView):
 class RepositoryAPIView(APIView):
     serializer_class = RepositorySerializer
 
+    @extend_schema(
+        parameters=[
+            OpenApiParameter(
+                name="search", description="text search", required=False, type=str
+            ),
+        ]
+    )
     def get(self, request, *args, **kwargs):
-        queryset = Repository.objects.all()
-        serializer = self.serializer_class(queryset, many=True)
-        return Response(serializer.data)
+        search_query = request.GET.get("search", "")
+        repositories = Repository.objects.all()
+
+        # Search
+        if search_query:
+            search_fields = [
+                "name",
+                "description",
+                "area",
+                "url",
+            ]
+            search_q = Q()
+            for field in search_fields:
+                search_q |= Q(**{f"{field}__icontains": search_query})
+            repositories = repositories.filter(search_q)
+
+        repositories = repositories.order_by(F("name").asc(nulls_last=True))
+        paginator = FilePagination()
+        paginated_repositories = paginator.paginate_queryset(repositories, request)
+        serializer = self.serializer_class(paginated_repositories, many=True)
+        return paginator.get_paginated_response(serializer.data)
 
 
 class ReferenceAPIView(APIView):
@@ -125,11 +150,49 @@ class StrainAPIView(APIView):
 
 
 class HardwareAPIView(APIView):
-    def get(self, *arg, **kwargs):
+    serializer_class = HardwareSerializer
+
+    @extend_schema(
+        parameters=[
+            OpenApiParameter(
+                name="search", description="text search", required=False, type=str
+            ),
+            OpenApiParameter(
+                name="filter", description="filter by type", required=False, type=str
+            ),
+        ]
+    )
+    def get(self, request, *args, **kwargs):
+        search_query = request.GET.get("search", "")
+        filter_query = request.GET.get("filter", "")
         hardware = Hardware.objects.all()
+
+        # Search
+        if search_query:
+            search_fields = [
+                "name",
+                "type",
+                "made_by",
+                "references__name",
+                "description",
+            ]
+            search_q = Q()
+            for field in search_fields:
+                search_q |= Q(**{f"{field}__icontains": search_query})
+            hardware = hardware.filter(search_q)
+
+        # Filter by type
+
+        ALLOWED_FILTERS = ["microphone", "speaker", "soundcard", "amplifier"]
+
+        if filter_query and filter_query in ALLOWED_FILTERS:
+            hardware = hardware.filter(type=filter_query)
+
         hardware = hardware.order_by(F("name").asc(nulls_last=True))
-        serializer = HardwareSerializer(hardware, many=True)
-        return Response(serializer.data)
+        paginator = FilePagination()
+        paginated_hardware = paginator.paginate_queryset(hardware, request)
+        serializer = self.serializer_class(paginated_hardware, many=True)
+        return paginator.get_paginated_response(serializer.data)
 
 
 class SubjectAPIView(APIView):

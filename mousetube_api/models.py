@@ -423,7 +423,7 @@ class Reference(models.Model):
     Model representing a reference (e.g., research paper, article, or website).
 
     Attributes:
-        name_reference (str): The name of the reference (e.g., title of a paper).
+        name (str): The name of the reference (e.g., title of a paper).
         description (str): A detailed description of the reference.
         url (str): The URL pointing to the reference, if available.
         doi (str): The DOI (Digital Object Identifier) of the reference, if applicable.
