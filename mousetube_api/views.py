@@ -127,6 +127,7 @@ class StrainAPIView(APIView):
 class HardwareAPIView(APIView):
     def get(self, *arg, **kwargs):
         hardware = Hardware.objects.all()
+        hardware = hardware.order_by(F("name").asc(nulls_last=True))
         serializer = HardwareSerializer(hardware, many=True)
         return Response(serializer.data)
 

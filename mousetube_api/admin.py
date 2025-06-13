@@ -44,7 +44,7 @@ class LegacyUserAdmin(admin.ModelAdmin):
 
 
 class StrainAdmin(admin.ModelAdmin):
-    list_display = ("name", "background")
+    list_display = ("name", "background", "species")
     search_fields = ("name",)
     list_filter = ("background",)
 
