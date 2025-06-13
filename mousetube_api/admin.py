@@ -148,6 +148,20 @@ class ReferenceAdmin(admin.ModelAdmin):
         "doi",
     )
 
+class HardwareAdmin(admin.ModelAdmin):
+    list_display = (
+        "name",
+        "type",
+        "made_by",
+        "description",
+    )
+    search_fields = (
+        "name",
+        "type",
+        "made_by",
+        "description",
+    )
+    filter_horizontal = ("references",)
 
 admin.site.register(UserProfile)
 admin.site.register(LegacyUser, LegacyUserAdmin)
@@ -159,7 +173,7 @@ admin.site.register(Protocol, ProtocolAdmin)
 admin.site.register(File, FileAdmin)
 admin.site.register(Dataset)
 admin.site.register(Software, SoftwareAdmin)
-admin.site.register(Hardware)
+admin.site.register(Hardware, HardwareAdmin)
 admin.site.register(RecordingSession, RecordingSessionAdmin)
 admin.site.register(Subject, SubjectAdmin)
 admin.site.register(AnimalProfile)
