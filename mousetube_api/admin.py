@@ -148,6 +148,7 @@ class ReferenceAdmin(admin.ModelAdmin):
         "doi",
     )
 
+
 class HardwareAdmin(admin.ModelAdmin):
     list_display = (
         "name",
@@ -162,6 +163,7 @@ class HardwareAdmin(admin.ModelAdmin):
         "description",
     )
     filter_horizontal = ("references",)
+
 
 admin.site.register(UserProfile)
 admin.site.register(LegacyUser, LegacyUserAdmin)
