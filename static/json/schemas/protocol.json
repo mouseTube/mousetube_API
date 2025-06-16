@@ -1,8 +1,17 @@
 {
+	"$schema": "http://json-schema.org/draft-07/schema#",
 	"title": "Protocol",
 	"description": "protocol description",
 	"type": "object",
 	"properties": {
+		"name": {
+			"type": "string",
+			"description": "The name of the protocol"
+		},
+		"description": {
+			"type": "string",
+			"description": "A description of the protocol"
+		},
 		"animals":{
 			"description": "information about animals",
 			"type": "object",
@@ -18,7 +27,7 @@
 				},
 				"age": {
 					"description": "age of the animal(s) recorded",
-					"type": "str",
+					"type": "string",
 					"enum": [
 						"pup",
 						"juvenile",
@@ -27,67 +36,64 @@
 				},
 				"housing": {
 					"description": "housing condition of the animal(s) before the recording",
-					"type": "str",
+					"type": "string",
 					"enum": [
 						"grouped",
 						"isolated",
 						"grouped & isolated"
 					]
-				}
+				},
+				"species": {
+						"description": "species of the animal(s) recorded",
+						"type": "string"
+						}
 			}
 		},
 		"context": {
-			"description": "behavioural context used for the recording",
+			"description": "experimental context used for the recording",
 			"type": "object",
 			"properties": {
 				"number of animals": {
 					"description": "number of animals present during recording",
-					"type": "string",
-					"enum": ["single", "dyad", "group (>2)"]
+					"type": "integer",
+					"minimum": 1
 				},
 				"duration": {
 					"description": "duration of the recording",
-					"type": "str",
+					"type": "string",
 					"enum": ["short term (<1h)", "mid term (<1day)", "long term (>=1day)"]
 				},
 				"cage": {
 					"description": "type of recording cage",
-					"type": "str",
+					"type": "string",
 					"enum": ["unfamiliar test cage", "familiar test cage", "home cage"]
 				},
 				"bedding": {
 					"description": "presence of bedding during recording",
-					"type": "str",
+					"type": "string",
 					"enum": ["bedding", "no bedding"]
 				},
-				"time": {
+				"light_cycle": {
 					"description": "time of the day or night (for the animal) during recording",
-					"type": "str",
-					"enum": ["day cycle", "night cycle"]
-				}
-			}
-		},
-		"equipment": {
-			"description": "equipment specificities used for the recording",
-			"type": "object",
-			"properties": {
-				"channels": {
-					"description": "number of microphones used for recording",
 					"type": "string",
-					"enum": [
-						"mono",
-						"stereo",
-						"more than 2"
-					]
+					"enum": ["day", "night"]
 				},
-				"sound isolation": {
-					"description": "presence of a sound attenuating chamber",
-					"type": "string",
-					"enum": [
-						"soundproof room",
-						"soundproof cage",
-						"no specific sound isolation"
-					]
+				"temperature": {
+					"properties": {
+						"value": {
+							"description": "value of the temperature",
+							"type": "string"
+						},
+						"unit": {
+							"description": "unit of the temperature",
+							"type": "string",
+							"enum": ["°C", "°F"]
+						}
+					}
+				},
+				"brightness": {
+					"description": "brightness of the recording environment in Lux",
+					"type": "integer"
 				}
 			}
 		}

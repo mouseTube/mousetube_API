@@ -12,25 +12,25 @@ from rest_framework import serializers
 from .models import (
     Repository,
     Reference,
-    User,
+    LegacyUser,
     UserProfile,
-    Contact,
     Hardware,
     Software,
     Species,
     Strain,
-    MetadataCategory,
-    MetadataField,
-    Metadata,
     Protocol,
     File,
+    RecordingSession,
+    Subject,
+    PageView,
+    SoftwareVersion,
+    AnimalProfile,
+    Dataset,
+    Laboratory,
+    Study,
 )
 
-
-# class CountrySerializer(serializers.Serializer):
-#     country = CountryField()
-#     class Meta:
-#         fields = '__all__'
+from django.contrib.auth.models import User
 
 
 class RepositorySerializer(serializers.ModelSerializer):
@@ -42,6 +42,12 @@ class RepositorySerializer(serializers.ModelSerializer):
 class ReferenceSerializer(serializers.ModelSerializer):
     class Meta:
         model = Reference
+        fields = "__all__"
+
+
+class LegacyUserSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = LegacyUser
         fields = "__all__"
 
 
@@ -59,31 +65,22 @@ class UserProfileSerializer(serializers.ModelSerializer):
         fields = "__all__"
 
 
-class ContactSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Contact
-        fields = "__all__"
-
-
 class HardwareSerializer(serializers.ModelSerializer):
-    reference = ReferenceSerializer(many=True, required=False)
+    references = ReferenceSerializer(many=True, required=False)
+    users = LegacyUserSerializer(many=True, required=False)
 
     class Meta:
         model = Hardware
         fields = "__all__"
-        # extra_kwargs = {'references_and_tutorials': {'required': False},
-        #                 'contacts': {'required': False}}
 
 
 class SoftwareSerializer(serializers.ModelSerializer):
-    references_and_tutorials = ReferenceSerializer(many=True, required=False)
-    contacts = ContactSerializer(many=True, required=False)
+    references = ReferenceSerializer(many=True, required=False)
+    users = LegacyUserSerializer(many=True, required=False)
 
     class Meta:
         model = Software
         fields = "__all__"
-        # extra_kwargs = {'references_and_tutorials': {'required': False},
-        #                 'contacts': {'required': False}}
 
 
 class SpeciesSerializer(serializers.ModelSerializer):
@@ -98,53 +95,113 @@ class StrainSerializer(serializers.ModelSerializer):
         fields = "__all__"
 
 
-class MetadataCategorySerializer(serializers.ModelSerializer):
-    class Meta:
-        model = MetadataCategory
-        fields = "__all__"
-
-
-class MetadataFieldSerializer(serializers.ModelSerializer):
-    metadata_category = MetadataCategorySerializer(many=True, required=False)
-
-    class Meta:
-        model = MetadataField
-        fields = "__all__"
-
-
-class MetadataSerializer(serializers.ModelSerializer):
-    metadata_field = MetadataFieldSerializer(many=True, required=False)
-
-    class Meta:
-        model = Metadata
-        fields = "__all__"
-
-
 class ProtocolSerializer(serializers.ModelSerializer):
-    protocol_keywords = MetadataSerializer(many=True, required=False)
+    user = LegacyUserSerializer(read_only=True)
 
     class Meta:
         model = Protocol
         fields = "__all__"
 
 
+class SoftwareVersionSerializer(serializers.ModelSerializer):
+    software = SoftwareSerializer(read_only=True)
+
+    class Meta:
+        model = SoftwareVersion
+        fields = "__all__"
+
+
+class AnimalProfileSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AnimalProfile
+        fields = "__all__"
+
+
+class SubjectSerializer(serializers.ModelSerializer):
+    user = LegacyUserSerializer(read_only=True)
+    strain = StrainSerializer(read_only=True)
+    animal_profile = AnimalProfileSerializer()
+
+    class Meta:
+        model = Subject
+        fields = "__all__"
+
+
+class LaboratorySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Laboratory
+        fields = "__all__"
+
+
+class StudyShortSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Study
+        fields = ("id", "name", "description")
+
+
+class RecordingSessionSerializer(serializers.ModelSerializer):
+    protocol = ProtocolSerializer(read_only=True)
+    studies = StudyShortSerializer(many=True, read_only=True)
+    laboratory = LaboratorySerializer(read_only=True)
+    animal_profiles = AnimalProfileSerializer(many=True, read_only=True)
+    equipment_acquisition_software = SoftwareVersionSerializer(
+        many=True, read_only=True
+    )
+    equipment_acquisition_hardware_soundcards = HardwareSerializer(
+        many=True, read_only=True
+    )
+    equipment_acquisition_hardware_speakers = HardwareSerializer(
+        many=True, read_only=True
+    )
+    equipment_acquisition_hardware_amplifiers = HardwareSerializer(
+        many=True, read_only=True
+    )
+    equipment_acquisition_hardware_microphones = HardwareSerializer(
+        many=True, read_only=True
+    )
+
+    class Meta:
+        model = RecordingSession
+        fields = "__all__"
+
+
+class RecordingSessionShortSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = RecordingSession
+        fields = ("id", "name")
+
+
+class StudySerializer(serializers.ModelSerializer):
+    recording_sessions = RecordingSessionShortSerializer(many=True, required=False)
+
+    class Meta:
+        model = Study
+        fields = "__all__"
+
+
 class FileSerializer(serializers.ModelSerializer):
-    repository = RepositorySerializer(many=True, required=False)
-    microphones = HardwareSerializer(many=True, required=False)
-    acquisition_hardware = HardwareSerializer(required=False)
-    acquisition_software = SoftwareSerializer(required=False)
-    strains = StrainSerializer(many=True, required=False)
-    protocol = ProtocolSerializer(required=False)
-    created_by = UserProfileSerializer(required=False)
+    repository = RepositorySerializer(required=False)
+    recording_session = RecordingSessionSerializer()
+    subjects = SubjectSerializer(many=True, required=False)
 
     class Meta:
         model = File
         fields = "__all__"
 
 
-class ProtocolMetadataSerializer(serializers.ModelSerializer):
-    metadata_field = MetadataFieldSerializer(many=True)
+class DatasetSerializer(serializers.ModelSerializer):
+    files = FileSerializer(many=True, required=False)
 
     class Meta:
-        model = Metadata
+        model = Dataset
         fields = "__all__"
+
+
+class PageViewSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PageView
+        fields = "__all__"
+
+
+class TrackPageSerializer(serializers.Serializer):
+    path = serializers.CharField(max_length=255)

@@ -22,10 +22,13 @@ dependencies = [
     "gunicorn==21.2.0",
     "mkdocs-material>=8.0",
     "mkdocstrings[python]>=0.11",
-    "django-countries==7.5",
+    "django-countries>=7.5",
+    "setuptools==67.8.0",
+    "pillow==11.2.1",
     "celery==5.3.6",
     "django-celery-results==2.5.1",
     "celery-progress==0.5",
+    "django-extensions==4.1",
 ]
 license = { text = "GPL-3.0" }
 

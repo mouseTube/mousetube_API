@@ -1,0 +1,27 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Subject",
+  "description": "Metadata schema describing an experimental subject (e.g., mouse).",
+  "type": "object",
+  "properties": {
+    "name": {
+      "description": "Common or given name used to refer to the animal(s) during the study.",
+      "type": "string"
+    },
+    "identifier": {
+      "description": "Unique identifier assigned to the animal(s), used for tracking and referencing within the experiment.",
+      "type": "string"
+    },
+    "cohort": {
+      "description": "Group or batch to which the animal(s) belongs.",					
+      "type": "string"
+    },
+    "origin": {
+      "description": "Source from which the animal(s) were obtained.",
+      "type": "string"
+    },
+    "animal_type": {
+      "$ref": "animal_profile.json"
+    }
+  }
+}

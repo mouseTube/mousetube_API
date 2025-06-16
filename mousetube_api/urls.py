@@ -23,59 +23,71 @@ Including another URLconf
 """
 
 from django.contrib import admin
-from django.urls import path, include
+from django.urls import path
 from django.conf.urls.static import static
-from rest_framework.routers import DefaultRouter
 from .views import (
-    RepositoryViewSet,
-    ReferenceViewSet,
-    ContactViewSet,
-    UserViewSet,
-    UserProfileViewSet,
-    SpeciesViewSet,
-    StrainViewSet,
-    MetadataViewSet,
-    ProtocolViewSet,
-    FileViewSet,
-    ProtocolMetadataViewSet,
+    RepositoryAPIView,
+    LegacyUserAPIView,
+    UserProfileAPIView,
+    SpeciesAPIView,
+    StrainAPIView,
+    ProtocolAPIView,
+    FileAPIView,
+    FileDetailAPIView,
     SoftwareAPIView,
-    AcquisitionSoftwareAPIView,
-    AnalysisSoftwareAPIView,
-    AcquisitionAndAnalysisSoftwareAPIView,
     HardwareAPIView,
     CountryAPIView,
+    ReferenceAPIView,
+    SubjectAPIView,
+    RecordingSessionAPIView,
+    SchemaDetailView,
+    StudyAPIView,
 )
+from .views import TrackPageView
+from django.views.static import serve
+from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
+from django.contrib.admin.views.decorators import staff_member_required
+import os
 from django.conf import settings
 
-router = DefaultRouter()
-# router.register('country', CountryViewSet, basename='country')
-router.register("repository", RepositoryViewSet, basename="repository")
-router.register("reference", ReferenceViewSet, basename="reference")
-router.register("contact", ContactViewSet, basename="contact")
-router.register("user", UserViewSet, basename="user")
-router.register("user_profile", UserProfileViewSet, basename="user_profile")
-router.register("species", SpeciesViewSet, basename="species")
-router.register("strain", StrainViewSet, basename="strain")
-router.register("metadata", MetadataViewSet, basename="metadata")
-router.register("protocol", ProtocolViewSet, basename="protocol")
-router.register("file", FileViewSet, basename="file")
-router.register(
-    "protocol_metadata", ProtocolMetadataViewSet, basename="protocol_metadata"
-)
-# router.register('software', SoftwareViewSet, basename='software')
-
 urlpatterns = [
-    path("admin/", admin.site.urls),
-    path("api/", include(router.urls)),
-    path("api/software/", SoftwareAPIView.as_view()),
-    path("api/acquisition_software/", AcquisitionSoftwareAPIView.as_view()),
-    path("api/analysis_software/", AnalysisSoftwareAPIView.as_view()),
     path(
-        "api/acquisition_and_analysis_software/",
-        AcquisitionAndAnalysisSoftwareAPIView.as_view(),
+        "admin/stats/",
+        staff_member_required(serve),
+        {
+            "document_root": os.path.join(settings.BASE_DIR, "logs"),
+            "path": "latest.html",
+        },
+        name="admin-stats",
     ),
-    path("api/hardware/", HardwareAPIView.as_view()),
+    path("admin/", admin.site.urls),
+    path("api/repository/", RepositoryAPIView.as_view(), name="repository"),
+    path("api/reference/", ReferenceAPIView.as_view(), name="reference"),
+    path("api/legacy_user/", LegacyUserAPIView.as_view(), name="legacy_user"),
+    path("api/user_profile/", UserProfileAPIView.as_view(), name="user_profile"),
+    path("api/species/", SpeciesAPIView.as_view(), name="species"),
+    path("api/strain/", StrainAPIView.as_view(), name="strain"),
+    path("api/protocol/", ProtocolAPIView.as_view(), name="protocol"),
+    path("api/file/", FileAPIView.as_view(), name="file"),
+    path("api/software/", SoftwareAPIView.as_view(), name="software"),
+    path("api/hardware/", HardwareAPIView.as_view(), name="hardware"),
     path("api/country/", CountryAPIView.as_view(), name="country"),
+    path("api/subject/", SubjectAPIView.as_view(), name="subject"),
+    path(
+        "api/recording_session/",
+        RecordingSessionAPIView.as_view(),
+        name="recording_session",
+    ),
+    path("api/study/", StudyAPIView.as_view(), name="study-list"),
+    path("api/file/<int:pk>/", FileDetailAPIView.as_view(), name="file-detail"),
+    path("api/track-page/", TrackPageView.as_view(), name="track-page"),
+    path(
+        "api/schema/<str:filename>/", SchemaDetailView.as_view(), name="schema-detail"
+    ),
+    path("schema/", SpectacularAPIView.as_view(), name="schema"),
+    path(
+        "swagger/", SpectacularSwaggerView.as_view(url_name="schema"), name="swagger-ui"
+    ),
 ]
 
 if settings.DEBUG:

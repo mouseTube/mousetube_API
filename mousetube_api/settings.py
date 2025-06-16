@@ -103,6 +103,8 @@ INSTALLED_APPS = [
     "django_celery_results",
     "celery_progress",
     "drf_spectacular",
+    "django_extensions",
+    "django_countries",
 ]
 
 MIDDLEWARE = [
@@ -116,13 +118,12 @@ MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
-ADMIN_BASE_TEMPLATE = "admin/base_site.html"
 ROOT_URLCONF = "mousetube_api.urls"
 
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [BASE_DIR / "templates"],
+        "DIRS": [BASE_DIR / "mousetube_api/templates"],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
@@ -135,6 +136,7 @@ TEMPLATES = [
     },
 ]
 
+ADMIN_BASE_TEMPLATE = "admin/base_site.html"
 WSGI_APPLICATION = "mousetube_api.wsgi.application"
 
 
@@ -151,7 +153,15 @@ DATABASES = {
         "PASSWORD": env("DB_PASSWORD", default=""),
         "HOST": env("DB_HOST", default="127.0.0.1"),
         "PORT": "3306" if IS_DOCKER else env("DB_PORT", default="3306"),
-        "OPTIONS": {"ssl": env.bool("DB_SSL", default=False)},
+        "OPTIONS": {}
+        if not env.bool("DB_SSL", default=False)
+        else {
+            "ssl": {
+                "ca": env("DB_SSL_CA", default=None),
+                "cert": env("DB_SSL_CERT", default=None),
+                "key": env("DB_SSL_KEY", default=None),
+            }
+        },
     }
 }
 
@@ -230,8 +240,8 @@ CELERY_IMPORTS = "mousetube_api.tasks"
 CELERY_RESULT_BACKEND = "django-db"
 CACHE_BACKEND = "memcached://127.0.0.1:11211/"
 
-LOG_DIR = Path(BASE_DIR) / "logs"
-LOG_DIR.mkdir(exist_ok=True)
+LOGS_DIR = Path(BASE_DIR) / "logs"
+LOGS_DIR.mkdir(exist_ok=True)
 
 LOGGING = {
     "version": 1,

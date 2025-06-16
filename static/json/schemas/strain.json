@@ -1,0 +1,24 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "Strain",
+    "description": "Represents a rodent strain.",
+    "type": "object",
+    "required": ["name", "background", "species"],
+    "properties": {
+      "name": {
+        "description": "Name of the strain.",
+        "type": "string"
+      },
+      "background": {
+        "description": "Genetic background of the strain.",
+        "type": "string"
+      },
+      "bibliography": {
+        "description": "Bibliographical references related to the strain.",
+        "type": "string"
+      },
+      "species": {
+        "$ref": "species.json"
+      }
+    }
+  }

@@ -1,0 +1,10 @@
+{% extends "admin/base.html" %}
+
+{% block branding %}
+    <h1 style="text-shadow: 4px 4px 4px rgba(0, 0, 0, 0.5);">MOUSETUBE ADMIN</h1>
+{% endblock %}
+
+{% block usertools %}
+    <a href="{% url 'admin-stats' %}" target="_blank" class="button">Show Stats</a>
+    {{ block.super }}
+{% endblock %}

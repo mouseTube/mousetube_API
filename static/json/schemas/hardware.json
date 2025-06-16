@@ -1,0 +1,27 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "Hardware",
+    "type": "object",
+    "properties": {
+      "name": {
+        "type": "string",
+        "title": "Hardware Name",
+        "maxLength": 255
+      },
+      "type": {
+        "type": "string",
+        "title": "Hardware Type",
+        "enum": ["soundcard", "microphone", "speaker", "amplifier"],
+        "default": ""
+      },
+      "made_by": {
+        "type": "string",
+        "title": "Made By"
+      },
+      "description": {
+        "type": "string",
+        "title": "Description"
+      }
+    },
+    "required": ["name"]
+  }
