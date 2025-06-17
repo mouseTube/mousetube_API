@@ -14,6 +14,7 @@ from django.core.management.utils import get_random_secret_key
 from pathlib import Path
 import os
 import environ
+from datetime import timedelta
 
 # Add two custom countries to django_countries
 COUNTRIES_OVERRIDE = {
@@ -100,6 +101,7 @@ INSTALLED_APPS = [
     "rest_framework.authtoken",
     "corsheaders",
     "djoser",
+    'django.contrib.sites',
     "django_celery_results",
     "celery_progress",
     "drf_spectacular",
@@ -223,7 +225,8 @@ REST_FRAMEWORK = {
     "PAGE_SIZE": 10,
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
     "DEFAULT_AUTHENTICATION_CLASSES": [
-        "rest_framework.authentication.TokenAuthentication",
+        # "rest_framework.authentication.TokenAuthentication",
+        "rest_framework_simplejwt.authentication.JWTAuthentication",
     ],
     "DEFAULT_PERMISSION_CLASSES": [
         # 'rest_framework.permissions.IsAuthenticated',
@@ -231,6 +234,26 @@ REST_FRAMEWORK = {
         "rest_framework.permissions.AllowAny",
     ],
 }
+
+SITE_ID = 1
+
+# Djoser settings
+DJOSER = {
+    'SEND_ACTIVATION_EMAIL': True,
+    'ACTIVATION_URL': 'activate/{uid}/{token}',
+    'SERIALIZERS': {},
+    'EMAIL': {
+        'activation': 'djoser.email.ActivationEmail',
+    },
+}
+
+SIMPLE_JWT = {
+    "ACCESS_TOKEN_LIFETIME": timedelta(hours=12),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
+}
+
+EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+DEFAULT_FROM_EMAIL = 'no-reply@mousetube.com'
 
 broker_url = "amqp://guest:guest@localhost:5672//"
 CELERY_ACCEPT_CONTENT = ["json"]

@@ -51,14 +51,21 @@ class LegacyUserSerializer(serializers.ModelSerializer):
         fields = "__all__"
 
 
+class LaboratorySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Laboratory
+        fields = "__all__"
+
+
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = "__all__"
+        fields = ["id", "username", "first_name", "last_name", "email"]
 
 
 class UserProfileSerializer(serializers.ModelSerializer):
     user = UserSerializer(read_only=True)
+    laboratory = LaboratorySerializer(read_only=True)
 
     class Meta:
         model = UserProfile
