@@ -74,7 +74,7 @@ class UserProfile(models.Model):
         settings.AUTH_USER_MODEL,
         null=True,
         related_name="user_profile",
-        on_delete=models.SET_NULL,
+        on_delete=models.CASCADE,
     )
     description = models.TextField(blank=True, null=True)
     phone = models.CharField(max_length=255, blank=True, null=True)

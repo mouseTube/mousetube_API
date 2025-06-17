@@ -241,10 +241,15 @@ SITE_ID = 1
 DJOSER = {
     'SEND_ACTIVATION_EMAIL': True,
     'ACTIVATION_URL': 'activate/{uid}/{token}',
-    'SERIALIZERS': {},
-    'EMAIL': {
-        'activation': 'djoser.email.ActivationEmail',
+    'SERIALIZERS': {
+        'user_create': 'mousetube_api.serializers.CustomUserCreateSerializer',
     },
+    "USER_CREATE_FIELDS": ["username", "email", "password", "first_name", "last_name"],
+    'EMAIL': {
+        'activation': 'mousetube_api.utils.email_activation.CustomActivationEmail',
+    },
+    "DOMAIN": "localhost:3000",
+    "SITE_NAME": "mouseTube",
 }
 
 SIMPLE_JWT = {
