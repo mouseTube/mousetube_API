@@ -247,7 +247,9 @@ DJOSER = {
     "USER_CREATE_FIELDS": ["username", "email", "password", "first_name", "last_name"],
     'EMAIL': {
         'activation': 'mousetube_api.utils.email_activation.CustomActivationEmail',
+        'password_reset': 'mousetube_api.utils.email_reset.CustomPasswordResetEmail',
     },
+    'PASSWORD_RESET_CONFIRM_URL': 'password/reset/confirm/{uid}/{token}',
     "DOMAIN": "localhost:3000",
     "SITE_NAME": "mouseTube",
 }
