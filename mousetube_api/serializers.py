@@ -34,10 +34,11 @@ from .models import (
 from django.contrib.auth.models import User
 from djoser.serializers import UserCreateSerializer as BaseUserCreateSerializer
 
+
 class CustomUserCreateSerializer(BaseUserCreateSerializer):
     class Meta(BaseUserCreateSerializer.Meta):
         model = User
-        fields = ('id', 'username', 'email', 'password', 'first_name', 'last_name')
+        fields = ("id", "username", "email", "password", "first_name", "last_name")
 
 
 class RepositorySerializer(serializers.ModelSerializer):

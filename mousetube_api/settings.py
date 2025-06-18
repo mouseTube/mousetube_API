@@ -101,7 +101,7 @@ INSTALLED_APPS = [
     "rest_framework.authtoken",
     "corsheaders",
     "djoser",
-    'django.contrib.sites',
+    "django.contrib.sites",
     "django_celery_results",
     "celery_progress",
     "drf_spectacular",
@@ -239,17 +239,17 @@ SITE_ID = 1
 
 # Djoser settings
 DJOSER = {
-    'SEND_ACTIVATION_EMAIL': True,
-    'ACTIVATION_URL': 'activate/{uid}/{token}',
-    'SERIALIZERS': {
-        'user_create': 'mousetube_api.serializers.CustomUserCreateSerializer',
+    "SEND_ACTIVATION_EMAIL": True,
+    "ACTIVATION_URL": "activate/{uid}/{token}",
+    "SERIALIZERS": {
+        "user_create": "mousetube_api.serializers.CustomUserCreateSerializer",
     },
     "USER_CREATE_FIELDS": ["username", "email", "password", "first_name", "last_name"],
-    'EMAIL': {
-        'activation': 'mousetube_api.utils.email_activation.CustomActivationEmail',
-        'password_reset': 'mousetube_api.utils.email_reset.CustomPasswordResetEmail',
+    "EMAIL": {
+        "activation": "mousetube_api.utils.email_activation.CustomActivationEmail",
+        "password_reset": "mousetube_api.utils.email_reset.CustomPasswordResetEmail",
     },
-    'PASSWORD_RESET_CONFIRM_URL': 'password/reset/confirm/{uid}/{token}',
+    "PASSWORD_RESET_CONFIRM_URL": "password/reset/confirm/{uid}/{token}",
     "DOMAIN": "localhost:3000",
     "SITE_NAME": "mouseTube",
 }
@@ -259,8 +259,8 @@ SIMPLE_JWT = {
     "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
 }
 
-EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
-DEFAULT_FROM_EMAIL = 'no-reply@mousetube.com'
+EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+DEFAULT_FROM_EMAIL = "no-reply@mousetube.com"
 
 broker_url = "amqp://guest:guest@localhost:5672//"
 CELERY_ACCEPT_CONTENT = ["json"]

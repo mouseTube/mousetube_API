@@ -127,7 +127,7 @@ class UserProfileAPIView(APIView):
 
     def get(self, request, *args, **kwargs):
         queryset = UserProfile.objects.all()
-        user_id = request.query_params.get('user_id')
+        user_id = request.query_params.get("user_id")
         if user_id:
             queryset = queryset.filter(user__id=user_id)
         serializer = self.serializer_class(queryset, many=True)
