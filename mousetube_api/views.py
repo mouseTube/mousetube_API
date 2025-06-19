@@ -56,6 +56,26 @@ from drf_spectacular.utils import extend_schema, OpenApiParameter
 from django.shortcuts import render
 from django.conf import settings
 import os
+from django.contrib.auth import get_user_model
+
+User = get_user_model()
+
+
+class LinkOrcidView(APIView):
+    def post(self, request):
+        user_id = request.data.get("user_id")
+        orcid = request.data.get("orcid")
+        if not (user_id and orcid):
+            return Response({"error": "Missing data"}, status=400)
+
+        try:
+            user = User.objects.get(id=user_id)
+            profile, _ = UserProfile.objects.get_or_create(user=user)
+            profile.orcid = orcid
+            profile.save()
+            return Response({"status": "linked"})
+        except User.DoesNotExist:
+            return Response({"error": "User not found"}, status=404)
 
 
 class FilePagination(PageNumberPagination):

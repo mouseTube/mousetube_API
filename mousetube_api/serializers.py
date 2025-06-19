@@ -36,9 +36,25 @@ from djoser.serializers import UserCreateSerializer as BaseUserCreateSerializer
 
 
 class CustomUserCreateSerializer(BaseUserCreateSerializer):
+    orcid = serializers.CharField(write_only=True, required=False, allow_blank=True)
+
     class Meta(BaseUserCreateSerializer.Meta):
-        model = User
-        fields = ("id", "username", "email", "password", "first_name", "last_name")
+        fields = BaseUserCreateSerializer.Meta.fields + ("orcid",)
+
+    def validate(self, attrs):
+        orcid = attrs.pop("orcid", None)
+        attrs = super().validate(attrs)
+        self._orcid = orcid
+        return attrs
+
+    def create(self, validated_data):
+        user = super().create(validated_data)
+        orcid = getattr(self, "_orcid", None)
+        if orcid:
+            profile, _ = UserProfile.objects.get_or_create(user=user)
+            profile.orcid = orcid
+            profile.save()
+        return user
 
 
 class RepositorySerializer(serializers.ModelSerializer):

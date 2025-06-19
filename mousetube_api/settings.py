@@ -54,7 +54,10 @@ DEBUG = env("DEBUG", default=True)
 SECRET_KEY = (
     env("SECRET_KEY") if env("SECRET_KEY", default=None) else get_random_secret_key()
 )
-ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=["localhost"])
+# ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=["localhost"])
+# print("ALLOWED_HOSTS =", ALLOWED_HOSTS)
+
+ALLOWED_HOSTS = ["localhost", "127.0.0.1", "dane-aware-vaguely.ngrok-free.app"]
 
 # CORS_ORIGIN_ALLOW_ALL = True
 
@@ -107,6 +110,10 @@ INSTALLED_APPS = [
     "drf_spectacular",
     "django_extensions",
     "django_countries",
+    "allauth",
+    "allauth.account",
+    "allauth.socialaccount",
+    "allauth.socialaccount.providers.orcid",
 ]
 
 MIDDLEWARE = [
@@ -116,8 +123,10 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "allauth.account.middleware.AccountMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "mousetube_api.middleware.SkipNgrokWarningMiddleware",
 ]
 
 ROOT_URLCONF = "mousetube_api.urls"
@@ -237,6 +246,35 @@ REST_FRAMEWORK = {
 
 SITE_ID = 1
 
+SOCIALACCOUNT_PROVIDERS = {
+    "orcid": {
+        "APP": {
+            "client_id": env("CLIENT_ID", default=""),
+            "secret": env("CLIENT_SECRET", default=""),
+        },
+        "SCOPE": ["/authenticate"],
+        "AUTH_PARAMS": {"access_type": "online"},
+    }
+}
+
+SOCIALACCOUNT_ADAPTER = "mousetube_api.utils.adapters.MySocialAccountAdapter"
+
+# Django Allauth settings
+ACCOUNT_LOGIN_METHODS = {"email"}
+ACCOUNT_SIGNUP_FIELDS = [
+    "email*",
+    "password1*",
+    "password2*",
+    "first_name",
+    "last_name",
+]
+ACCOUNT_EMAIL_VERIFICATION = "none"
+SOCIALACCOUNT_AUTO_SIGNUP = False
+ACCOUNT_SESSION_REMEMBER = None
+ACCOUNT_LOGOUT_ON_GET = False
+SOCIALACCOUNT_EMAIL_VERIFICATION = "none"
+ACCOUNT_CONFIRM_EMAIL_ON_GET = False
+
 # Djoser settings
 DJOSER = {
     "SEND_ACTIVATION_EMAIL": True,
@@ -244,7 +282,14 @@ DJOSER = {
     "SERIALIZERS": {
         "user_create": "mousetube_api.serializers.CustomUserCreateSerializer",
     },
-    "USER_CREATE_FIELDS": ["username", "email", "password", "first_name", "last_name"],
+    "USER_CREATE_FIELDS": [
+        "username",
+        "email",
+        "password",
+        "first_name",
+        "last_name",
+        "orcid",
+    ],
     "EMAIL": {
         "activation": "mousetube_api.utils.email_activation.CustomActivationEmail",
         "password_reset": "mousetube_api.utils.email_reset.CustomPasswordResetEmail",

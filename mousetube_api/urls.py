@@ -42,6 +42,7 @@ from .views import (
     RecordingSessionAPIView,
     SchemaDetailView,
     StudyAPIView,
+    LinkOrcidView,
 )
 from .views import TrackPageView
 from django.views.static import serve
@@ -90,6 +91,9 @@ urlpatterns = [
     ),
     path("auth/", include("djoser.urls")),
     path("auth/", include("djoser.urls.jwt")),
+    path("accounts/", include("allauth.socialaccount.urls")),
+    path("accounts/", include("allauth.urls")),
+    path("api/link-orcid/", LinkOrcidView.as_view(), name="link-orcid"),
 ]
 
 if settings.DEBUG:
