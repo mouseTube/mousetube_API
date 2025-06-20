@@ -5,17 +5,22 @@ from django.core.exceptions import MultipleObjectsReturned
 from django.http import HttpResponseRedirect
 from allauth.core.exceptions import ImmediateHttpResponse
 from rest_framework_simplejwt.tokens import RefreshToken
+import environ
+from django.conf import settings
 
+
+env = environ.Env()
+environ.Env.read_env() 
 
 class MySocialAccountAdapter(DefaultSocialAccountAdapter):
     def is_open_for_signup(self, request, sociallogin):
         return True
 
     def pre_social_login(self, request, sociallogin):
-        print("[pre_social_login] Called")
-
+        domain = env("FRONT_DOMAIN", default="localhost:3000")
+        protocol = "https" if not settings.DEBUG else "http"
         if sociallogin.account.provider != "orcid":
-            return  # Skip non-ORCID providers
+            return
 
         given_names = (
             (
@@ -50,7 +55,7 @@ class MySocialAccountAdapter(DefaultSocialAccountAdapter):
             if profile and not profile.orcid:
                 raise ImmediateHttpResponse(
                     HttpResponseRedirect(
-                        f"http://localhost:3000/account/link-orcid?orcid={orcid_id}&first_name={given_names}&last_name={family_name}&user_id={user.id}"
+                        f"{protocol}://{domain}/account/link-orcid?orcid={orcid_id}&first_name={given_names}&last_name={family_name}&user_id={user.id}"
                     )
                 )
 
@@ -63,13 +68,13 @@ class MySocialAccountAdapter(DefaultSocialAccountAdapter):
             token = str(refresh.access_token)
             raise ImmediateHttpResponse(
                 HttpResponseRedirect(
-                    f"http://localhost:3000/auth/callback?token={token}"
+                    f"{protocol}://{domain}/auth/callback?token={token}"
                 )
             )
         except UserProfile.DoesNotExist:
             raise ImmediateHttpResponse(
                 HttpResponseRedirect(
-                    f"http://localhost:3000/account/register?orcid={orcid_id}&first_name={given_names}&last_name={family_name}"
+                    f"{protocol}://{domain}/account/register?orcid={orcid_id}&first_name={given_names}&last_name={family_name}"
                 )
             )
 

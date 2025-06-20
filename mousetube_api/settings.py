@@ -35,18 +35,15 @@ env = environ.Env(
     DEBUG=(bool, False),
 )
 
-env_paths = [
-    environ.Path(Path.joinpath(BASE_DIR, ".env")),
-    environ.Path("/etc/mousetube/mousetube.env"),
+env_files = [
+    BASE_DIR / ".env",
+    Path("/etc/mousetube/mousetube.env"),
 ]
 
-# Read all environment files
-for e in env_paths:
-    try:
-        e.file("")
-        env.read_env(e())
-    except FileNotFoundError:
-        pass
+for env_path in env_files:
+    if env_path.exists():
+        env.read_env(str(env_path))
+        break
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = env("DEBUG", default=True)
@@ -54,10 +51,8 @@ DEBUG = env("DEBUG", default=True)
 SECRET_KEY = (
     env("SECRET_KEY") if env("SECRET_KEY", default=None) else get_random_secret_key()
 )
-# ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=["localhost"])
-# print("ALLOWED_HOSTS =", ALLOWED_HOSTS)
 
-ALLOWED_HOSTS = ["localhost", "127.0.0.1", "dane-aware-vaguely.ngrok-free.app"]
+ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=["localhost,127.0.0.1"])
 
 # CORS_ORIGIN_ALLOW_ALL = True
 
@@ -126,7 +121,6 @@ MIDDLEWARE = [
     "allauth.account.middleware.AccountMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
-    "mousetube_api.middleware.SkipNgrokWarningMiddleware",
 ]
 
 ROOT_URLCONF = "mousetube_api.urls"
@@ -295,7 +289,7 @@ DJOSER = {
         "password_reset": "mousetube_api.utils.email_reset.CustomPasswordResetEmail",
     },
     "PASSWORD_RESET_CONFIRM_URL": "password/reset/confirm/{uid}/{token}",
-    "DOMAIN": "localhost:3000",
+    "DOMAIN": env("FRONT_DOMAIN", default="localhost:3000"),
     "SITE_NAME": "mouseTube",
 }
 
