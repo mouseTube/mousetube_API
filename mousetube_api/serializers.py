@@ -39,7 +39,15 @@ class CustomUserCreateSerializer(BaseUserCreateSerializer):
     orcid = serializers.CharField(write_only=True, required=False, allow_blank=True)
 
     class Meta(BaseUserCreateSerializer.Meta):
-        fields = BaseUserCreateSerializer.Meta.fields + ("orcid",)
+        fields = (
+            "id",
+            "username",
+            "email",
+            "password",
+            "first_name",
+            "last_name",
+            "orcid",
+        )
 
     def validate(self, attrs):
         orcid = attrs.pop("orcid", None)

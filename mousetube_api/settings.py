@@ -53,7 +53,7 @@ SECRET_KEY = (
 )
 
 ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=["localhost,127.0.0.1"])
-
+ALLOWED_HOSTS = ["localhost", "127.0.0.1", "dane-aware-vaguely.ngrok-free.app"]
 # CORS_ORIGIN_ALLOW_ALL = True
 
 CORS_ALLOWED_ORIGINS = env.list(
@@ -114,6 +114,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
+    "mousetube_api.middleware.OrcidProcessSessionMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -246,6 +247,7 @@ SOCIALACCOUNT_PROVIDERS = {
             "client_id": env("CLIENT_ID", default=""),
             "secret": env("CLIENT_SECRET", default=""),
         },
+        "LOGIN_URL": "/accounts/orcid/login/",
         "SCOPE": ["/authenticate"],
         "AUTH_PARAMS": {"access_type": "online"},
     }
@@ -268,6 +270,10 @@ ACCOUNT_SESSION_REMEMBER = None
 ACCOUNT_LOGOUT_ON_GET = False
 SOCIALACCOUNT_EMAIL_VERIFICATION = "none"
 ACCOUNT_CONFIRM_EMAIL_ON_GET = False
+SESSION_COOKIE_SECURE = True
+SESSION_COOKIE_SAMESITE = "None"
+CSRF_COOKIE_SECURE = True
+CSRF_COOKIE_SAMESITE = "None"
 
 # Djoser settings
 DJOSER = {
@@ -311,6 +317,8 @@ CACHE_BACKEND = "memcached://127.0.0.1:11211/"
 
 LOGS_DIR = Path(BASE_DIR) / "logs"
 LOGS_DIR.mkdir(exist_ok=True)
+
+FRONT_DOMAIN = env("FRONT_DOMAIN", default="localhost:3000")
 
 LOGGING = {
     "version": 1,

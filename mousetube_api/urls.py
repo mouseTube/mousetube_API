@@ -43,6 +43,9 @@ from .views import (
     SchemaDetailView,
     StudyAPIView,
     LinkOrcidView,
+    # init_orcid_connect,
+    # orcid_custom_login
+    # OrcidOAuth2LoginView
 )
 from .views import TrackPageView
 from django.views.static import serve

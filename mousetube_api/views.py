@@ -56,26 +56,41 @@ from drf_spectacular.utils import extend_schema, OpenApiParameter
 from django.shortcuts import render
 from django.conf import settings
 import os
-from django.contrib.auth import get_user_model
-
-User = get_user_model()
+from rest_framework.permissions import IsAuthenticated
 
 
 class LinkOrcidView(APIView):
-    def post(self, request):
-        user_id = request.data.get("user_id")
-        orcid = request.data.get("orcid")
-        if not (user_id and orcid):
-            return Response({"error": "Missing data"}, status=400)
+    permission_classes = [IsAuthenticated]
 
-        try:
-            user = User.objects.get(id=user_id)
-            profile, _ = UserProfile.objects.get_or_create(user=user)
-            profile.orcid = orcid
-            profile.save()
-            return Response({"status": "linked"})
-        except User.DoesNotExist:
-            return Response({"error": "User not found"}, status=404)
+    def post(self, request):
+        orcid = request.data.get("orcid", "").strip()
+        user = request.user
+
+        if not orcid:
+            return Response(
+                {"error": "Missing ORCID"}, status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # ORCID déjà utilisé par un autre utilisateur
+        if UserProfile.objects.filter(orcid=orcid).exclude(user=user).exists():
+            return Response(
+                {"error": "This ORCID is already linked to another user."},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        profile, _ = UserProfile.objects.get_or_create(user=user)
+
+        # Optionnel : bloquer la modification d’un ORCID déjà défini
+        if profile.orcid and profile.orcid != orcid:
+            return Response(
+                {"error": "ORCID already linked to this account."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        profile.orcid = orcid
+        profile.save()
+
+        return Response({"status": "linked"}, status=status.HTTP_200_OK)
 
 
 class FilePagination(PageNumberPagination):

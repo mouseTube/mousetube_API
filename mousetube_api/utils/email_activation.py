@@ -1,12 +1,10 @@
 from djoser.email import ActivationEmail
-import environ
+from django.conf import settings
 
-env = environ.Env()
-environ.Env.read_env()
 
 class CustomActivationEmail(ActivationEmail):
     def get_context_data(self):
         context = super().get_context_data()
-        context["domain"] = env("FRONT_DOMAIN", default="localhost:3000")
+        context["domain"] = settings.FRONT_DOMAIN
         context["site_name"] = "mouseTube"
         return context
