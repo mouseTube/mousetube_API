@@ -15,6 +15,7 @@ User = get_user_model()
 class MySocialAccountAdapter(DefaultSocialAccountAdapter):
     def is_open_for_signup(self, request, sociallogin):
         return True
+
     """
     Handle login with ORCID.
 
@@ -25,6 +26,7 @@ class MySocialAccountAdapter(DefaultSocialAccountAdapter):
     Raises:
         ImmediateHttpResponse: Redirects the user depending on whether the ORCID is known.
     """
+
     def pre_social_login(self, request, sociallogin):
         process = request.session.pop("orcid_process", None)
 

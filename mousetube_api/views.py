@@ -85,6 +85,7 @@ class LinkOrcidView(APIView):
             - {"error": "This ORCID is already linked to another user."}
             - {"error": "ORCID already linked to this account."}
     """
+
     def post(self, request):
         orcid = request.data.get("orcid", "").strip()
         first_name = request.data.get("firstName", "").strip()
