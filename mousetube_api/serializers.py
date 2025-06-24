@@ -9,6 +9,7 @@ Code under GPL v3.0 licence
 
 # from djoser.serializers import UserSerializer
 from rest_framework import serializers
+from django_countries.serializer_fields import CountryField
 from .models import (
     Repository,
     Reference,
@@ -31,6 +32,37 @@ from .models import (
 )
 
 from django.contrib.auth.models import User
+from djoser.serializers import UserCreateSerializer as BaseUserCreateSerializer
+
+
+class CustomUserCreateSerializer(BaseUserCreateSerializer):
+    orcid = serializers.CharField(write_only=True, required=False, allow_blank=True)
+
+    class Meta(BaseUserCreateSerializer.Meta):
+        fields = (
+            "id",
+            "username",
+            "email",
+            "password",
+            "first_name",
+            "last_name",
+            "orcid",
+        )
+
+    def validate(self, attrs):
+        orcid = attrs.pop("orcid", None)
+        attrs = super().validate(attrs)
+        self._orcid = orcid
+        return attrs
+
+    def create(self, validated_data):
+        user = super().create(validated_data)
+        orcid = getattr(self, "_orcid", None)
+        if orcid:
+            profile, _ = UserProfile.objects.get_or_create(user=user)
+            profile.orcid = orcid
+            profile.save()
+        return user
 
 
 class RepositorySerializer(serializers.ModelSerializer):
@@ -51,14 +83,22 @@ class LegacyUserSerializer(serializers.ModelSerializer):
         fields = "__all__"
 
 
+class LaboratorySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Laboratory
+        fields = "__all__"
+
+
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = "__all__"
+        fields = ["id", "username", "first_name", "last_name", "email"]
 
 
 class UserProfileSerializer(serializers.ModelSerializer):
     user = UserSerializer(read_only=True)
+    laboratory = LaboratorySerializer(read_only=True)
+    country = CountryField()
 
     class Meta:
         model = UserProfile

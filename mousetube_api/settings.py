@@ -14,6 +14,7 @@ from django.core.management.utils import get_random_secret_key
 from pathlib import Path
 import os
 import environ
+from datetime import timedelta
 
 # Add two custom countries to django_countries
 COUNTRIES_OVERRIDE = {
@@ -34,18 +35,15 @@ env = environ.Env(
     DEBUG=(bool, False),
 )
 
-env_paths = [
-    environ.Path(Path.joinpath(BASE_DIR, ".env")),
-    environ.Path("/etc/mousetube/mousetube.env"),
+env_files = [
+    BASE_DIR / ".env",
+    Path("/etc/mousetube/mousetube.env"),
 ]
 
-# Read all environment files
-for e in env_paths:
-    try:
-        e.file("")
-        env.read_env(e())
-    except FileNotFoundError:
-        pass
+for env_path in env_files:
+    if env_path.exists():
+        env.read_env(str(env_path))
+        break
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = env("DEBUG", default=True)
@@ -53,8 +51,8 @@ DEBUG = env("DEBUG", default=True)
 SECRET_KEY = (
     env("SECRET_KEY") if env("SECRET_KEY", default=None) else get_random_secret_key()
 )
-ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=["localhost"])
 
+ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=["localhost,127.0.0.1"])
 # CORS_ORIGIN_ALLOW_ALL = True
 
 CORS_ALLOWED_ORIGINS = env.list(
@@ -100,20 +98,27 @@ INSTALLED_APPS = [
     "rest_framework.authtoken",
     "corsheaders",
     "djoser",
+    "django.contrib.sites",
     "django_celery_results",
     "celery_progress",
     "drf_spectacular",
     "django_extensions",
     "django_countries",
+    "allauth",
+    "allauth.account",
+    "allauth.socialaccount",
+    "allauth.socialaccount.providers.orcid",
 ]
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
+    "mousetube_api.middleware.OrcidProcessSessionMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "allauth.account.middleware.AccountMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
@@ -223,7 +228,8 @@ REST_FRAMEWORK = {
     "PAGE_SIZE": 10,
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
     "DEFAULT_AUTHENTICATION_CLASSES": [
-        "rest_framework.authentication.TokenAuthentication",
+        # "rest_framework.authentication.TokenAuthentication",
+        "rest_framework_simplejwt.authentication.JWTAuthentication",
     ],
     "DEFAULT_PERMISSION_CLASSES": [
         # 'rest_framework.permissions.IsAuthenticated',
@@ -231,6 +237,74 @@ REST_FRAMEWORK = {
         "rest_framework.permissions.AllowAny",
     ],
 }
+
+SITE_ID = 1
+
+SOCIALACCOUNT_PROVIDERS = {
+    "orcid": {
+        "APP": {
+            "client_id": env("CLIENT_ID", default=""),
+            "secret": env("CLIENT_SECRET", default=""),
+        },
+        "LOGIN_URL": "/accounts/orcid/login/",
+        "SCOPE": ["/authenticate"],
+        "AUTH_PARAMS": {"access_type": "online"},
+    }
+}
+
+SOCIALACCOUNT_ADAPTER = "mousetube_api.utils.adapters.MySocialAccountAdapter"
+
+# Django Allauth settings
+ACCOUNT_LOGIN_METHODS = {"email"}
+ACCOUNT_SIGNUP_FIELDS = [
+    "email*",
+    "password1*",
+    "password2*",
+    "first_name",
+    "last_name",
+]
+ACCOUNT_EMAIL_VERIFICATION = "none"
+SOCIALACCOUNT_AUTO_SIGNUP = False
+ACCOUNT_SESSION_REMEMBER = None
+ACCOUNT_LOGOUT_ON_GET = False
+SOCIALACCOUNT_EMAIL_VERIFICATION = "none"
+ACCOUNT_CONFIRM_EMAIL_ON_GET = False
+SESSION_COOKIE_SECURE = True
+SESSION_COOKIE_SAMESITE = "None"
+CSRF_COOKIE_SECURE = True
+CSRF_COOKIE_SAMESITE = "None"
+
+# Djoser settings
+DJOSER = {
+    "SEND_ACTIVATION_EMAIL": True,
+    "ACTIVATION_URL": "activate/{uid}/{token}",
+    "SERIALIZERS": {
+        "user_create": "mousetube_api.serializers.CustomUserCreateSerializer",
+    },
+    "USER_CREATE_FIELDS": [
+        "username",
+        "email",
+        "password",
+        "first_name",
+        "last_name",
+        "orcid",
+    ],
+    "EMAIL": {
+        "activation": "mousetube_api.utils.email_activation.CustomActivationEmail",
+        "password_reset": "mousetube_api.utils.email_reset.CustomPasswordResetEmail",
+    },
+    "PASSWORD_RESET_CONFIRM_URL": "password/reset/confirm/{uid}/{token}",
+    "DOMAIN": env("FRONT_DOMAIN", default="localhost:3000"),
+    "SITE_NAME": "mouseTube",
+}
+
+SIMPLE_JWT = {
+    "ACCESS_TOKEN_LIFETIME": timedelta(hours=12),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
+}
+
+EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+DEFAULT_FROM_EMAIL = "no-reply@mousetube.com"
 
 broker_url = "amqp://guest:guest@localhost:5672//"
 CELERY_ACCEPT_CONTENT = ["json"]
@@ -242,6 +316,8 @@ CACHE_BACKEND = "memcached://127.0.0.1:11211/"
 
 LOGS_DIR = Path(BASE_DIR) / "logs"
 LOGS_DIR.mkdir(exist_ok=True)
+
+FRONT_DOMAIN = env("FRONT_DOMAIN", default="localhost:3000")
 
 LOGGING = {
     "version": 1,

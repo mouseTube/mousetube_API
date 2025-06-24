@@ -23,7 +23,7 @@ Including another URLconf
 """
 
 from django.contrib import admin
-from django.urls import path
+from django.urls import path, include
 from django.conf.urls.static import static
 from .views import (
     RepositoryAPIView,
@@ -42,6 +42,10 @@ from .views import (
     RecordingSessionAPIView,
     SchemaDetailView,
     StudyAPIView,
+    LinkOrcidView,
+    # init_orcid_connect,
+    # orcid_custom_login
+    # OrcidOAuth2LoginView
 )
 from .views import TrackPageView
 from django.views.static import serve
@@ -88,6 +92,11 @@ urlpatterns = [
     path(
         "swagger/", SpectacularSwaggerView.as_view(url_name="schema"), name="swagger-ui"
     ),
+    path("auth/", include("djoser.urls")),
+    path("auth/", include("djoser.urls.jwt")),
+    path("accounts/", include("allauth.socialaccount.urls")),
+    path("accounts/", include("allauth.urls")),
+    path("api/link-orcid/", LinkOrcidView.as_view(), name="link-orcid"),
 ]
 
 if settings.DEBUG:

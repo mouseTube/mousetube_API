@@ -56,6 +56,72 @@ from drf_spectacular.utils import extend_schema, OpenApiParameter
 from django.shortcuts import render
 from django.conf import settings
 import os
+from rest_framework.permissions import IsAuthenticated
+
+
+class LinkOrcidView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    """
+        Link an ORCID iD to the currently authenticated user.
+
+        This endpoint is used after an ORCID OAuth2 authentication with the
+        `process=connect` flag to associate the ORCID iD with an existing account.
+
+        Behavior:
+        - Validates that an ORCID iD is provided.
+        - Returns an error if the ORCID is already linked to another user.
+        - Returns an error if the current user already has a different ORCID set.
+        - If valid:
+            - Links the ORCID to the user's profile.
+            - Sets the user's first and last name if those fields are still empty.
+
+        Returns:
+            - 200 OK with {"status": "linked"} if the association is successful.
+            - 400 Bad Request or 409 Conflict on validation errors.
+
+        Example error responses:
+            - {"error": "Missing ORCID"}
+            - {"error": "This ORCID is already linked to another user."}
+            - {"error": "ORCID already linked to this account."}
+    """
+
+    def post(self, request):
+        orcid = request.data.get("orcid", "").strip()
+        first_name = request.data.get("firstName", "").strip()
+        last_name = request.data.get("lastName", "").strip()
+        user = request.user
+
+        if not orcid:
+            return Response(
+                {"error": "Missing ORCID"}, status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # ORCID already bind to another user
+        if UserProfile.objects.filter(orcid=orcid).exclude(user=user).exists():
+            return Response(
+                {"error": "This ORCID is already linked to another user."},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        profile, _ = UserProfile.objects.get_or_create(user=user)
+
+        # Forbid ORCID modifification if already exist
+        if profile.orcid and profile.orcid != orcid:
+            return Response(
+                {"error": "ORCID already linked to this account."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if first_name and not user.first_name:
+            user.first_name = first_name
+        if last_name and not user.last_name:
+            user.last_name = last_name
+        user.save()
+        profile.orcid = orcid
+        profile.save()
+
+        return Response({"status": "linked"}, status=status.HTTP_200_OK)
 
 
 class FilePagination(PageNumberPagination):
@@ -127,6 +193,9 @@ class UserProfileAPIView(APIView):
 
     def get(self, request, *args, **kwargs):
         queryset = UserProfile.objects.all()
+        user_id = request.query_params.get("user_id")
+        if user_id:
+            queryset = queryset.filter(user__id=user_id)
         serializer = self.serializer_class(queryset, many=True)
         return Response(serializer.data)
 
