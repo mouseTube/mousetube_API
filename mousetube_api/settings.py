@@ -53,7 +53,6 @@ SECRET_KEY = (
 )
 
 ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=["localhost,127.0.0.1"])
-ALLOWED_HOSTS = ["localhost", "127.0.0.1", "dane-aware-vaguely.ngrok-free.app"]
 # CORS_ORIGIN_ALLOW_ALL = True
 
 CORS_ALLOWED_ORIGINS = env.list(
