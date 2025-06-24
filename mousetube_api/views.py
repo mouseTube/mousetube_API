@@ -64,6 +64,8 @@ class LinkOrcidView(APIView):
 
     def post(self, request):
         orcid = request.data.get("orcid", "").strip()
+        first_name = request.data.get("firstName", "").strip()
+        last_name = request.data.get("lastName", "").strip()
         user = request.user
 
         if not orcid:
@@ -71,7 +73,7 @@ class LinkOrcidView(APIView):
                 {"error": "Missing ORCID"}, status=status.HTTP_400_BAD_REQUEST
             )
 
-        # ORCID déjà utilisé par un autre utilisateur
+        # ORCID already bind to another user
         if UserProfile.objects.filter(orcid=orcid).exclude(user=user).exists():
             return Response(
                 {"error": "This ORCID is already linked to another user."},
@@ -80,13 +82,18 @@ class LinkOrcidView(APIView):
 
         profile, _ = UserProfile.objects.get_or_create(user=user)
 
-        # Optionnel : bloquer la modification d’un ORCID déjà défini
+        # Forbid ORCID modifification if already exist
         if profile.orcid and profile.orcid != orcid:
             return Response(
                 {"error": "ORCID already linked to this account."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        if first_name and not user.first_name:
+            user.first_name = first_name
+        if last_name and not user.last_name:
+            user.last_name = last_name
+        user.save()
         profile.orcid = orcid
         profile.save()
 
