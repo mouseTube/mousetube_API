@@ -62,6 +62,29 @@ from rest_framework.permissions import IsAuthenticated
 class LinkOrcidView(APIView):
     permission_classes = [IsAuthenticated]
 
+    """
+        Link an ORCID iD to the currently authenticated user.
+
+        This endpoint is used after an ORCID OAuth2 authentication with the
+        `process=connect` flag to associate the ORCID iD with an existing account.
+
+        Behavior:
+        - Validates that an ORCID iD is provided.
+        - Returns an error if the ORCID is already linked to another user.
+        - Returns an error if the current user already has a different ORCID set.
+        - If valid:
+            - Links the ORCID to the user's profile.
+            - Sets the user's first and last name if those fields are still empty.
+
+        Returns:
+            - 200 OK with {"status": "linked"} if the association is successful.
+            - 400 Bad Request or 409 Conflict on validation errors.
+
+        Example error responses:
+            - {"error": "Missing ORCID"}
+            - {"error": "This ORCID is already linked to another user."}
+            - {"error": "ORCID already linked to this account."}
+    """
     def post(self, request):
         orcid = request.data.get("orcid", "").strip()
         first_name = request.data.get("firstName", "").strip()
