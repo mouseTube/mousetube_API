@@ -5,4 +5,4 @@ class MousetubeApiConfig(AppConfig):
     name = "mousetube_api"
 
     def ready(self):
-        import mousetube_api.utils.signals
+        import mousetube_api.utils.signals  # noqa: F401 (ou noqa: unused-import)
