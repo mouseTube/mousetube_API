@@ -200,16 +200,24 @@ class UserProfileAPIView(APIView):
             queryset = queryset.filter(user__id=user_id)
         serializer = self.serializer_class(queryset, many=True)
         return Response(serializer.data)
+
     def patch(self, request, *args, **kwargs):
         profile_id = kwargs.get("pk")
         if not profile_id:
-            return Response({"detail": "UserProfile id required."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"detail": "UserProfile id required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         user_profile = get_object_or_404(UserProfile, id=profile_id)
         if user_profile.user != request.user:
-            return Response({"detail": "Not authorized."}, status=status.HTTP_403_FORBIDDEN)
+            return Response(
+                {"detail": "Not authorized."}, status=status.HTTP_403_FORBIDDEN
+            )
 
-        serializer = self.serializer_class(user_profile, data=request.data, partial=True)
+        serializer = self.serializer_class(
+            user_profile, data=request.data, partial=True
+        )
         if serializer.is_valid():
             serializer.save()
             return Response(serializer.data)

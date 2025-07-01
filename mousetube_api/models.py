@@ -95,10 +95,12 @@ class UserProfile(models.Model):
         on_delete=models.SET_NULL,
     )
     VIEW_MODE_CHOICES = [
-        ('cards', 'Cards'),
-        ('table', 'Table'),
+        ("cards", "Cards"),
+        ("table", "Table"),
     ]
-    view_mode = models.CharField(max_length=10, choices=VIEW_MODE_CHOICES, default='cards')
+    view_mode = models.CharField(
+        max_length=10, choices=VIEW_MODE_CHOICES, default="cards"
+    )
 
     def __str__(self):
         return self.user.username if self.user else "No user"
