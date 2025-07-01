@@ -57,6 +57,7 @@ from django.shortcuts import render
 from django.conf import settings
 import os
 from rest_framework.permissions import IsAuthenticated
+from django.shortcuts import get_object_or_404
 
 
 class LinkOrcidView(APIView):
@@ -190,6 +191,7 @@ class LegacyUserAPIView(APIView):
 
 class UserProfileAPIView(APIView):
     serializer_class = UserProfileSerializer
+    permission_classes = [IsAuthenticated]
 
     def get(self, request, *args, **kwargs):
         queryset = UserProfile.objects.all()
@@ -198,6 +200,21 @@ class UserProfileAPIView(APIView):
             queryset = queryset.filter(user__id=user_id)
         serializer = self.serializer_class(queryset, many=True)
         return Response(serializer.data)
+    def patch(self, request, *args, **kwargs):
+        profile_id = kwargs.get("pk")
+        if not profile_id:
+            return Response({"detail": "UserProfile id required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        user_profile = get_object_or_404(UserProfile, id=profile_id)
+        if user_profile.user != request.user:
+            return Response({"detail": "Not authorized."}, status=status.HTTP_403_FORBIDDEN)
+
+        serializer = self.serializer_class(user_profile, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        else:
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 class SpeciesAPIView(APIView):

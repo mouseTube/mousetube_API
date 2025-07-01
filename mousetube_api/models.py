@@ -94,6 +94,11 @@ class UserProfile(models.Model):
         related_name="userprofile_created_by",
         on_delete=models.SET_NULL,
     )
+    VIEW_MODE_CHOICES = [
+        ('cards', 'Cards'),
+        ('table', 'Table'),
+    ]
+    view_mode = models.CharField(max_length=10, choices=VIEW_MODE_CHOICES, default='cards')
 
     def __str__(self):
         return self.user.username if self.user else "No user"
