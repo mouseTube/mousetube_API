@@ -69,6 +69,11 @@ urlpatterns = [
     path("api/reference/", ReferenceAPIView.as_view(), name="reference"),
     path("api/legacy_user/", LegacyUserAPIView.as_view(), name="legacy_user"),
     path("api/user_profile/", UserProfileAPIView.as_view(), name="user_profile"),
+    path(
+        "api/user_profile/<int:pk>/",
+        UserProfileAPIView.as_view(),
+        name="user_profile-detail",
+    ),
     path("api/species/", SpeciesAPIView.as_view(), name="species"),
     path("api/strain/", StrainAPIView.as_view(), name="strain"),
     path("api/protocol/", ProtocolAPIView.as_view(), name="protocol"),
