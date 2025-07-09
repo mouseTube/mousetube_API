@@ -29,30 +29,40 @@ from .views import (
     RepositoryAPIView,
     LegacyUserAPIView,
     UserProfileAPIView,
-    SpeciesAPIView,
-    StrainAPIView,
-    ProtocolAPIView,
+    ProtocolViewSet,
     FileAPIView,
     FileDetailAPIView,
     SoftwareAPIView,
     HardwareAPIView,
     CountryAPIView,
     ReferenceAPIView,
-    SubjectAPIView,
-    RecordingSessionAPIView,
+    SubjectViewSet,
     SchemaDetailView,
     StudyAPIView,
     LinkOrcidView,
+    TrackPageView,
+    RecordingSessionViewSet,
+    AnimalProfileViewSet,
+    SpeciesViewSet,
+    StrainViewSet
     # init_orcid_connect,
     # orcid_custom_login
     # OrcidOAuth2LoginView
 )
-from .views import TrackPageView
 from django.views.static import serve
+from rest_framework.routers import DefaultRouter
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 from django.contrib.admin.views.decorators import staff_member_required
 import os
 from django.conf import settings
+
+router = DefaultRouter()
+router.register(r'protocol', ProtocolViewSet, basename='protocol')
+router.register(r'recording-session', RecordingSessionViewSet, basename='recording-session')
+router.register(r'species', SpeciesViewSet, basename='species')
+router.register(r'strain', StrainViewSet, basename='strain')
+router.register(r'animalprofile', AnimalProfileViewSet, basename='animalprofile')
+router.register(r'subject', SubjectViewSet, basename='subject')
 
 urlpatterns = [
     path(
@@ -65,6 +75,7 @@ urlpatterns = [
         name="admin-stats",
     ),
     path("admin/", admin.site.urls),
+    path('api/', include(router.urls)),
     path("api/repository/", RepositoryAPIView.as_view(), name="repository"),
     path("api/reference/", ReferenceAPIView.as_view(), name="reference"),
     path("api/legacy_user/", LegacyUserAPIView.as_view(), name="legacy_user"),
@@ -76,17 +87,19 @@ urlpatterns = [
     ),
     path("api/species/", SpeciesAPIView.as_view(), name="species"),
     path("api/strain/", StrainAPIView.as_view(), name="strain"),
-    path("api/protocol/", ProtocolAPIView.as_view(), name="protocol"),
+    # path("api/protocol/", ProtocolAPIView.as_view(), name="protocol"),
     path("api/file/", FileAPIView.as_view(), name="file"),
     path("api/software/", SoftwareAPIView.as_view(), name="software"),
     path("api/hardware/", HardwareAPIView.as_view(), name="hardware"),
     path("api/country/", CountryAPIView.as_view(), name="country"),
-    path("api/subject/", SubjectAPIView.as_view(), name="subject"),
-    path(
-        "api/recording_session/",
-        RecordingSessionAPIView.as_view(),
-        name="recording_session",
-    ),
+    # path("api/subject/", SubjectAPIView.as_view(), name="subject"),
+    # path("api/subject/<int:pk>/", SubjectAPIView.as_view(), name="subject-detail"),
+    # path(
+    #     "api/recording_session/",
+    #     RecordingSessionAPIView.as_view(),
+    #     name="recording-session",
+    # ),
+    # path('api/recording-session/<int:pk>/', RecordingSessionAPIView.as_view(), name='recording-session-detail'),
     path("api/study/", StudyAPIView.as_view(), name="study-list"),
     path("api/file/<int:pk>/", FileDetailAPIView.as_view(), name="file-detail"),
     path("api/track-page/", TrackPageView.as_view(), name="track-page"),
