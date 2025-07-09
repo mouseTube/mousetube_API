@@ -1,27 +1,30 @@
 {
-    "$schema": "http://json-schema.org/draft-07/schema#",
-    "title": "Hardware",
-    "type": "object",
-    "properties": {
-      "name": {
-        "type": "string",
-        "title": "Hardware Name",
-        "maxLength": 255
-      },
-      "type": {
-        "type": "string",
-        "title": "Hardware Type",
-        "enum": ["soundcard", "microphone", "speaker", "amplifier"],
-        "default": ""
-      },
-      "made_by": {
-        "type": "string",
-        "title": "Made By"
-      },
-      "description": {
-        "type": "string",
-        "title": "Description"
-      }
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Hardware",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "title": "Hardware Name",
+      "description": "Name of the hardware device",
+      "maxLength": 255
     },
-    "required": ["name"]
-  }
+    "type": {
+      "type": "string",
+      "title": "Hardware Type",
+      "description": "Type of hardware (e.g., soundcard, microphone, speaker, amplifier)",
+      "enum": ["soundcard", "microphone", "speaker", "amplifier"]
+    },
+    "made_by": {
+      "type": "string",
+      "title": "Made By",
+      "description": "Manufacturer or creator of the hardware"
+    },
+    "description": {
+      "type": "string",
+      "title": "Description",
+      "description": "Additional information about the hardware"
+    }
+  },
+  "required": ["name", "type"]
+}

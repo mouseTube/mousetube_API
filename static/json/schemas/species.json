@@ -1,13 +1,14 @@
 {
-    "$schema": "http://json-schema.org/draft-07/schema#",
-    "title": "Species",
-    "description": "Represents a biological species.",
-    "type": "object",
-    "required": ["name"],
-    "properties": {
-      "name": {
-        "description": "Scientific or common name of the species.",
-        "type": "string"
-      }
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Species",
+  "description": "Represents a biological species.",
+  "type": "object",
+  "required": ["name"],
+  "properties": {
+    "name": {
+      "type": "string",
+      "title": "Species Name",
+      "description": "Scientific or common name of the species."
     }
   }
+}

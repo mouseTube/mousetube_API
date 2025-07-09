@@ -1,32 +1,36 @@
 {
-    "$schema": "http://json-schema.org/draft-07/schema#",
-    "title": "Software",
-    "type": "object",
-    "properties": {
-      "name": {
-        "type": "string",
-        "title": "Software Name",
-        "maxLength": 255
-      },
-      "type": {
-        "type": "string",
-        "title": "Software Type",
-        "enum": ["acquisition", "analysis", "acquisition and analysis"],
-        "default": "acquisition"
-      },
-      "made_by": {
-        "type": "string",
-        "title": "Made By"
-      },
-      "description": {
-        "type": "string",
-        "title": "Description of the Software"
-      },
-      "technical_requirements": {
-        "type": "string",
-        "title": "Technical Requirements",
-        "description": "Technical requirements for running the software, such as hardware specifications or dependencies."
-      }
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Software",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "title": "Software Name",
+      "description": "Name of the software",
+      "maxLength": 255
     },
-    "required": ["name", "type"]
-  }
+    "type": {
+      "type": "string",
+      "title": "Software Type",
+      "description": "Category of the software (e.g. acquisition, analysis)",
+      "enum": ["acquisition", "analysis", "acquisition and analysis"],
+      "default": "acquisition"
+    },
+    "made_by": {
+      "type": "string",
+      "title": "Made By",
+      "description": "Organization or individual who developed the software"
+    },
+    "description": {
+      "type": "string",
+      "title": "Description",
+      "description": "Brief description of the software"
+    },
+    "technical_requirements": {
+      "type": "string",
+      "title": "Technical Requirements",
+      "description": "Hardware or software requirements to run this software"
+    }
+  },
+  "required": ["name", "type"]
+}

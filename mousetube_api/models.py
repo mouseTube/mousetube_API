@@ -656,6 +656,7 @@ class RecordingSession(models.Model):
         studies (ManyToManyField): The studies associated with the experiment.
         description (str, optional): A description of the experiment.
         date (date, optional): The date of the experiment.
+        status (str, optional): The status of the experiment.
         duration (int, optional): The duration of the experiment in seconds.
         temperature (str, optional): The temperature during the experiment.
         equipment_acquisition_hardware_soundcard (ManyToManyField): Soundcards used for data acquisition.
@@ -683,6 +684,11 @@ class RecordingSession(models.Model):
         ("no specific sound isolation", "No specific sound isolation"),
     ]
 
+    STATUS = [
+        ("draft", "Draft"),
+        ("published", "Published"),
+    ]
+
     name = models.CharField(max_length=255, unique=True)
     protocol = models.ForeignKey(Protocol, on_delete=models.CASCADE)
     studies = models.ManyToManyField(
@@ -690,6 +696,11 @@ class RecordingSession(models.Model):
     )
     description = models.TextField(blank=True, null=True)
     date = models.DateTimeField(blank=True, null=True)
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS,
+        default="draft",
+    )
     duration = models.PositiveIntegerField(
         blank=True, null=True, help_text="Duration in seconds"
     )

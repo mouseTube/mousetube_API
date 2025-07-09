@@ -1,101 +1,113 @@
 {
 	"$schema": "http://json-schema.org/draft-07/schema#",
 	"title": "Protocol",
-	"description": "protocol description",
+	"description": "Metadata for a protocol used during recording sessions.",
 	"type": "object",
 	"properties": {
-		"name": {
+	  "name": {
+		"type": "string",
+		"title": "Protocol Name",
+		"description": "The name of the protocol."
+	  },
+	  "description": {
+		"type": "string",
+		"title": "Description",
+		"description": "Description of the protocol."
+	  },
+	  "animals": {
+		"type": "object",
+		"title": "Animal Information",
+		"description": "Information about animals involved in this protocol.",
+		"properties": {
+		  "sex": {
 			"type": "string",
-			"description": "The name of the protocol"
-		},
-		"description": {
+			"enum": ["male(s)", "female(s)", "male(s) & female(s)"],
+			"title": "Sex",
+			"description": "Sex of the animals involved."
+		  },
+		  "age": {
 			"type": "string",
-			"description": "A description of the protocol"
+			"enum": ["pup", "juvenile", "adult"],
+			"title": "Age",
+			"description": "Age category of the animals involved."
+		  },
+		  "housing": {
+			"type": "string",
+			"enum": ["grouped", "isolated", "grouped & isolated"],
+			"title": "Housing",
+			"description": "Housing condition before recording."
+		  },
+		  "species": {
+			"type": "string",
+			"title": "Species",
+			"description": "Species of the animals involved."
+		  }
 		},
-		"animals":{
-			"description": "information about animals",
+		"required": ["sex", "age", "housing", "species"]
+	  },
+	  "context": {
+		"type": "object",
+		"title": "Experimental Context",
+		"description": "Experimental context used for the recording.",
+		"properties": {
+		  "number of animals": {
+			"type": "integer",
+			"minimum": 1,
+			"title": "Number of Animals",
+			"description": "Number of animals present during the recording."
+		  },
+		  "duration": {
+			"type": "string",
+			"enum": ["short term (<1h)", "mid term (<1day)", "long term (>=1day)"],
+			"title": "Duration",
+			"description": "Duration of the recording."
+		  },
+		  "cage": {
+			"type": "string",
+			"enum": ["unfamiliar test cage", "familiar test cage", "home cage"],
+			"title": "Cage Type",
+			"description": "Type of recording cage."
+		  },
+		  "bedding": {
+			"type": "string",
+			"enum": ["bedding", "no bedding"],
+			"title": "Bedding",
+			"description": "Bedding condition during recording."
+		  },
+		  "light_cycle": {
+			"type": "string",
+			"enum": ["day", "night"],
+			"title": "Light Cycle",
+			"description": "Time of the day or night for the animal during recording."
+		  },
+		  "temperature": {
 			"type": "object",
+			"title": "Temperature",
+			"description": "Temperature during the recording.",
 			"properties": {
-				"sex": {
-					"description": "sex of the animal(s) recorded",
-					"type": "string",
-					"enum": [
-						"male(s)",
-						"female(s)",
-						"male(s) & female(s)"
-					]
-				},
-				"age": {
-					"description": "age of the animal(s) recorded",
-					"type": "string",
-					"enum": [
-						"pup",
-						"juvenile",
-						"adult"
-					]
-				},
-				"housing": {
-					"description": "housing condition of the animal(s) before the recording",
-					"type": "string",
-					"enum": [
-						"grouped",
-						"isolated",
-						"grouped & isolated"
-					]
-				},
-				"species": {
-						"description": "species of the animal(s) recorded",
-						"type": "string"
-						}
-			}
+			  "value": {
+				"type": "string",
+				"title": "Temperature Value",
+				"description": "Temperature value."
+			  },
+			  "unit": {
+				"type": "string",
+				"enum": ["°C", "°F"],
+				"title": "Temperature Unit",
+				"description": "Temperature unit."
+			  }
+			},
+			"required": ["value", "unit"]
+		  },
+		  "brightness": {
+			"type": "integer",
+			"title": "Brightness (Lux)",
+			"description": "Brightness of the environment in Lux."
+		  }
 		},
-		"context": {
-			"description": "experimental context used for the recording",
-			"type": "object",
-			"properties": {
-				"number of animals": {
-					"description": "number of animals present during recording",
-					"type": "integer",
-					"minimum": 1
-				},
-				"duration": {
-					"description": "duration of the recording",
-					"type": "string",
-					"enum": ["short term (<1h)", "mid term (<1day)", "long term (>=1day)"]
-				},
-				"cage": {
-					"description": "type of recording cage",
-					"type": "string",
-					"enum": ["unfamiliar test cage", "familiar test cage", "home cage"]
-				},
-				"bedding": {
-					"description": "presence of bedding during recording",
-					"type": "string",
-					"enum": ["bedding", "no bedding"]
-				},
-				"light_cycle": {
-					"description": "time of the day or night (for the animal) during recording",
-					"type": "string",
-					"enum": ["day", "night"]
-				},
-				"temperature": {
-					"properties": {
-						"value": {
-							"description": "value of the temperature",
-							"type": "string"
-						},
-						"unit": {
-							"description": "unit of the temperature",
-							"type": "string",
-							"enum": ["°C", "°F"]
-						}
-					}
-				},
-				"brightness": {
-					"description": "brightness of the recording environment in Lux",
-					"type": "integer"
-				}
-			}
-		}
-	}
-}
+		"required": ["number of animals"]
+	  }
+	},
+	"required": ["name", "description", "animals", "context"]
+  }
+  
