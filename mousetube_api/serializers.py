@@ -282,7 +282,6 @@ class AnimalProfileSerializer(serializers.ModelSerializer):
 class SubjectSerializer(serializers.ModelSerializer):
     id = serializers.IntegerField(required=False)
     user = LegacyUserSerializer(read_only=True)
-    strain = StrainSerializer()
     animal_profile = AnimalProfileSerializer()
 
     class Meta:
