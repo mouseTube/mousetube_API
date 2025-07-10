@@ -29,7 +29,7 @@ from .models import (
     RecordingSession,
     PageView,
     Study,
-    AnimalProfile
+    AnimalProfile,
 )
 from .serializers import (
     SpeciesSerializer,
@@ -59,7 +59,11 @@ from drf_spectacular.utils import extend_schema, OpenApiParameter
 from django.shortcuts import render
 from django.conf import settings
 import os
-from rest_framework.permissions import IsAuthenticated, IsAuthenticatedOrReadOnly, AllowAny
+from rest_framework.permissions import (
+    IsAuthenticated,
+    IsAuthenticatedOrReadOnly,
+    AllowAny,
+)
 from django.shortcuts import get_object_or_404
 
 
@@ -230,6 +234,7 @@ class UserProfileAPIView(APIView):
 
 class HardwareAPIView(APIView):
     serializer_class = HardwareSerializer
+
     def get_permissions(self):
         if self.request.method == "POST":
             return [IsAuthenticated()]
@@ -276,12 +281,14 @@ class HardwareAPIView(APIView):
         paginated_hardware = paginator.paginate_queryset(hardware, request)
         serializer = self.serializer_class(paginated_hardware, many=True)
         return paginator.get_paginated_response(serializer.data)
-    
+
     def post(self, request, *args, **kwargs):
         serializer = self.serializer_class(data=request.data)
         if serializer.is_valid():
             hardware = serializer.save()
-            return Response(self.serializer_class(hardware).data, status=status.HTTP_201_CREATED)
+            return Response(
+                self.serializer_class(hardware).data, status=status.HTTP_201_CREATED
+            )
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
@@ -337,8 +344,9 @@ class RecordingSessionViewSet(viewsets.ModelViewSet):
 
 class FileAPIView(APIView):
     serializer_class = FileSerializer
+
     def get_permissions(self):
-        if self.request.method == 'POST':
+        if self.request.method == "POST":
             return [IsAuthenticated()]
         return [AllowAny()]
 
@@ -526,16 +534,20 @@ class FileAPIView(APIView):
         serializer = self.serializer_class(data=request.data)
         if serializer.is_valid():
             file = serializer.save()
-            return Response(self.serializer_class(file).data, status=status.HTTP_201_CREATED)
+            return Response(
+                self.serializer_class(file).data, status=status.HTTP_201_CREATED
+            )
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 class FileDetailAPIView(APIView):
     serializer_class = FileSerializer
+
     def get_permissions(self):
-        if self.request.method in ['PUT', 'PATCH', 'DELETE']:
+        if self.request.method in ["PUT", "PATCH", "DELETE"]:
             return [IsAuthenticated()]
         return [AllowAny()]
+
     def get_object(self, pk):
         try:
             return File.objects.get(pk=pk)
@@ -545,19 +557,24 @@ class FileDetailAPIView(APIView):
     def get(self, request, *args, **kwargs):
         file = self.get_object(kwargs["pk"])
         if not file:
-            return Response({"detail": "File not found"}, status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {"detail": "File not found"}, status=status.HTTP_404_NOT_FOUND
+            )
         serializer = self.serializer_class(file)
         return Response(serializer.data)
 
     def put(self, request, *args, **kwargs):
         file = self.get_object(kwargs["pk"])
         if not file:
-            return Response({"detail": "File not found"}, status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {"detail": "File not found"}, status=status.HTTP_404_NOT_FOUND
+            )
         serializer = self.serializer_class(file, data=request.data)
         if serializer.is_valid():
             file = serializer.save()
             return Response(self.serializer_class(file).data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
     @extend_schema(exclude=True)
     def patch(self, request, *args, **kwargs):
         try:
@@ -582,10 +599,13 @@ class FileDetailAPIView(APIView):
         return Response(
             {"detail": "Invalid request body"}, status=status.HTTP_400_BAD_REQUEST
         )
+
     def delete(self, request, *args, **kwargs):
         file = self.get_object(kwargs["pk"])
         if not file:
-            return Response({"detail": "File not found"}, status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {"detail": "File not found"}, status=status.HTTP_404_NOT_FOUND
+            )
         file.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
@@ -669,7 +689,7 @@ class SoftwareAPIView(APIView):
         paginated_softwares = paginator.paginate_queryset(softwares, request)
         serializer = self.serializer_class(paginated_softwares, many=True)
         return paginator.get_paginated_response(serializer.data)
-    
+
     def post(self, request, *args, **kwargs):
         serializer = self.serializer_class(data=request.data)
         if serializer.is_valid():

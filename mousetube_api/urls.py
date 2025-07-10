@@ -44,7 +44,7 @@ from .views import (
     RecordingSessionViewSet,
     AnimalProfileViewSet,
     SpeciesViewSet,
-    StrainViewSet
+    StrainViewSet,
     # init_orcid_connect,
     # orcid_custom_login
     # OrcidOAuth2LoginView
@@ -57,12 +57,14 @@ import os
 from django.conf import settings
 
 router = DefaultRouter()
-router.register(r'protocol', ProtocolViewSet, basename='protocol')
-router.register(r'recording-session', RecordingSessionViewSet, basename='recording-session')
-router.register(r'species', SpeciesViewSet, basename='species')
-router.register(r'strain', StrainViewSet, basename='strain')
-router.register(r'animalprofile', AnimalProfileViewSet, basename='animalprofile')
-router.register(r'subject', SubjectViewSet, basename='subject')
+router.register(r"protocol", ProtocolViewSet, basename="protocol")
+router.register(
+    r"recording-session", RecordingSessionViewSet, basename="recording-session"
+)
+router.register(r"species", SpeciesViewSet, basename="species")
+router.register(r"strain", StrainViewSet, basename="strain")
+router.register(r"animalprofile", AnimalProfileViewSet, basename="animalprofile")
+router.register(r"subject", SubjectViewSet, basename="subject")
 
 urlpatterns = [
     path(
@@ -75,7 +77,7 @@ urlpatterns = [
         name="admin-stats",
     ),
     path("admin/", admin.site.urls),
-    path('api/', include(router.urls)),
+    path("api/", include(router.urls)),
     path("api/repository/", RepositoryAPIView.as_view(), name="repository"),
     path("api/reference/", ReferenceAPIView.as_view(), name="reference"),
     path("api/legacy_user/", LegacyUserAPIView.as_view(), name="legacy_user"),
@@ -85,8 +87,8 @@ urlpatterns = [
         UserProfileAPIView.as_view(),
         name="user_profile-detail",
     ),
-    path("api/species/", SpeciesAPIView.as_view(), name="species"),
-    path("api/strain/", StrainAPIView.as_view(), name="strain"),
+    # path("api/species/", SpeciesAPIView.as_view(), name="species"),
+    # path("api/strain/", StrainAPIView.as_view(), name="strain"),
     # path("api/protocol/", ProtocolAPIView.as_view(), name="protocol"),
     path("api/file/", FileAPIView.as_view(), name="file"),
     path("api/software/", SoftwareAPIView.as_view(), name="software"),
