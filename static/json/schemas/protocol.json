@@ -1,5 +1,4 @@
 {
-	"$schema": "http://json-schema.org/draft-07/schema#",
 	"title": "Protocol",
 	"description": "Metadata for a protocol used during recording sessions.",
 	"type": "object",
