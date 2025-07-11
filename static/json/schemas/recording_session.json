@@ -1,5 +1,5 @@
 {
-	"title": "RecordingSession",
+	"title": "Recording Session",
 	"description": "Metadata for a recording session.",
 	"type": "object",
 	"properties": {
