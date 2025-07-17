@@ -1,0 +1,36 @@
+{
+  "title": "Laboratory",
+  "description": "Laboratory or research unit.",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "integer",
+      "readOnly": true
+    },
+    "name": {
+      "type": "string",
+      "title": "Name"
+    },
+    "institution": {
+      "type": "string",
+      "title": "Institution"
+    },
+    "unit": {
+      "type": "string",
+      "title": "Unit"
+    },
+    "address": {
+      "type": "string",
+      "title": "Address"
+    },
+    "country": {
+      "type": "string",
+      "title": "Country"
+    },
+    "contact": {
+      "type": "string",
+      "title": "Contact"
+    }
+  },
+  "required": ["name"]
+}

@@ -1,6 +1,4 @@
 {
-	"title": "Recording Session",
-	"description": "Metadata for a recording session.",
 	"type": "object",
 	"properties": {
 	  "name": {
@@ -33,9 +31,9 @@
 		"description": "Duration of the recording session in seconds."
 	  },
 	  "laboratory": {
-		"type": "string",
+		"$ref": "laboratory.json",
 		"title": "Laboratory",
-		"description": "Name or identifier of the laboratory where the session was conducted."
+		"description": "Laboratory where the session was conducted."
 	  },
 	  "equipment": {
 		"type": "object",

@@ -11,6 +11,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.pagination import PageNumberPagination
 import json
+from rest_framework import generics
 from rest_framework import viewsets
 from rest_framework import status
 from django.http import Http404
@@ -324,13 +325,10 @@ class AnimalProfileViewSet(viewsets.ModelViewSet):
         serializer.save(created_by=self.request.user)
 
 
-class StudyAPIView(APIView):
-    serializer_class = StudySerializer
 
-    def get(self, request, *args, **kwargs):
-        queryset = Study.objects.all()
-        serializer = self.serializer_class(queryset, many=True)
-        return Response(serializer.data)
+class StudyAPIView(generics.ListCreateAPIView):
+    queryset = Study.objects.all()
+    serializer_class = StudySerializer
 
 
 class RecordingSessionViewSet(viewsets.ModelViewSet):
