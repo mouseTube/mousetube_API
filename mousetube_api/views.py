@@ -361,7 +361,15 @@ class FileAPIView(APIView):
     def get(self, request, *args, **kwargs):
         search_query = request.GET.get("search", "")
         filter_query = request.GET.get("filter", "")
+        recording_session_id = request.GET.get("recording_session")
         files = File.objects.all()
+        if recording_session_id:
+            try:
+                recording_session_id_int = int(recording_session_id)
+                files = files.filter(recording_session__id=recording_session_id_int)
+            except ValueError:
+                pass
+
         if search_query:
             file_fields = ["number", "link", "notes", "doi"]
 
