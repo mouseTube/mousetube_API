@@ -31,11 +31,13 @@ from .models import (
     PageView,
     Study,
     AnimalProfile,
+    Laboratory,
 )
 from .serializers import (
     SpeciesSerializer,
     StrainSerializer,
     AnimalProfileSerializer,
+    LaboratorySerializer,
     ProtocolSerializer,
     FileSerializer,
     HardwareSerializer,
@@ -144,6 +146,9 @@ class CountryAPIView(APIView):
         country = countries
         return Response(country)
 
+class LaboratoryAPIView(viewsets.ModelViewSet):
+    queryset = Laboratory.objects.all()
+    serializer_class = LaboratorySerializer
 
 class RepositoryAPIView(APIView):
     serializer_class = RepositorySerializer

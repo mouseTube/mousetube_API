@@ -45,6 +45,7 @@ from .views import (
     AnimalProfileViewSet,
     SpeciesViewSet,
     StrainViewSet,
+    LaboratoryAPIView,
     # init_orcid_connect,
     # orcid_custom_login
     # OrcidOAuth2LoginView
@@ -65,6 +66,7 @@ router.register(r"species", SpeciesViewSet, basename="species")
 router.register(r"strain", StrainViewSet, basename="strain")
 router.register(r"animalprofile", AnimalProfileViewSet, basename="animalprofile")
 router.register(r"subject", SubjectViewSet, basename="subject")
+router.register(r"laboratory", LaboratoryAPIView, basename="laboratory")
 
 urlpatterns = [
     path(
