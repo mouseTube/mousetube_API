@@ -691,10 +691,7 @@ class RecordingSession(models.Model):
 
     name = models.CharField(max_length=255, unique=True)
     protocol = models.ForeignKey(
-    Protocol,
-    on_delete=models.CASCADE,
-    null=True,
-    blank=True
+        Protocol, on_delete=models.CASCADE, null=True, blank=True
     )
     studies = models.ManyToManyField(
         Study, blank=True, related_name="recording_sessions"
@@ -837,9 +834,10 @@ class RecordingSession(models.Model):
                     f"Hardware {hardware.name} is not valid for acquisition."
                 )
         if self.status == "published" and self.protocol is None:
-            raise ValidationError("Cannot publish a recording session without a protocol."
-                )
-        
+            raise ValidationError(
+                "Cannot publish a recording session without a protocol."
+            )
+
     def save(self, *args, **kwargs):
         self.full_clean()
         super().save(*args, **kwargs)

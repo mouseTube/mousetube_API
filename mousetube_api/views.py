@@ -148,9 +148,11 @@ class CountryAPIView(APIView):
         country = countries
         return Response(country)
 
+
 class LaboratoryAPIView(viewsets.ModelViewSet):
     queryset = Laboratory.objects.all()
     serializer_class = LaboratorySerializer
+
 
 class RepositoryAPIView(APIView):
     serializer_class = RepositorySerializer
@@ -370,7 +372,6 @@ class AnimalProfileViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
-
 
 
 class StudyAPIView(generics.ListCreateAPIView):
@@ -749,13 +750,13 @@ class SoftwareAPIView(APIView):
             software = serializer.save()
             return Response(self.serializer_class(software).data, status=201)
         return Response(serializer.errors, status=400)
-    
+
 
 class SoftwareDetailAPIView(APIView):
     serializer_class = SoftwareSerializer
 
     def get_permissions(self):
-        if self.request.method in ['PUT', 'PATCH', 'DELETE']:
+        if self.request.method in ["PUT", "PATCH", "DELETE"]:
             return [IsAuthenticated()]
         return [AllowAny()]
 
@@ -808,8 +809,8 @@ class SoftwareVersionViewSet(viewsets.ModelViewSet):
         search_query = self.request.query_params.get("search")
         if search_query:
             queryset = queryset.filter(
-                models.Q(software__name__icontains=search_query)
-                | models.Q(version__icontains=search_query)
+                Q(software__name__icontains=search_query)
+                | Q(version__icontains=search_query)
             )
         return queryset
 
