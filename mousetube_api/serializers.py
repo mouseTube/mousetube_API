@@ -215,11 +215,21 @@ class ProtocolSerializer(serializers.ModelSerializer):
 
 
 class SoftwareVersionSerializer(serializers.ModelSerializer):
-    software = SoftwareSerializer(read_only=True)
+    software_name = serializers.CharField(source="software.name", read_only=True)
 
     class Meta:
         model = SoftwareVersion
-        fields = "__all__"
+        fields = [
+            "id",
+            "software",
+            "software_name",
+            "version",
+            "release_date",
+            "created_at",
+            "modified_at",
+            "created_by",
+        ]
+        read_only_fields = ["created_at", "modified_at", "created_by"]
 
 
 class SpeciesSerializer(serializers.ModelSerializer):

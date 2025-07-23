@@ -21,6 +21,7 @@ from .models import (
     LegacyUser,
     UserProfile,
     Software,
+    SoftwareVersion,
     Hardware,
     Species,
     Strain,
@@ -42,6 +43,7 @@ from .serializers import (
     FileSerializer,
     HardwareSerializer,
     SoftwareSerializer,
+    SoftwareVersionSerializer,
     RepositorySerializer,
     ReferenceSerializer,
     UserSerializer,
@@ -296,6 +298,46 @@ class HardwareAPIView(APIView):
                 self.serializer_class(hardware).data, status=status.HTTP_201_CREATED
             )
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class HardwareDetailAPIView(APIView):
+    serializer_class = HardwareSerializer
+
+    def get_permissions(self):
+        if self.request.method in ["PUT", "PATCH", "DELETE"]:
+            return [IsAuthenticated()]
+        return [AllowAny()]
+
+    @extend_schema(
+        parameters=[
+            # ici tu peux documenter le paramètre pk si tu veux
+        ]
+    )
+    def get(self, request, pk, *args, **kwargs):
+        hardware = get_object_or_404(Hardware, pk=pk)
+        serializer = self.serializer_class(hardware)
+        return Response(serializer.data)
+
+    def put(self, request, pk, *args, **kwargs):
+        hardware = get_object_or_404(Hardware, pk=pk)
+        serializer = self.serializer_class(hardware, data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    def patch(self, request, pk, *args, **kwargs):
+        hardware = get_object_or_404(Hardware, pk=pk)
+        serializer = self.serializer_class(hardware, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    def delete(self, request, pk, *args, **kwargs):
+        hardware = get_object_or_404(Hardware, pk=pk)
+        hardware.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class SubjectViewSet(viewsets.ModelViewSet):
@@ -707,6 +749,72 @@ class SoftwareAPIView(APIView):
             software = serializer.save()
             return Response(self.serializer_class(software).data, status=201)
         return Response(serializer.errors, status=400)
+    
+
+class SoftwareDetailAPIView(APIView):
+    serializer_class = SoftwareSerializer
+
+    def get_permissions(self):
+        if self.request.method in ['PUT', 'PATCH', 'DELETE']:
+            return [IsAuthenticated()]
+        return [AllowAny()]
+
+    def get(self, request, pk, *args, **kwargs):
+        software = get_object_or_404(Software, pk=pk)
+        serializer = self.serializer_class(software)
+        return Response(serializer.data)
+
+    def put(self, request, pk, *args, **kwargs):
+        software = get_object_or_404(Software, pk=pk)
+        serializer = self.serializer_class(software, data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    def patch(self, request, pk, *args, **kwargs):
+        software = get_object_or_404(Software, pk=pk)
+        serializer = self.serializer_class(software, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    def delete(self, request, pk, *args, **kwargs):
+        software = get_object_or_404(Software, pk=pk)
+        software.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class SoftwareVersionViewSet(viewsets.ModelViewSet):
+    queryset = SoftwareVersion.objects.all().order_by("software__name", "version")
+    serializer_class = SoftwareVersionSerializer
+    permission_classes = [IsAuthenticatedOrReadOnly]
+    pagination_class = FilePagination
+    filterset_fields = ["software"]
+
+    @extend_schema(
+        parameters=[
+            OpenApiParameter(
+                name="search",
+                description="Text search on software name or version",
+                required=False,
+                type=str,
+            )
+        ]
+    )
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        search_query = self.request.query_params.get("search")
+        if search_query:
+            queryset = queryset.filter(
+                models.Q(software__name__icontains=search_query)
+                | models.Q(version__icontains=search_query)
+            )
+        return queryset
+
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
 
 
 class TrackPageView(APIView):

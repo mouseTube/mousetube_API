@@ -33,6 +33,9 @@ from .views import (
     FileAPIView,
     FileDetailAPIView,
     SoftwareAPIView,
+    SoftwareDetailAPIView,
+    HardwareDetailAPIView,
+    SoftwareVersionViewSet,
     HardwareAPIView,
     CountryAPIView,
     ReferenceAPIView,
@@ -67,6 +70,7 @@ router.register(r"strain", StrainViewSet, basename="strain")
 router.register(r"animalprofile", AnimalProfileViewSet, basename="animalprofile")
 router.register(r"subject", SubjectViewSet, basename="subject")
 router.register(r"laboratory", LaboratoryAPIView, basename="laboratory")
+router.register(r"software-version", SoftwareVersionViewSet, basename="software-version")
 
 urlpatterns = [
     path(
@@ -94,7 +98,11 @@ urlpatterns = [
     # path("api/protocol/", ProtocolAPIView.as_view(), name="protocol"),
     path("api/file/", FileAPIView.as_view(), name="file"),
     path("api/software/", SoftwareAPIView.as_view(), name="software"),
+    path(
+        "api/software/<int:pk>/", SoftwareDetailAPIView.as_view(), name="software-detail"
+    ),
     path("api/hardware/", HardwareAPIView.as_view(), name="hardware"),
+    path("api/hardware/<int:pk>/", HardwareDetailAPIView.as_view(), name="hardware-detail"),
     path("api/country/", CountryAPIView.as_view(), name="country"),
     # path("api/subject/", SubjectAPIView.as_view(), name="subject"),
     # path("api/subject/<int:pk>/", SubjectAPIView.as_view(), name="subject-detail"),
