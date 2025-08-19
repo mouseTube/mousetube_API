@@ -11,7 +11,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.pagination import PageNumberPagination
 import json
-from rest_framework import generics, viewsets, status, filters
+from rest_framework import viewsets, status, filters
 from django.http import Http404
 from .models import (
     Repository,
@@ -383,7 +383,7 @@ class RecordingSessionViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     filter_backends = [filters.SearchFilter]
-    search_fields = ['name', 'description']
+    search_fields = ["name", "description"]
 
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)

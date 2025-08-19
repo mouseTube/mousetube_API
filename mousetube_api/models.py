@@ -796,31 +796,46 @@ class RecordingSession(models.Model):
         return self.name
 
     def clean(self):
-    # 🔹 Vérifie M2M seulement si l'objet est déjà en base (pk existe)
+        # 🔹 Vérifie M2M seulement si l'objet est déjà en base (pk existe)
         if self.pk:
             for software_version in self.equipment_acquisition_software.all():
-                if software_version.software.type not in ["acquisition", "acquisition and analysis"]:
-                    raise ValidationError(f"Software {software_version} is not valid for acquisition.")
+                if software_version.software.type not in [
+                    "acquisition",
+                    "acquisition and analysis",
+                ]:
+                    raise ValidationError(
+                        f"Software {software_version} is not valid for acquisition."
+                    )
 
             for hardware in self.equipment_acquisition_hardware_soundcards.all():
                 if hardware.type not in ["soundcard"]:
-                    raise ValidationError(f"Hardware {hardware.name} is not valid for acquisition.")
+                    raise ValidationError(
+                        f"Hardware {hardware.name} is not valid for acquisition."
+                    )
 
             for hardware in self.equipment_acquisition_hardware_speakers.all():
                 if hardware.type not in ["speaker"]:
-                    raise ValidationError(f"Hardware {hardware.name} is not valid for acquisition.")
+                    raise ValidationError(
+                        f"Hardware {hardware.name} is not valid for acquisition."
+                    )
 
             for hardware in self.equipment_acquisition_hardware_amplifiers.all():
                 if hardware.type not in ["amplifier"]:
-                    raise ValidationError(f"Hardware {hardware.name} is not valid for acquisition.")
+                    raise ValidationError(
+                        f"Hardware {hardware.name} is not valid for acquisition."
+                    )
 
             for hardware in self.equipment_acquisition_hardware_microphones.all():
                 if hardware.type not in ["microphone"]:
-                    raise ValidationError(f"Hardware {hardware.name} is not valid for acquisition.")
+                    raise ValidationError(
+                        f"Hardware {hardware.name} is not valid for acquisition."
+                    )
 
         # 🔹 Vérification du protocole pour publication
         if self.status == "published" and self.protocol is None:
-            raise ValidationError("Cannot publish a recording session without a protocol.")
+            raise ValidationError(
+                "Cannot publish a recording session without a protocol."
+            )
 
     def save(self, *args, **kwargs):
         self.full_clean()
