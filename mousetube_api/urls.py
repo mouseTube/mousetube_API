@@ -41,7 +41,7 @@ from .views import (
     ReferenceAPIView,
     SubjectViewSet,
     SchemaDetailView,
-    StudyAPIView,
+    StudyViewSet,
     LinkOrcidView,
     TrackPageView,
     RecordingSessionViewSet,
@@ -73,6 +73,7 @@ router.register(r"laboratory", LaboratoryAPIView, basename="laboratory")
 router.register(
     r"software-version", SoftwareVersionViewSet, basename="software-version"
 )
+router.register(r"study", StudyViewSet, basename="study")
 
 urlpatterns = [
     path(
@@ -120,7 +121,6 @@ urlpatterns = [
     #     name="recording-session",
     # ),
     # path('api/recording-session/<int:pk>/', RecordingSessionAPIView.as_view(), name='recording-session-detail'),
-    path("api/study/", StudyAPIView.as_view(), name="study-list"),
     path("api/file/<int:pk>/", FileDetailAPIView.as_view(), name="file-detail"),
     path("api/track-page/", TrackPageView.as_view(), name="track-page"),
     path(

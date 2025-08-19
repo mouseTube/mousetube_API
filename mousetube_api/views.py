@@ -136,7 +136,7 @@ class LinkOrcidView(APIView):
 
 
 class FilePagination(PageNumberPagination):
-    page_size = 5
+    page_size = 10
     page_size_query_param = "page_size"
     max_page_size = 100
 
@@ -372,7 +372,7 @@ class AnimalProfileViewSet(viewsets.ModelViewSet):
         serializer.save(created_by=self.request.user)
 
 
-class StudyAPIView(generics.ListCreateAPIView):
+class StudyViewSet(viewsets.ModelViewSet):
     queryset = Study.objects.all()
     serializer_class = StudySerializer
 
