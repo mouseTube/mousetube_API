@@ -318,21 +318,11 @@ class RecordingSessionSerializer(serializers.ModelSerializer):
     studies = StudyShortSerializer(many=True, read_only=True)
     laboratory = LaboratorySerializer(read_only=True)
     animal_profiles = AnimalProfileSerializer(many=True, read_only=True)
-    equipment_acquisition_software = SoftwareVersionSerializer(
-        many=True, read_only=True
-    )
-    equipment_acquisition_hardware_soundcards = HardwareSerializer(
-        many=True, read_only=True
-    )
-    equipment_acquisition_hardware_speakers = HardwareSerializer(
-        many=True, read_only=True
-    )
-    equipment_acquisition_hardware_amplifiers = HardwareSerializer(
-        many=True, read_only=True
-    )
-    equipment_acquisition_hardware_microphones = HardwareSerializer(
-        many=True, read_only=True
-    )
+    equipment_acquisition_software = SoftwareVersionSerializer(many=True, read_only=True)
+    equipment_acquisition_hardware_soundcards = HardwareSerializer(many=True, read_only=True)
+    equipment_acquisition_hardware_speakers = HardwareSerializer(many=True, read_only=True)
+    equipment_acquisition_hardware_amplifiers = HardwareSerializer(many=True, read_only=True)
+    equipment_acquisition_hardware_microphones = HardwareSerializer(many=True, read_only=True)
 
     # ---- Write fields pour POST/PUT/PATCH ----
     protocol_id = serializers.PrimaryKeyRelatedField(
@@ -399,23 +389,23 @@ class RecordingSessionSerializer(serializers.ModelSerializer):
         required=False,
     )
 
-    # ---- Champs context et equipment ----
-    context = serializers.DictField(write_only=True, required=False)
-    equipment = serializers.DictField(write_only=True, required=False)
+    # ---- Champs simples "aplatis" ----
+    equipment_channels = serializers.CharField(required=False, allow_null=True, allow_blank=True)
+    equipment_sound_isolation = serializers.CharField(required=False, allow_null=True, allow_blank=True)
+
+    context_temperature_value = serializers.CharField(required=False, allow_null=True, allow_blank=True)
+    context_temperature_unit = serializers.CharField(required=False, allow_null=True, allow_blank=True)
+    context_brightness = serializers.FloatField(required=False, allow_null=True)
 
     class Meta:
         model = RecordingSession
         fields = "__all__"
 
-    # ---- Validation globale du payload ----
+    # ---- Validation ----
     def validate(self, data):
         errors = {}
 
-        # Champs simples
-        simple_fields = [
-            "name",
-            "date",
-        ]
+        simple_fields = ["name", "date"]
         for field in simple_fields:
             if field in data and data[field] is None:
                 errors[field] = f"{field} cannot be None."
@@ -434,54 +424,6 @@ class RecordingSessionSerializer(serializers.ModelSerializer):
             if field in data and not isinstance(data[field], list):
                 errors[field] = f"{field} must be a list of IDs."
 
-        # Context
-        context = data.get("context")
-        if context is not None:
-            if not isinstance(context, dict):
-                errors["context"] = "Context must be a dictionary."
-            else:
-                temp = context.get("temperature")
-                if temp and (
-                    not isinstance(temp, dict)
-                    or "value" not in temp
-                    or "unit" not in temp
-                ):
-                    errors["context.temperature"] = (
-                        "Temperature must be a dict with 'value' and 'unit'."
-                    )
-                brightness = context.get("brightness")
-                if brightness is not None and not isinstance(brightness, (int, float)):
-                    errors["context.brightness"] = "Brightness must be a number."
-
-        # Equipment
-        equipment = data.get("equipment")
-        if equipment is not None:
-            if not isinstance(equipment, dict):
-                errors["equipment"] = "Equipment must be a dictionary."
-            else:
-                allowed_keys = {
-                    "channels",
-                    "sound_isolation",
-                    "soundcards",
-                    "microphones",
-                    "speakers",
-                    "amplifiers",
-                    "acquisition_software",
-                }
-                for key, val in equipment.items():
-                    if key not in allowed_keys:
-                        errors[f"equipment.{key}"] = (
-                            f"Unexpected key '{key}' in equipment."
-                        )
-                    if key in {
-                        "soundcards",
-                        "microphones",
-                        "speakers",
-                        "amplifiers",
-                        "acquisition_software",
-                    } and not isinstance(val, list):
-                        errors[f"equipment.{key}"] = f"{key} must be a list of IDs."
-
         if errors:
             raise serializers.ValidationError(errors)
 
@@ -492,21 +434,11 @@ class RecordingSessionSerializer(serializers.ModelSerializer):
         return {
             "studies": validated_data.pop("studies", None),
             "animal_profiles": validated_data.pop("animal_profiles", None),
-            "equipment_acquisition_software": validated_data.pop(
-                "equipment_acquisition_software", None
-            ),
-            "equipment_acquisition_hardware_soundcards": validated_data.pop(
-                "equipment_acquisition_hardware_soundcards", None
-            ),
-            "equipment_acquisition_hardware_microphones": validated_data.pop(
-                "equipment_acquisition_hardware_microphones", None
-            ),
-            "equipment_acquisition_hardware_speakers": validated_data.pop(
-                "equipment_acquisition_hardware_speakers", None
-            ),
-            "equipment_acquisition_hardware_amplifiers": validated_data.pop(
-                "equipment_acquisition_hardware_amplifiers", None
-            ),
+            "equipment_acquisition_software": validated_data.pop("equipment_acquisition_software", None),
+            "equipment_acquisition_hardware_soundcards": validated_data.pop("equipment_acquisition_hardware_soundcards", None),
+            "equipment_acquisition_hardware_microphones": validated_data.pop("equipment_acquisition_hardware_microphones", None),
+            "equipment_acquisition_hardware_speakers": validated_data.pop("equipment_acquisition_hardware_speakers", None),
+            "equipment_acquisition_hardware_amplifiers": validated_data.pop("equipment_acquisition_hardware_amplifiers", None),
         }
 
     def _assign_m2m(self, instance, m2m_fields):
@@ -514,101 +446,34 @@ class RecordingSessionSerializer(serializers.ModelSerializer):
             if value is not None:
                 getattr(instance, field).set(value)
 
-    def _assign_context_equipment(self, instance, validated_data):
-        # Context
-        context_data = validated_data.pop("context", {})
-        if "temperature" in context_data:
-            temp = context_data["temperature"]
-            instance.context_temperature_value = temp.get("value")
-            instance.context_temperature_unit = temp.get("unit")
-        instance.context_brightness = context_data.get("brightness")
-
-        # Equipment
-        equipment_data = validated_data.pop("equipment", {})
-        instance.equipment_channels = equipment_data.get("channels")
-        instance.equipment_sound_isolation = equipment_data.get("sound_isolation")
-
-        # Hardware / software M2M
-        if "soundcards" in equipment_data:
-            instance.equipment_acquisition_hardware_soundcards.set(
-                Hardware.objects.filter(id__in=equipment_data["soundcards"])
-            )
-        if "microphones" in equipment_data:
-            instance.equipment_acquisition_hardware_microphones.set(
-                Hardware.objects.filter(id__in=equipment_data["microphones"])
-            )
-        if "speakers" in equipment_data:
-            instance.equipment_acquisition_hardware_speakers.set(
-                Hardware.objects.filter(id__in=equipment_data["speakers"])
-            )
-        if "amplifiers" in equipment_data:
-            instance.equipment_acquisition_hardware_amplifiers.set(
-                Hardware.objects.filter(id__in=equipment_data["amplifiers"])
-            )
-        if "acquisition_software" in equipment_data:
-            instance.equipment_acquisition_software.set(
-                SoftwareVersion.objects.filter(
-                    id__in=equipment_data["acquisition_software"]
-                )
-            )
-
-    # ---- Création ----
+    # ---- Create ----
     def create(self, validated_data):
         m2m_fields = self._extract_m2m(validated_data)
         laboratory = validated_data.pop("laboratory", None)
 
-        # Validation protocole
-        if (
-            validated_data.get("status") == "published"
-            and validated_data.get("protocol") is None
-        ):
-            raise serializers.ValidationError(
-                {"protocol_id": "A protocol is required for published sessions."}
-            )
+        if validated_data.get("status") == "published" and validated_data.get("protocol") is None:
+            raise serializers.ValidationError({"protocol_id": "A protocol is required for published sessions."})
 
-        instance = RecordingSession.objects.create(
-            **validated_data, laboratory=laboratory
-        )
+        instance = RecordingSession.objects.create(**validated_data, laboratory=laboratory)
         self._assign_m2m(instance, m2m_fields)
-        self._assign_context_equipment(instance, validated_data)
-        instance.save()
         return instance
 
-    # ---- Mise à jour ----
+    # ---- Update ----
     def update(self, instance, validated_data):
         m2m_fields = self._extract_m2m(validated_data)
-        # laboratory = validated_data.pop("laboratory", None)
 
-        # Validation protocole
-        if (
-            validated_data.get("status") == "published"
-            and validated_data.get("protocol") is None
-        ):
-            raise serializers.ValidationError(
-                {"protocol_id": "A protocol is required for published sessions."}
-            )
+        if validated_data.get("status") == "published" and validated_data.get("protocol") is None:
+            raise serializers.ValidationError({"protocol_id": "A protocol is required for published sessions."})
 
-        # Champs simples
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
 
         if "laboratory" in validated_data:
             instance.laboratory = validated_data["laboratory"]
 
-        self._assign_context_equipment(instance, validated_data)
         self._assign_m2m(instance, m2m_fields)
         instance.save()
         return instance
-
-    # def validate(self, data):
-    #     # add rules for validation if needed
-    #     return data
-
-    # def create(self, validated_data):
-    #     return super().create(validated_data)
-
-    # def update(self, instance, validated_data):
-    #     return super().update(instance, validated_data)
 
 
 class RecordingSessionShortSerializer(serializers.ModelSerializer):
