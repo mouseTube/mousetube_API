@@ -414,12 +414,7 @@ class RecordingSessionSerializer(serializers.ModelSerializer):
         # Champs simples
         simple_fields = [
             "name",
-            "description",
             "date",
-            "duration",
-            "status",
-            "protocol",
-            "laboratory",
         ]
         for field in simple_fields:
             if field in data and data[field] is None:
@@ -582,7 +577,7 @@ class RecordingSessionSerializer(serializers.ModelSerializer):
     # ---- Mise à jour ----
     def update(self, instance, validated_data):
         m2m_fields = self._extract_m2m(validated_data)
-        laboratory = validated_data.pop("laboratory", None)
+        # laboratory = validated_data.pop("laboratory", None)
 
         # Validation protocole
         if (
@@ -597,8 +592,8 @@ class RecordingSessionSerializer(serializers.ModelSerializer):
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
 
-        if laboratory is not None:
-            instance.laboratory = laboratory
+        if "laboratory" in validated_data:
+            instance.laboratory = validated_data["laboratory"]
 
         self._assign_context_equipment(instance, validated_data)
         self._assign_m2m(instance, m2m_fields)
