@@ -652,6 +652,7 @@ class RecordingSession(models.Model):
 
     Attributes:
         name (str): The name of the experiment.
+        is_multiple (bool): Indicates if the experiment represents multiple recording sessions.
         protocol (Protocol): The protocol associated with the experiment.
         studies (ManyToManyField): The studies associated with the experiment.
         description (str, optional): A description of the experiment.
@@ -690,6 +691,13 @@ class RecordingSession(models.Model):
     ]
 
     name = models.CharField(max_length=255, unique=True)
+    is_multiple = models.BooleanField(
+        default=False,
+        help_text=(
+            "If checked, this represents a multiple/plural recording session "
+            "with no precise start date."
+        ),
+    )
     protocol = models.ForeignKey(
         Protocol, on_delete=models.CASCADE, null=True, blank=True
     )
@@ -796,7 +804,6 @@ class RecordingSession(models.Model):
         return self.name
 
     def clean(self):
-        # 🔹 Vérifie M2M seulement si l'objet est déjà en base (pk existe)
         if self.pk:
             for software_version in self.equipment_acquisition_software.all():
                 if software_version.software.type not in [
@@ -835,6 +842,11 @@ class RecordingSession(models.Model):
         if self.status == "published" and self.protocol is None:
             raise ValidationError(
                 "Cannot publish a recording session without a protocol."
+            )
+        # 🔹 Vérification de la date pour les sessions multiples
+        if not self.is_multiple and self.date is None:
+            raise ValidationError(
+                "A single recording session must have a precise start date."
             )
 
     def save(self, *args, **kwargs):

@@ -402,6 +402,8 @@ class RecordingSessionSerializer(serializers.ModelSerializer):
     context_temperature_unit = serializers.CharField(required=False, allow_null=True, allow_blank=True)
     context_brightness = serializers.FloatField(required=False, allow_null=True)
 
+    is_multiple = serializers.BooleanField(required=False, default=False)
+
     class Meta:
         model = RecordingSession
         fields = "__all__"
@@ -410,24 +412,16 @@ class RecordingSessionSerializer(serializers.ModelSerializer):
     def validate(self, data):
         errors = {}
 
-        simple_fields = ["name", "date"]
-        for field in simple_fields:
-            if field in data and data[field] is None:
-                errors[field] = f"{field} cannot be None."
+        is_multiple = data.get("is_multiple", getattr(self.instance, "is_multiple", False))
 
-        # M2M fields
-        m2m_fields = [
-            "studies",
-            "animal_profiles",
-            "equipment_acquisition_software",
-            "equipment_acquisition_hardware_soundcards",
-            "equipment_acquisition_hardware_speakers",
-            "equipment_acquisition_hardware_amplifiers",
-            "equipment_acquisition_hardware_microphones",
-        ]
-        for field in m2m_fields:
-            if field in data and not isinstance(data[field], list):
-                errors[field] = f"{field} must be a list of IDs."
+        if not is_multiple and not data.get("date") and not getattr(self.instance, "date", None):
+            errors["date"] = "A date is required for single recording sessions."
+
+        for field in ["name", "date"]:
+            if field in data and data[field] is None:
+                if field == "date" and is_multiple:
+                    continue 
+                errors[field] = f"{field} cannot be None."
 
         if errors:
             raise serializers.ValidationError(errors)
