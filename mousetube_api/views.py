@@ -57,7 +57,6 @@ from .serializers import (
     StudySerializer,
 )
 from django_countries import countries
-from django.db.models import Q
 from django.utils.timezone import now
 from django.db.models import F
 from django.core.cache import cache
@@ -399,7 +398,11 @@ class RecordingSessionViewSet(viewsets.ModelViewSet):
     serializer_class = RecordingSessionSerializer
     permission_classes = [IsAuthenticated]
 
-    filter_backends = [filters.SearchFilter, DjangoFilterBackend, filters.OrderingFilter]
+    filter_backends = [
+        filters.SearchFilter,
+        DjangoFilterBackend,
+        filters.OrderingFilter,
+    ]
     search_fields = ["name", "description"]
     filterset_fields = ["is_multiple"]
     ordering_fields = ["name", "date", "status", "protocol__name", "laboratory__name"]
@@ -690,7 +693,7 @@ class FileDetailAPIView(APIView):
 
 class SoftwareViewSet(viewsets.ModelViewSet):
     serializer_class = SoftwareSerializer
-    lookup_field = 'pk'
+    lookup_field = "pk"
 
     def get_permissions(self):
         if self.action in ["create"]:
@@ -703,10 +706,23 @@ class SoftwareViewSet(viewsets.ModelViewSet):
         qs = Software.objects.all()
         search_query = self.request.GET.get("search", "")
         if search_query:
-            software_fields = ["name", "type", "made_by", "description", "technical_requirements"]
+            software_fields = [
+                "name",
+                "type",
+                "made_by",
+                "description",
+                "technical_requirements",
+            ]
             reference_fields = ["name", "description", "url", "doi"]
-            user_fields = ["name_user", "first_name_user", "email_user", "unit_user",
-                           "institution_user", "address_user", "country_user"]
+            user_fields = [
+                "name_user",
+                "first_name_user",
+                "email_user",
+                "unit_user",
+                "institution_user",
+                "address_user",
+                "country_user",
+            ]
 
             q = Q()
             for f in software_fields:
@@ -724,7 +740,9 @@ class SoftwareViewSet(viewsets.ModelViewSet):
             qs = qs.filter(type=filter_query)
 
         if self.action == "retrieve":
-            qs = SoftwareSerializer.annotate_queryset(qs, user=self.request.user, detail=True)
+            qs = SoftwareSerializer.annotate_queryset(
+                qs, user=self.request.user, detail=True
+            )
 
         return qs.order_by("name")
 
@@ -736,24 +754,32 @@ class SoftwareViewSet(viewsets.ModelViewSet):
 
     @extend_schema(
         parameters=[
-            OpenApiParameter(name="search", description="Text search", required=False, type=str),
-            OpenApiParameter(name="filter", description="Type filter", required=False, type=str),
+            OpenApiParameter(
+                name="search", description="Text search", required=False, type=str
+            ),
+            OpenApiParameter(
+                name="filter", description="Type filter", required=False, type=str
+            ),
         ]
     )
-
     def _check_editable(self, software):
-        other_sessions_count = software.versions.annotate(
-            cnt=Count(
-                'recording_sessions_as_software',
-                filter=~Q(recording_sessions_as_software__created_by=self.request.user)
-            )
-        ).aggregate(total=Sum('cnt'))['total'] or 0
+        other_sessions_count = (
+            software.versions.annotate(
+                cnt=Count(
+                    "recording_sessions_as_software",
+                    filter=~Q(
+                        recording_sessions_as_software__created_by=self.request.user
+                    ),
+                )
+            ).aggregate(total=Sum("cnt"))["total"]
+            or 0
+        )
 
         if other_sessions_count > 0:
             raise PermissionDenied(
                 "This software is linked to recording sessions from other users and cannot be edited or deleted."
             )
-    
+
     def list(self, request, *args, **kwargs):
         queryset = self.get_queryset()
         paginator = FilePagination()
@@ -765,7 +791,9 @@ class SoftwareViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         software = serializer.save(created_by=request.user)
-        return Response(self.get_serializer(software).data, status=status.HTTP_201_CREATED)
+        return Response(
+            self.get_serializer(software).data, status=status.HTTP_201_CREATED
+        )
 
     def retrieve(self, request, *args, **kwargs):
         software = self.get_object()
@@ -848,13 +876,15 @@ class SoftwareVersionViewSet(viewsets.ModelViewSet):
             )
 
         # Annoter uniquement pour le détail
-        if self.action == 'retrieve':
+        if self.action == "retrieve":
             queryset = queryset.annotate(
-                linked_sessions_count=Count('recording_sessions_as_software'),
+                linked_sessions_count=Count("recording_sessions_as_software"),
                 linked_sessions_from_other_users=Count(
-                    'recording_sessions_as_software',
-                    filter=~Q(recording_sessions_as_software__created_by=self.request.user)
-                )
+                    "recording_sessions_as_software",
+                    filter=~Q(
+                        recording_sessions_as_software__created_by=self.request.user
+                    ),
+                ),
             )
 
         return queryset
@@ -887,7 +917,6 @@ class SoftwareVersionViewSet(viewsets.ModelViewSet):
         version = self.get_object()
         self._check_editable(version)
         return super().destroy(request, *args, **kwargs)
-
 
 
 class TrackPageView(APIView):

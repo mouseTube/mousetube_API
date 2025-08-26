@@ -154,18 +154,24 @@ class ReferenceSerializer(serializers.ModelSerializer):
         model = Reference
         fields = "__all__"
 
+
 class SoftwareSerializer(serializers.ModelSerializer):
     references = ReferenceSerializer(many=True, required=False)
     users = LegacyUserSerializer(many=True, required=False)
-    
+
     linked_sessions_count = serializers.IntegerField(read_only=True)
     linked_sessions_from_other_users = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = Software
         fields = "__all__"
-        read_only_fields = ["created_at", "modified_at", "created_by", 
-                            "linked_sessions_count", "linked_sessions_from_other_users"]
+        read_only_fields = [
+            "created_at",
+            "modified_at",
+            "created_by",
+            "linked_sessions_count",
+            "linked_sessions_from_other_users",
+        ]
 
     @staticmethod
     def annotate_queryset(queryset, user=None, detail=False):
@@ -175,14 +181,15 @@ class SoftwareSerializer(serializers.ModelSerializer):
         if detail:
             queryset = queryset.annotate(
                 linked_sessions_count=Count(
-                    'versions__recording_sessions_as_software',
-                    distinct=True
+                    "versions__recording_sessions_as_software", distinct=True
                 ),
                 linked_sessions_from_other_users=Count(
-                    'versions__recording_sessions_as_software',
-                    filter=~Q(versions__recording_sessions_as_software__created_by=user),
-                    distinct=True
-                )
+                    "versions__recording_sessions_as_software",
+                    filter=~Q(
+                        versions__recording_sessions_as_software__created_by=user
+                    ),
+                    distinct=True,
+                ),
             )
         return queryset
 
@@ -215,7 +222,9 @@ class SoftwareSerializer(serializers.ModelSerializer):
                 Reference.objects.create(software=instance, **ref_data)
 
         if users_data is not None:
-            user_ids = [user_data["id"] for user_data in users_data if "id" in user_data]
+            user_ids = [
+                user_data["id"] for user_data in users_data if "id" in user_data
+            ]
             if user_ids:
                 instance.users.set(user_ids)
 
@@ -257,7 +266,13 @@ class SoftwareVersionSerializer(serializers.ModelSerializer):
             "linked_sessions_count",
             "linked_sessions_from_other_users",
         ]
-        read_only_fields = ["created_at", "modified_at", "created_by", "linked_sessions_count", "linked_sessions_from_other_users"]
+        read_only_fields = [
+            "created_at",
+            "modified_at",
+            "created_by",
+            "linked_sessions_count",
+            "linked_sessions_from_other_users",
+        ]
 
 
 class SpeciesSerializer(serializers.ModelSerializer):
@@ -345,11 +360,21 @@ class RecordingSessionSerializer(serializers.ModelSerializer):
     studies = StudyShortSerializer(many=True, read_only=True)
     laboratory = LaboratorySerializer(read_only=True)
     animal_profiles = AnimalProfileSerializer(many=True, read_only=True)
-    equipment_acquisition_software = SoftwareVersionSerializer(many=True, read_only=True)
-    equipment_acquisition_hardware_soundcards = HardwareSerializer(many=True, read_only=True)
-    equipment_acquisition_hardware_speakers = HardwareSerializer(many=True, read_only=True)
-    equipment_acquisition_hardware_amplifiers = HardwareSerializer(many=True, read_only=True)
-    equipment_acquisition_hardware_microphones = HardwareSerializer(many=True, read_only=True)
+    equipment_acquisition_software = SoftwareVersionSerializer(
+        many=True, read_only=True
+    )
+    equipment_acquisition_hardware_soundcards = HardwareSerializer(
+        many=True, read_only=True
+    )
+    equipment_acquisition_hardware_speakers = HardwareSerializer(
+        many=True, read_only=True
+    )
+    equipment_acquisition_hardware_amplifiers = HardwareSerializer(
+        many=True, read_only=True
+    )
+    equipment_acquisition_hardware_microphones = HardwareSerializer(
+        many=True, read_only=True
+    )
 
     # ---- Write fields pour POST/PUT/PATCH ----
     protocol_id = serializers.PrimaryKeyRelatedField(
@@ -417,11 +442,19 @@ class RecordingSessionSerializer(serializers.ModelSerializer):
     )
 
     # ---- Champs simples "aplatis" ----
-    equipment_channels = serializers.CharField(required=False, allow_null=True, allow_blank=True)
-    equipment_sound_isolation = serializers.CharField(required=False, allow_null=True, allow_blank=True)
+    equipment_channels = serializers.CharField(
+        required=False, allow_null=True, allow_blank=True
+    )
+    equipment_sound_isolation = serializers.CharField(
+        required=False, allow_null=True, allow_blank=True
+    )
 
-    context_temperature_value = serializers.CharField(required=False, allow_null=True, allow_blank=True)
-    context_temperature_unit = serializers.CharField(required=False, allow_null=True, allow_blank=True)
+    context_temperature_value = serializers.CharField(
+        required=False, allow_null=True, allow_blank=True
+    )
+    context_temperature_unit = serializers.CharField(
+        required=False, allow_null=True, allow_blank=True
+    )
     context_brightness = serializers.FloatField(required=False, allow_null=True)
 
     is_multiple = serializers.BooleanField(required=False, default=False)
@@ -434,15 +467,21 @@ class RecordingSessionSerializer(serializers.ModelSerializer):
     def validate(self, data):
         errors = {}
 
-        is_multiple = data.get("is_multiple", getattr(self.instance, "is_multiple", False))
+        is_multiple = data.get(
+            "is_multiple", getattr(self.instance, "is_multiple", False)
+        )
 
-        if not is_multiple and not data.get("date") and not getattr(self.instance, "date", None):
+        if (
+            not is_multiple
+            and not data.get("date")
+            and not getattr(self.instance, "date", None)
+        ):
             errors["date"] = "A date is required for single recording sessions."
 
         for field in ["name", "date"]:
             if field in data and data[field] is None:
                 if field == "date" and is_multiple:
-                    continue 
+                    continue
                 errors[field] = f"{field} cannot be None."
 
         if errors:
@@ -455,11 +494,21 @@ class RecordingSessionSerializer(serializers.ModelSerializer):
         return {
             "studies": validated_data.pop("studies", None),
             "animal_profiles": validated_data.pop("animal_profiles", None),
-            "equipment_acquisition_software": validated_data.pop("equipment_acquisition_software", None),
-            "equipment_acquisition_hardware_soundcards": validated_data.pop("equipment_acquisition_hardware_soundcards", None),
-            "equipment_acquisition_hardware_microphones": validated_data.pop("equipment_acquisition_hardware_microphones", None),
-            "equipment_acquisition_hardware_speakers": validated_data.pop("equipment_acquisition_hardware_speakers", None),
-            "equipment_acquisition_hardware_amplifiers": validated_data.pop("equipment_acquisition_hardware_amplifiers", None),
+            "equipment_acquisition_software": validated_data.pop(
+                "equipment_acquisition_software", None
+            ),
+            "equipment_acquisition_hardware_soundcards": validated_data.pop(
+                "equipment_acquisition_hardware_soundcards", None
+            ),
+            "equipment_acquisition_hardware_microphones": validated_data.pop(
+                "equipment_acquisition_hardware_microphones", None
+            ),
+            "equipment_acquisition_hardware_speakers": validated_data.pop(
+                "equipment_acquisition_hardware_speakers", None
+            ),
+            "equipment_acquisition_hardware_amplifiers": validated_data.pop(
+                "equipment_acquisition_hardware_amplifiers", None
+            ),
         }
 
     def _assign_m2m(self, instance, m2m_fields):
@@ -472,10 +521,17 @@ class RecordingSessionSerializer(serializers.ModelSerializer):
         m2m_fields = self._extract_m2m(validated_data)
         laboratory = validated_data.pop("laboratory", None)
 
-        if validated_data.get("status") == "published" and validated_data.get("protocol") is None:
-            raise serializers.ValidationError({"protocol_id": "A protocol is required for published sessions."})
+        if (
+            validated_data.get("status") == "published"
+            and validated_data.get("protocol") is None
+        ):
+            raise serializers.ValidationError(
+                {"protocol_id": "A protocol is required for published sessions."}
+            )
 
-        instance = RecordingSession.objects.create(**validated_data, laboratory=laboratory)
+        instance = RecordingSession.objects.create(
+            **validated_data, laboratory=laboratory
+        )
         self._assign_m2m(instance, m2m_fields)
         return instance
 
@@ -483,8 +539,13 @@ class RecordingSessionSerializer(serializers.ModelSerializer):
     def update(self, instance, validated_data):
         m2m_fields = self._extract_m2m(validated_data)
 
-        if validated_data.get("status") == "published" and validated_data.get("protocol") is None:
-            raise serializers.ValidationError({"protocol_id": "A protocol is required for published sessions."})
+        if (
+            validated_data.get("status") == "published"
+            and validated_data.get("protocol") is None
+        ):
+            raise serializers.ValidationError(
+                {"protocol_id": "A protocol is required for published sessions."}
+            )
 
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
