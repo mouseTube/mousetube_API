@@ -10,6 +10,7 @@ Code under GPL v3.0 licence
 # from djoser.serializers import UserSerializer
 from rest_framework import serializers
 from django_countries.serializer_fields import CountryField
+from django.db.models import Count, Q
 from .models import (
     Repository,
     Reference,
@@ -148,13 +149,42 @@ class HardwareSerializer(serializers.ModelSerializer):
         return instance
 
 
+class ReferenceSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Reference
+        fields = "__all__"
+
 class SoftwareSerializer(serializers.ModelSerializer):
     references = ReferenceSerializer(many=True, required=False)
     users = LegacyUserSerializer(many=True, required=False)
+    
+    linked_sessions_count = serializers.IntegerField(read_only=True)
+    linked_sessions_from_other_users = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = Software
         fields = "__all__"
+        read_only_fields = ["created_at", "modified_at", "created_by", 
+                            "linked_sessions_count", "linked_sessions_from_other_users"]
+
+    @staticmethod
+    def annotate_queryset(queryset, user=None, detail=False):
+        """
+        Annotate linked session counts uniquement si detail=True
+        """
+        if detail:
+            queryset = queryset.annotate(
+                linked_sessions_count=Count(
+                    'versions__recording_sessions_as_software',
+                    distinct=True
+                ),
+                linked_sessions_from_other_users=Count(
+                    'versions__recording_sessions_as_software',
+                    filter=~Q(versions__recording_sessions_as_software__created_by=user),
+                    distinct=True
+                )
+            )
+        return queryset
 
     def create(self, validated_data):
         references_data = validated_data.pop("references", [])
@@ -185,25 +215,11 @@ class SoftwareSerializer(serializers.ModelSerializer):
                 Reference.objects.create(software=instance, **ref_data)
 
         if users_data is not None:
-            user_ids = [
-                user_data["id"] for user_data in users_data if "id" in user_data
-            ]
+            user_ids = [user_data["id"] for user_data in users_data if "id" in user_data]
             if user_ids:
                 instance.users.set(user_ids)
 
         return instance
-
-
-# class SpeciesSerializer(serializers.ModelSerializer):
-#     class Meta:
-#         model = Species
-#         fields = "__all__"
-
-
-# class StrainSerializer(serializers.ModelSerializer):
-#     class Meta:
-#         model = Strain
-#         fields = "__all__"
 
 
 class ProtocolSerializer(serializers.ModelSerializer):
@@ -222,6 +238,10 @@ class SoftwareVersionSerializer(serializers.ModelSerializer):
         write_only=True,
     )
     software_name = serializers.CharField(source="software.name", read_only=True)
+
+    linked_sessions_count = serializers.IntegerField(read_only=True)
+    linked_sessions_from_other_users = serializers.IntegerField(read_only=True)
+
     class Meta:
         model = SoftwareVersion
         fields = [
@@ -234,8 +254,10 @@ class SoftwareVersionSerializer(serializers.ModelSerializer):
             "created_at",
             "modified_at",
             "created_by",
+            "linked_sessions_count",
+            "linked_sessions_from_other_users",
         ]
-        read_only_fields = ["created_at", "modified_at", "created_by"]
+        read_only_fields = ["created_at", "modified_at", "created_by", "linked_sessions_count", "linked_sessions_from_other_users"]
 
 
 class SpeciesSerializer(serializers.ModelSerializer):

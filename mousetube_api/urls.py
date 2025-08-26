@@ -32,8 +32,8 @@ from .views import (
     ProtocolViewSet,
     FileAPIView,
     FileDetailAPIView,
-    SoftwareAPIView,
-    SoftwareDetailAPIView,
+    # SoftwareAPIView,
+    # SoftwareDetailAPIView,
     HardwareDetailAPIView,
     SoftwareVersionViewSet,
     HardwareAPIView,
@@ -49,6 +49,7 @@ from .views import (
     SpeciesViewSet,
     StrainViewSet,
     LaboratoryAPIView,
+    SoftwareViewSet,
     # init_orcid_connect,
     # orcid_custom_login
     # OrcidOAuth2LoginView
@@ -74,6 +75,7 @@ router.register(
     r"software-version", SoftwareVersionViewSet, basename="software-version"
 )
 router.register(r"study", StudyViewSet, basename="study")
+router.register(r"software", SoftwareViewSet, basename="software")
 
 urlpatterns = [
     path(
@@ -100,12 +102,12 @@ urlpatterns = [
     # path("api/strain/", StrainAPIView.as_view(), name="strain"),
     # path("api/protocol/", ProtocolAPIView.as_view(), name="protocol"),
     path("api/file/", FileAPIView.as_view(), name="file"),
-    path("api/software/", SoftwareAPIView.as_view(), name="software"),
-    path(
-        "api/software/<int:pk>/",
-        SoftwareDetailAPIView.as_view(),
-        name="software-detail",
-    ),
+    # path("api/software/", SoftwareAPIView.as_view(), name="software"),
+    # path(
+    #     "api/software/<int:pk>/",
+    #     SoftwareDetailAPIView.as_view(),
+    #     name="software-detail",
+    # ),
     path("api/hardware/", HardwareAPIView.as_view(), name="hardware"),
     path(
         "api/hardware/<int:pk>/",

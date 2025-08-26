@@ -10,10 +10,13 @@ Code under GPL v3.0 licence
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.pagination import PageNumberPagination
+from rest_framework import permissions
 import json
 from rest_framework import viewsets, status, filters
 from django_filters.rest_framework import DjangoFilterBackend
 from django.http import Http404
+from rest_framework.exceptions import PermissionDenied
+from django.db.models import Count, Q, Sum
 from .models import (
     Repository,
     Reference,
@@ -140,6 +143,19 @@ class FilePagination(PageNumberPagination):
     page_size = 10
     page_size_query_param = "page_size"
     max_page_size = 100
+
+
+class IsCreatorOrReadOnly(permissions.BasePermission):
+    """
+    Autorise seulement le créateur (created_by) à modifier ou supprimer.
+    """
+
+    def has_object_permission(self, request, view, obj):
+        # Lecture autorisée pour tout le monde
+        if request.method in permissions.SAFE_METHODS:
+            return True
+        # Modification/suppression uniquement si le user est le créateur
+        return obj.created_by == request.user
 
 
 class CountryAPIView(APIView):
@@ -383,12 +399,17 @@ class RecordingSessionViewSet(viewsets.ModelViewSet):
     serializer_class = RecordingSessionSerializer
     permission_classes = [IsAuthenticated]
 
-    filter_backends = [filters.SearchFilter, DjangoFilterBackend]
+    filter_backends = [filters.SearchFilter, DjangoFilterBackend, filters.OrderingFilter]
     search_fields = ["name", "description"]
     filterset_fields = ["is_multiple"]
+    ordering_fields = ["name", "date", "status", "protocol__name", "laboratory__name"]
+    ordering = ["name"]
 
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
+
+    def get_queryset(self):
+        return RecordingSession.objects.filter(created_by=self.request.user)
 
 
 class FileAPIView(APIView):
@@ -667,158 +688,206 @@ class FileDetailAPIView(APIView):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
-class SoftwareAPIView(APIView):
+class SoftwareViewSet(viewsets.ModelViewSet):
     serializer_class = SoftwareSerializer
+    lookup_field = 'pk'
 
     def get_permissions(self):
-        if self.request.method == "POST":
-            return [IsAuthenticated()]
-        return [AllowAny()]
+        if self.action in ["create"]:
+            return [permissions.IsAuthenticated()]
+        if self.action in ["update", "partial_update", "destroy"]:
+            return [permissions.IsAuthenticated(), IsCreatorOrReadOnly()]
+        return [permissions.AllowAny()]
+
+    def get_queryset(self):
+        qs = Software.objects.all()
+        search_query = self.request.GET.get("search", "")
+        if search_query:
+            software_fields = ["name", "type", "made_by", "description", "technical_requirements"]
+            reference_fields = ["name", "description", "url", "doi"]
+            user_fields = ["name_user", "first_name_user", "email_user", "unit_user",
+                           "institution_user", "address_user", "country_user"]
+
+            q = Q()
+            for f in software_fields:
+                q |= Q(**{f"{f}__icontains": search_query})
+            for f in reference_fields:
+                q |= Q(**{f"references__{f}__icontains": search_query})
+            for f in user_fields:
+                q |= Q(**{f"users__{f}__icontains": search_query})
+
+            qs = qs.filter(q).distinct()
+
+        filter_query = self.request.GET.get("filter")
+        ALLOWED_FILTERS = ["acquisition", "analysis", "acquisition and analysis"]
+        if filter_query in ALLOWED_FILTERS:
+            qs = qs.filter(type=filter_query)
+
+        if self.action == "retrieve":
+            qs = SoftwareSerializer.annotate_queryset(qs, user=self.request.user, detail=True)
+
+        return qs.order_by("name")
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context["detail"] = self.action == "retrieve"
+        context["user"] = self.request.user
+        return context
 
     @extend_schema(
         parameters=[
-            OpenApiParameter(
-                name="search", description="text search", required=False, type=str
-            ),
-            OpenApiParameter(
-                name="filter", description="filter", required=False, type=str
-            ),
+            OpenApiParameter(name="search", description="Text search", required=False, type=str),
+            OpenApiParameter(name="filter", description="Type filter", required=False, type=str),
         ]
     )
-    def get(self, request, *args, **kwargs):
-        search_query = request.GET.get("search", "")
-        filter_query = request.GET.get("filter", "")
-        softwares = Software.objects.all()
 
-        if search_query:
-            software_fields = [
-                "name",
-                "type",
-                "made_by",
-                "description",
-                "technical_requirements",
-            ]
+    def _check_editable(self, software):
+        other_sessions_count = software.versions.annotate(
+            cnt=Count(
+                'recording_sessions_as_software',
+                filter=~Q(recording_sessions_as_software__created_by=self.request.user)
+            )
+        ).aggregate(total=Sum('cnt'))['total'] or 0
 
-            reference_fields = [
-                "name",
-                "description",
-                "url",
-                "doi",
-            ]
-
-            user_fields = [
-                "name_user",
-                "first_name_user",
-                "email_user",
-                "unit_user",
-                "institution_user",
-                "address_user",
-                "country_user",
-            ]
-
-            # Build Q objects
-            software_query = Q()
-            for field in software_fields:
-                software_query |= Q(**{f"{field}__icontains": search_query})
-
-            reference_query = Q()
-            for field in reference_fields:
-                reference_query |= Q(
-                    **{f"references__{field}__icontains": search_query}
-                )
-
-            user_query = Q()
-            for field in user_fields:
-                user_query |= Q(**{f"users__{field}__icontains": search_query})
-
-            # Combine all
-            softwares = softwares.filter(
-                software_query | reference_query | user_query
-            ).distinct()
-
-        ALLOWED_FILTERS = ["acquisition", "analysis", "acquisition and analysis"]
-
-        if filter_query and filter_query in ALLOWED_FILTERS:
-            softwares = softwares.filter(type=filter_query)
-
-        softwares = softwares.order_by("name")
+        if other_sessions_count > 0:
+            raise PermissionDenied(
+                "This software is linked to recording sessions from other users and cannot be edited or deleted."
+            )
+    
+    def list(self, request, *args, **kwargs):
+        queryset = self.get_queryset()
         paginator = FilePagination()
-        paginated_softwares = paginator.paginate_queryset(softwares, request)
-        serializer = self.serializer_class(paginated_softwares, many=True)
+        paginated = paginator.paginate_queryset(queryset, request)
+        serializer = self.get_serializer(paginated, many=True)
         return paginator.get_paginated_response(serializer.data)
 
-    def post(self, request, *args, **kwargs):
-        serializer = self.serializer_class(data=request.data)
-        if serializer.is_valid():
-            software = serializer.save()
-            return Response(self.serializer_class(software).data, status=201)
-        return Response(serializer.errors, status=400)
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        software = serializer.save(created_by=request.user)
+        return Response(self.get_serializer(software).data, status=status.HTTP_201_CREATED)
 
-
-class SoftwareDetailAPIView(APIView):
-    serializer_class = SoftwareSerializer
-
-    def get_permissions(self):
-        if self.request.method in ["PUT", "PATCH", "DELETE"]:
-            return [IsAuthenticated()]
-        return [AllowAny()]
-
-    def get(self, request, pk, *args, **kwargs):
-        software = get_object_or_404(Software, pk=pk)
-        serializer = self.serializer_class(software)
+    def retrieve(self, request, *args, **kwargs):
+        software = self.get_object()
+        serializer = self.get_serializer(software)
         return Response(serializer.data)
 
-    def put(self, request, pk, *args, **kwargs):
-        software = get_object_or_404(Software, pk=pk)
-        serializer = self.serializer_class(software, data=request.data)
-        if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    def update(self, request, *args, **kwargs):
+        software = self.get_object()
+        self._check_editable(software)
+        serializer = self.get_serializer(software, data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data)
 
-    def patch(self, request, pk, *args, **kwargs):
-        software = get_object_or_404(Software, pk=pk)
-        serializer = self.serializer_class(software, data=request.data, partial=True)
-        if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    def partial_update(self, request, *args, **kwargs):
+        software = self.get_object()
+        self._check_editable(software)
+        serializer = self.get_serializer(software, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data)
 
-    def delete(self, request, pk, *args, **kwargs):
-        software = get_object_or_404(Software, pk=pk)
+    def destroy(self, request, *args, **kwargs):
+        software = self.get_object()
+        self._check_editable(software)
         software.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
+# class SoftwareDetailAPIView(APIView):
+#     serializer_class = SoftwareSerializer
+
+#     def get_permissions(self):
+#         if self.request.method in ["PUT", "PATCH", "DELETE"]:
+#             return [IsAuthenticated()]
+#         return [AllowAny()]
+
+#     def get(self, request, pk, *args, **kwargs):
+#         software = get_object_or_404(Software, pk=pk)
+#         serializer = self.serializer_class(software)
+#         return Response(serializer.data)
+
+#     def put(self, request, pk, *args, **kwargs):
+#         software = get_object_or_404(Software, pk=pk)
+#         serializer = self.serializer_class(software, data=request.data)
+#         if serializer.is_valid():
+#             serializer.save()
+#             return Response(serializer.data)
+#         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+#     def patch(self, request, pk, *args, **kwargs):
+#         software = get_object_or_404(Software, pk=pk)
+#         serializer = self.serializer_class(software, data=request.data, partial=True)
+#         if serializer.is_valid():
+#             serializer.save()
+#             return Response(serializer.data)
+#         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+#     def delete(self, request, pk, *args, **kwargs):
+#         software = get_object_or_404(Software, pk=pk)
+#         software.delete()
+#         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
 class SoftwareVersionViewSet(viewsets.ModelViewSet):
-    queryset = SoftwareVersion.objects.all().order_by("software__name", "version")
     serializer_class = SoftwareVersionSerializer
-    permission_classes = [IsAuthenticatedOrReadOnly]
+    permission_classes = [IsCreatorOrReadOnly]
     pagination_class = FilePagination
     filterset_fields = ["software"]
 
-    @extend_schema(
-        parameters=[
-            OpenApiParameter(
-                name="search",
-                description="Text search on software name or version",
-                required=False,
-                type=str,
-            )
-        ]
-    )
     def get_queryset(self):
-        queryset = super().get_queryset()
+        queryset = SoftwareVersion.objects.all().order_by("software__name", "version")
+
+        # Recherche textuelle
         search_query = self.request.query_params.get("search")
         if search_query:
             queryset = queryset.filter(
                 Q(software__name__icontains=search_query)
                 | Q(version__icontains=search_query)
             )
+
+        # Annoter uniquement pour le détail
+        if self.action == 'retrieve':
+            queryset = queryset.annotate(
+                linked_sessions_count=Count('recording_sessions_as_software'),
+                linked_sessions_from_other_users=Count(
+                    'recording_sessions_as_software',
+                    filter=~Q(recording_sessions_as_software__created_by=self.request.user)
+                )
+            )
+
         return queryset
 
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
+
+    def _check_editable(self, version: SoftwareVersion):
+        """Vérifie si la version peut être éditée/supprimée."""
+        other_sessions_count = version.recording_sessions_as_software.exclude(
+            created_by=self.request.user
+        ).count()
+        if other_sessions_count > 0:
+            raise PermissionDenied(
+                "This software version is linked to recording sessions from other users "
+                "and cannot be edited or deleted."
+            )
+
+    def update(self, request, *args, **kwargs):
+        version = self.get_object()
+        self._check_editable(version)
+        return super().update(request, *args, **kwargs)
+
+    def partial_update(self, request, *args, **kwargs):
+        version = self.get_object()
+        self._check_editable(version)
+        return super().partial_update(request, *args, **kwargs)
+
+    def destroy(self, request, *args, **kwargs):
+        version = self.get_object()
+        self._check_editable(version)
+        return super().destroy(request, *args, **kwargs)
+
 
 
 class TrackPageView(APIView):

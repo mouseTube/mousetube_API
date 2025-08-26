@@ -3,6 +3,7 @@ from django.dispatch import receiver
 from django.contrib.auth import get_user_model
 from mousetube_api.models import UserProfile
 from mousetube_api.models import Software, SoftwareVersion
+from django.core.exceptions import ObjectDoesNotExist
 
 User = get_user_model()
 
@@ -25,6 +26,11 @@ def create_default_version(sender, instance, created, **kwargs):
 
 @receiver(post_delete, sender=SoftwareVersion)
 def delete_software_if_no_versions(sender, instance, **kwargs):
-    software = instance.software
+    try:
+        software = instance.software
+    except ObjectDoesNotExist:
+        # Le software parent a déjà été supprimé (CASCADE)
+        return
+
     if not software.versions.exists():
         software.delete()

@@ -699,7 +699,7 @@ class RecordingSession(models.Model):
         ),
     )
     protocol = models.ForeignKey(
-        Protocol, on_delete=models.CASCADE, null=True, blank=True
+        Protocol, on_delete=models.SET_NULL, null=True, blank=True
     )
     studies = models.ManyToManyField(
         Study, blank=True, related_name="recording_sessions"
