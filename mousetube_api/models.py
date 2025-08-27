@@ -838,12 +838,12 @@ class RecordingSession(models.Model):
                         f"Hardware {hardware.name} is not valid for acquisition."
                     )
 
-        # 🔹 Vérification du protocole pour publication
+        #  Check if protocol exist before recording session publication
         if self.status == "published" and self.protocol is None:
             raise ValidationError(
                 "Cannot publish a recording session without a protocol."
             )
-        # 🔹 Vérification de la date pour les sessions multiples
+        #  Check date for multiple sessions
         if not self.is_multiple and self.date is None:
             raise ValidationError(
                 "A single recording session must have a precise start date."

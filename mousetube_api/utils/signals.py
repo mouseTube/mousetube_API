@@ -29,7 +29,6 @@ def delete_software_if_no_versions(sender, instance, **kwargs):
     try:
         software = instance.software
     except ObjectDoesNotExist:
-        # Le software parent a déjà été supprimé (CASCADE)
         return
 
     if not software.versions.exists():

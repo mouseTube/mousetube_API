@@ -7,7 +7,6 @@ PHENOMIN, CNRS UMR7104, INSERM U964, Université de Strasbourg
 Code under GPL v3.0 licence
 """
 
-# from djoser.serializers import UserSerializer
 from rest_framework import serializers
 from django_countries.serializer_fields import CountryField
 from django.db.models import Count, Q
@@ -355,7 +354,7 @@ class StudyShortSerializer(serializers.ModelSerializer):
 
 
 class RecordingSessionSerializer(serializers.ModelSerializer):
-    # ---- Nested serializers pour GET (read only) ----
+    # ---- Nested serializers GET (read only) ----
     protocol = ProtocolSerializer(read_only=True)
     studies = StudyShortSerializer(many=True, read_only=True)
     laboratory = LaboratorySerializer(read_only=True)
@@ -376,7 +375,7 @@ class RecordingSessionSerializer(serializers.ModelSerializer):
         many=True, read_only=True
     )
 
-    # ---- Write fields pour POST/PUT/PATCH ----
+    # ---- Write fields POST/PUT/PATCH ----
     protocol_id = serializers.PrimaryKeyRelatedField(
         queryset=Protocol.objects.all(),
         source="protocol",
@@ -441,7 +440,6 @@ class RecordingSessionSerializer(serializers.ModelSerializer):
         required=False,
     )
 
-    # ---- Champs simples "aplatis" ----
     equipment_channels = serializers.CharField(
         required=False, allow_null=True, allow_blank=True
     )

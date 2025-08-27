@@ -1,7 +1,7 @@
 #!/bin/sh
 
 if [ -z "$DOMAIN" ]; then
-    echo "❌ DOMAIN n'est pas défini."
+    echo "❌ DOMAIN is not set."
     exit 1
 fi
 

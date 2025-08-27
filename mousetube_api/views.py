@@ -146,14 +146,12 @@ class FilePagination(PageNumberPagination):
 
 class IsCreatorOrReadOnly(permissions.BasePermission):
     """
-    Autorise seulement le créateur (created_by) à modifier ou supprimer.
+    Custom permission to only allow the creator of an object to edit or delete it.
     """
 
     def has_object_permission(self, request, view, obj):
-        # Lecture autorisée pour tout le monde
         if request.method in permissions.SAFE_METHODS:
             return True
-        # Modification/suppression uniquement si le user est le créateur
         return obj.created_by == request.user
 
 
@@ -324,11 +322,6 @@ class HardwareDetailAPIView(APIView):
             return [IsAuthenticated()]
         return [AllowAny()]
 
-    @extend_schema(
-        parameters=[
-            # ici tu peux documenter le paramètre pk si tu veux
-        ]
-    )
     def get(self, request, pk, *args, **kwargs):
         hardware = get_object_or_404(Hardware, pk=pk)
         serializer = self.serializer_class(hardware)
@@ -823,41 +816,6 @@ class SoftwareViewSet(viewsets.ModelViewSet):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
-# class SoftwareDetailAPIView(APIView):
-#     serializer_class = SoftwareSerializer
-
-#     def get_permissions(self):
-#         if self.request.method in ["PUT", "PATCH", "DELETE"]:
-#             return [IsAuthenticated()]
-#         return [AllowAny()]
-
-#     def get(self, request, pk, *args, **kwargs):
-#         software = get_object_or_404(Software, pk=pk)
-#         serializer = self.serializer_class(software)
-#         return Response(serializer.data)
-
-#     def put(self, request, pk, *args, **kwargs):
-#         software = get_object_or_404(Software, pk=pk)
-#         serializer = self.serializer_class(software, data=request.data)
-#         if serializer.is_valid():
-#             serializer.save()
-#             return Response(serializer.data)
-#         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-#     def patch(self, request, pk, *args, **kwargs):
-#         software = get_object_or_404(Software, pk=pk)
-#         serializer = self.serializer_class(software, data=request.data, partial=True)
-#         if serializer.is_valid():
-#             serializer.save()
-#             return Response(serializer.data)
-#         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-#     def delete(self, request, pk, *args, **kwargs):
-#         software = get_object_or_404(Software, pk=pk)
-#         software.delete()
-#         return Response(status=status.HTTP_204_NO_CONTENT)
-
-
 class SoftwareVersionViewSet(viewsets.ModelViewSet):
     serializer_class = SoftwareVersionSerializer
     permission_classes = [IsCreatorOrReadOnly]
@@ -867,7 +825,6 @@ class SoftwareVersionViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         queryset = SoftwareVersion.objects.all().order_by("software__name", "version")
 
-        # Recherche textuelle
         search_query = self.request.query_params.get("search")
         if search_query:
             queryset = queryset.filter(
@@ -875,7 +832,6 @@ class SoftwareVersionViewSet(viewsets.ModelViewSet):
                 | Q(version__icontains=search_query)
             )
 
-        # Annoter uniquement pour le détail
         if self.action == "retrieve":
             queryset = queryset.annotate(
                 linked_sessions_count=Count("recording_sessions_as_software"),
@@ -893,7 +849,6 @@ class SoftwareVersionViewSet(viewsets.ModelViewSet):
         serializer.save(created_by=self.request.user)
 
     def _check_editable(self, version: SoftwareVersion):
-        """Vérifie si la version peut être éditée/supprimée."""
         other_sessions_count = version.recording_sessions_as_software.exclude(
             created_by=self.request.user
         ).count()
