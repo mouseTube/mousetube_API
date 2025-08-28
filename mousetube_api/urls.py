@@ -28,7 +28,8 @@ from django.conf.urls.static import static
 from .views import (
     RepositoryAPIView,
     LegacyUserAPIView,
-    UserProfileAPIView,
+    UserProfileListAPIView,
+    UserProfileDetailAPIView,
     ProtocolViewSet,
     FileAPIView,
     FileDetailAPIView,
@@ -92,10 +93,10 @@ urlpatterns = [
     path("api/repository/", RepositoryAPIView.as_view(), name="repository"),
     path("api/reference/", ReferenceAPIView.as_view(), name="reference"),
     path("api/legacy_user/", LegacyUserAPIView.as_view(), name="legacy_user"),
-    path("api/user_profile/", UserProfileAPIView.as_view(), name="user_profile"),
+    path("api/user_profile/", UserProfileListAPIView.as_view(), name="user_profile"),
     path(
         "api/user_profile/<int:pk>/",
-        UserProfileAPIView.as_view(),
+        UserProfileDetailAPIView.as_view(),
         name="user_profile-detail",
     ),
     # path("api/species/", SpeciesAPIView.as_view(), name="species"),
