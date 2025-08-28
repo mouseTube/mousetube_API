@@ -432,7 +432,7 @@ class SubjectViewSet(viewsets.ModelViewSet):
 
 
 class ProtocolViewSet(viewsets.ModelViewSet):
-    queryset = Protocol.objects.all()
+    queryset = Protocol.objects.all().order_by('name')
     serializer_class = ProtocolSerializer
 
     def get_permissions(self):
