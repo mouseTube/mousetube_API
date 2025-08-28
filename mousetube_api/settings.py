@@ -239,6 +239,16 @@ REST_FRAMEWORK = {
     ],
 }
 
+SPECTACULAR_SETTINGS = {
+    "TITLE": "Mousetube API",
+    "DESCRIPTION": "API Documentation",
+    "VERSION": "1.0.0",
+    "PREPROCESSING_HOOKS": [
+        "mousetube_api.utils.swagger_hooks.remove_auth_paths",
+    ],
+    "SERVE_INCLUDE_SCHEMA": False,
+}
+
 SITE_ID = 1
 
 SOCIALACCOUNT_PROVIDERS = {

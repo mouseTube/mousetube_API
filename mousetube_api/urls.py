@@ -33,8 +33,6 @@ from .views import (
     ProtocolViewSet,
     FileAPIView,
     FileDetailAPIView,
-    # SoftwareAPIView,
-    # SoftwareDetailAPIView,
     HardwareDetailAPIView,
     SoftwareVersionViewSet,
     HardwareAPIView,
@@ -51,9 +49,6 @@ from .views import (
     StrainViewSet,
     LaboratoryAPIView,
     SoftwareViewSet,
-    # init_orcid_connect,
-    # orcid_custom_login
-    # OrcidOAuth2LoginView
 )
 from django.views.static import serve
 from rest_framework.routers import DefaultRouter
@@ -99,16 +94,7 @@ urlpatterns = [
         UserProfileDetailAPIView.as_view(),
         name="user_profile-detail",
     ),
-    # path("api/species/", SpeciesAPIView.as_view(), name="species"),
-    # path("api/strain/", StrainAPIView.as_view(), name="strain"),
-    # path("api/protocol/", ProtocolAPIView.as_view(), name="protocol"),
     path("api/file/", FileAPIView.as_view(), name="file"),
-    # path("api/software/", SoftwareAPIView.as_view(), name="software"),
-    # path(
-    #     "api/software/<int:pk>/",
-    #     SoftwareDetailAPIView.as_view(),
-    #     name="software-detail",
-    # ),
     path("api/hardware/", HardwareAPIView.as_view(), name="hardware"),
     path(
         "api/hardware/<int:pk>/",
@@ -116,14 +102,6 @@ urlpatterns = [
         name="hardware-detail",
     ),
     path("api/country/", CountryAPIView.as_view(), name="country"),
-    # path("api/subject/", SubjectAPIView.as_view(), name="subject"),
-    # path("api/subject/<int:pk>/", SubjectAPIView.as_view(), name="subject-detail"),
-    # path(
-    #     "api/recording_session/",
-    #     RecordingSessionAPIView.as_view(),
-    #     name="recording-session",
-    # ),
-    # path('api/recording-session/<int:pk>/', RecordingSessionAPIView.as_view(), name='recording-session-detail'),
     path("api/file/<int:pk>/", FileDetailAPIView.as_view(), name="file-detail"),
     path("api/track-page/", TrackPageView.as_view(), name="track-page"),
     path(
