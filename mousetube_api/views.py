@@ -62,17 +62,19 @@ from django.utils.timezone import now
 from django.db.models import F
 from django.core.cache import cache
 from django.core.management import call_command
-from drf_spectacular.utils import extend_schema, OpenApiParameter, extend_schema_serializer
+from drf_spectacular.utils import (
+    extend_schema,
+    OpenApiParameter,
+    extend_schema_serializer,
+)
 from django.shortcuts import render
 from django.conf import settings
 import os
 from rest_framework.permissions import (
     IsAuthenticated,
-    IsAuthenticatedOrReadOnly,
     AllowAny,
 )
 from django.shortcuts import get_object_or_404
-
 
 
 # ----------------------------
@@ -146,6 +148,7 @@ class LinkOrcidView(APIView):
 
         return Response({"status": "linked"}, status=status.HTTP_200_OK)
 
+
 # ----------------------------
 # Pagination
 # ----------------------------
@@ -198,7 +201,6 @@ class LaboratoryAPIView(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
-
 
 
 # ----------------------------
@@ -337,7 +339,7 @@ class HardwareAPIView(GenericAPIView):
             OpenApiParameter(
                 name="filter", description="filter by type", required=False, type=str
             ),
-        ]
+        ],
     )
     def get(self, request, *args, **kwargs):
         search_query = request.GET.get("search", "")
@@ -432,7 +434,7 @@ class SubjectViewSet(viewsets.ModelViewSet):
 
 
 class ProtocolViewSet(viewsets.ModelViewSet):
-    queryset = Protocol.objects.all().order_by('name')
+    queryset = Protocol.objects.all().order_by("name")
     serializer_class = ProtocolSerializer
 
     def get_permissions(self):
@@ -533,7 +535,7 @@ class FileAPIView(GenericAPIView):
             OpenApiParameter(
                 name="filter", description="filter", required=False, type=str
             ),
-        ]
+        ],
     )
     def get(self, request, *args, **kwargs):
         search_query = request.GET.get("search", "")
