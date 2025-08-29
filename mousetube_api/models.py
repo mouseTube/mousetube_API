@@ -332,8 +332,8 @@ class Protocol(models.Model):
     """
 
     name = models.CharField(max_length=255)
-    description = models.TextField(default="")
-    user = models.ForeignKey(LegacyUser, on_delete=models.CASCADE)
+    description = models.TextField(blank=True, null=True)
+    user = models.ForeignKey(LegacyUser, on_delete=models.CASCADE, null=True, blank=True)
     # Animals
     animals_sex = models.CharField(
         max_length=32,
@@ -732,7 +732,7 @@ class RecordingSession(models.Model):
         null=True,
         default="°C",
     )
-    context_brightness = models.FloatField(blank=True, null=True)
+    context_brightness = models.FloatField(help_text="in Lux", blank=True, null=True)
     equipment_acquisition_software = models.ManyToManyField(
         SoftwareVersion,
         blank=True,

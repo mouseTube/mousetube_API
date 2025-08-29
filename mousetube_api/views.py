@@ -188,7 +188,7 @@ class CountryAPIView(APIView):
 # Laboratory
 # ----------------------------
 class LaboratoryAPIView(viewsets.ModelViewSet):
-    queryset = Laboratory.objects.all()
+    queryset = Laboratory.objects.all().order_by("name")
     serializer_class = LaboratorySerializer
 
     def get_permissions(self):
@@ -431,11 +431,21 @@ class SubjectViewSet(viewsets.ModelViewSet):
         if self.action in ["update", "partial_update", "destroy"]:
             return [IsAuthenticated(), IsCreatorOrReadOnly()]
         return [permissions.AllowAny()]
+    
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
 
 
 class ProtocolViewSet(viewsets.ModelViewSet):
     queryset = Protocol.objects.all().order_by("name")
     serializer_class = ProtocolSerializer
+
+    filter_backends = [
+        filters.SearchFilter,
+        DjangoFilterBackend,
+        filters.OrderingFilter,
+    ]
+    search_fields = ["name", "description"]
 
     def get_permissions(self):
         if self.action == "create":
@@ -443,6 +453,9 @@ class ProtocolViewSet(viewsets.ModelViewSet):
         if self.action in ["update", "partial_update", "destroy"]:
             return [IsAuthenticated(), IsCreatorOrReadOnly()]
         return [permissions.AllowAny()]
+    
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
 
 
 class SpeciesViewSet(viewsets.ModelViewSet):
@@ -455,6 +468,9 @@ class SpeciesViewSet(viewsets.ModelViewSet):
         if self.action in ["update", "partial_update", "destroy"]:
             return [IsAuthenticated(), IsCreatorOrReadOnly()]
         return [permissions.AllowAny()]
+    
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
 
 
 class StrainViewSet(viewsets.ModelViewSet):
@@ -467,6 +483,9 @@ class StrainViewSet(viewsets.ModelViewSet):
         if self.action in ["update", "partial_update", "destroy"]:
             return [IsAuthenticated(), IsCreatorOrReadOnly()]
         return [permissions.AllowAny()]
+    
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
 
 
 class AnimalProfileViewSet(viewsets.ModelViewSet):
@@ -485,7 +504,7 @@ class AnimalProfileViewSet(viewsets.ModelViewSet):
 
 
 class StudyViewSet(viewsets.ModelViewSet):
-    queryset = Study.objects.all()
+    queryset = Study.objects.all().order_by("name")
     serializer_class = StudySerializer
 
     def get_permissions(self):
