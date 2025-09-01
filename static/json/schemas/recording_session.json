@@ -1,148 +1,150 @@
 {
-	"$schema": "http://json-schema.org/draft-07/schema#",
-	"title": "RecordingSession",
-	"description": "recording session description",
 	"type": "object",
 	"properties": {
-		"name": {
-			"description": "name of the recording session",
-			"type": "string"
-		},
-		"description": {
-			"description": "description of the recording session",
-			"type": "string"
-		},
-		"studies": {
-			"description": "List of studies associated with the recording session",
-			"type": "array",
-			"items": {
-				"$ref": "study.json"
-			}
-		},
-		"protocol": {
-			"$ref": "protocol.json"
-		},
-		"date": {
-			"description": "Date when the recording was made (YYY-MM-DD hh:mm:ss).",
-			"type": "string",
-			"format": "date-time"
-		},
-		"duration": {
-					"description": "duration of the recording in seconds",
-					"type": "integer"
-		},
-		"laboratory": {
-            "description": "Name or identifier of the laboratory where the recording was performed.",
-            "type": "string"
-        },
-		"animal_profiles": {
-			"description": "List of animal profiles involved in the session",
-			"type": "array",
-			"items": {
-				"$ref": "animal_profile.json"
-			}
-		},
-		"equipment": {
-			"description": "equipment used for the recording",
-			"type": "object",
-			"properties": {
-				"soundcards": {
-					"description": "List of soundcards used for acquisition",
-					"type": "array",
-					"items": {
-						"$ref": "hardware.json"
-					}
-				},
-				"microphones": {
-					"description": "List of microphones used for acquisition",
-					"type": "array",
-					"items": {
-						"$ref": "hardware.json"
-					}
-				},
-				"amplifiers": {
-					"description": "List of amplifiers used for acquisition",
-					"type": "array",
-					"items": {
-						"$ref": "hardware.json"
-					}
-				},
-				"speakers": {
-					"description": "List of speakers used for acquisition",
-					"type": "array",
-					"items": {
-						"$ref": "hardware.json"
-					}
-				},
-				"acquisition_software": {
-					"description": "Software and their versions used to record audio",
-					"type": "array",
-					"items": {
-						"type": "object",
-						"properties": {
-							"software": {
-								"$ref": "software.json"
-							},
-							"version": {
-								"description": "Version of the software used",
-								"type": "string",
-								"pattern": "^(\\d+\\.)?(\\d+\\.)?(\\*|\\d+)$"
-							},
-							"release_date": {
-								"description": "Release date of the software version",
-								"type": "string",
-								"format": "date"
-							}
-						},
-						"required": ["software"],
-						"additionalProperties": false
-					}
-				},
-				"channels": {
-					"description": "Number of microphones used for recording",
-					"type": "string",
-					"enum": [
-						"mono",
-						"stereo",
-						"more than 2"
-					]
-				},
-				"sound_isolation": {
-					"description": "Presence of a sound attenuating chamber",
-					"type": "string",
-					"enum": [
-						"soundproof room",
-						"soundproof cage",
-						"no specific sound isolation"
-					]
-				}
-			}
-		},
-        "context": {
-			"description": "experimental context used for the recording session",
-			"type": "object",
-			"properties": {
-				"temperature": {
-					"description": "Temperature during the recording",
-  					"type": "object",
-					"properties": {
-						"value": {
-							"description": "value of the temperature",
-							"type": "integer"
-						},
-						"unit": {
-							"description": "unit of the temperature",
-							"type": "string",
-							"enum": ["°C", "°F"]
-						}
-					},
-					"required": ["value", "unit"]
-				},
-				"brightness": {
-					"description": "brightness of the recording environment in Lux",
-					"type": "integer"
-				}
-			}
+	  "name": {
+		"type": "string",
+		"title": "Session Name",
+		"description": "Name of the recording session (must be unique per user)."
+	  },
+	  "description": {
+		"type": "string",
+		"title": "Description",
+		"description": "Optional description of the recording session."
+	  },
+	  "studies": {
+		"type": "array",
+		"title": "Associated Studies",
+		"description": "List of studies associated with this recording session.",
+		"items": {
+		  "$ref": "study.json"
 		}
-    }
-}
+	  },
+	  "date": {
+		"type": "string",
+		"format": "date-time",
+		"title": "Recording Date",
+		"description": "Date and time when the recording session was conducted."
+	  },
+	  "duration": {
+		"type": "integer",
+		"title": "Duration (seconds)",
+		"description": "Duration of the recording session in seconds."
+	  },
+	  "laboratory": {
+		"$ref": "laboratory.json",
+		"title": "Laboratory",
+		"description": "Laboratory where the session was conducted."
+	  },
+	  "equipment": {
+		"type": "object",
+		"title": "Equipment Used",
+		"description": "Equipment used during the recording session.",
+		"properties": {
+		  "soundcards": {
+			"type": "array",
+			"title": "Soundcards",
+			"description": "Soundcards used during acquisition (required if used).",
+			"items": {
+			  "$ref": "hardware.json"
+			}
+		  },
+		  "microphones": {
+			"type": "array",
+			"title": "Microphones",
+			"description": "Microphones used during acquisition (required if used).",
+			"items": {
+			  "$ref": "hardware.json"
+			}
+		  },
+		  "amplifiers": {
+			"type": "array",
+			"title": "Amplifiers",
+			"description": "Amplifiers used during acquisition (optional).",
+			"items": {
+			  "$ref": "hardware.json"
+			}
+		  },
+		  "speakers": {
+			"type": "array",
+			"title": "Speakers",
+			"description": "Speakers used during acquisition (optional).",
+			"items": {
+			  "$ref": "hardware.json"
+			}
+		  },
+		  "acquisition_software": {
+			"type": "array",
+			"title": "Acquisition Software",
+			"description": "Software used for recording audio (required if used).",
+			"items": {
+			  "type": "object",
+			  "properties": {
+				"software": {
+				  "$ref": "software.json"
+				},
+				"version": {
+				  "type": "string",
+				  "pattern": "^(\\d+\\.)?(\\d+\\.)?(\\*|\\d+)$",
+				  "title": "Version",
+				  "description": "Version of the software used."
+				},
+				"release_date": {
+				  "type": "string",
+				  "format": "date",
+				  "title": "Release Date",
+				  "description": "Release date of the software version."
+				}
+			  },
+			  "required": ["software"],
+			  "additionalProperties": false
+			}
+		  },
+		  "channels": {
+			"type": "string",
+			"enum": ["mono", "stereo", "more than 2"],
+			"title": "Channels",
+			"description": "Number of microphones used during recording."
+		  },
+		  "sound_isolation": {
+			"type": "string",
+			"enum": ["soundproof room", "soundproof cage", "no specific sound isolation"],
+			"title": "Sound Isolation",
+			"description": "Sound isolation used during recording."
+		  }
+		},
+		"required": ["soundcards", "microphones", "acquisition_software"]
+	  },
+	  "context": {
+		"type": "object",
+		"title": "Context",
+		"description": "Environmental context during the recording session.",
+		"properties": {
+		  "temperature": {
+			"type": "object",
+			"title": "Temperature",
+			"properties": {
+			  "value": {
+				"type": "integer",
+				"title": "Temperature Value",
+				"description": "Value of the temperature during recording."
+			  },
+			  "unit": {
+				"type": "string",
+				"enum": ["°C", "°F"],
+				"title": "Temperature Unit",
+				"description": "Unit of the temperature measurement."
+			  }
+			},
+			"required": ["value", "unit"]
+		  },
+		  "brightness": {
+			"type": "integer",
+			"title": "Brightness (Lux)",
+			"description": "Brightness of the recording environment in Lux."
+		  }
+		}
+	  }
+	},
+	"required": ["name", "equipment"]
+  }
+  

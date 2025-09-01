@@ -652,10 +652,12 @@ class RecordingSession(models.Model):
 
     Attributes:
         name (str): The name of the experiment.
+        is_multiple (bool): Indicates if the experiment represents multiple recording sessions.
         protocol (Protocol): The protocol associated with the experiment.
         studies (ManyToManyField): The studies associated with the experiment.
         description (str, optional): A description of the experiment.
         date (date, optional): The date of the experiment.
+        status (str, optional): The status of the experiment.
         duration (int, optional): The duration of the experiment in seconds.
         temperature (str, optional): The temperature during the experiment.
         equipment_acquisition_hardware_soundcard (ManyToManyField): Soundcards used for data acquisition.
@@ -683,13 +685,32 @@ class RecordingSession(models.Model):
         ("no specific sound isolation", "No specific sound isolation"),
     ]
 
+    STATUS = [
+        ("draft", "Draft"),
+        ("published", "Published"),
+    ]
+
     name = models.CharField(max_length=255, unique=True)
-    protocol = models.ForeignKey(Protocol, on_delete=models.CASCADE)
+    is_multiple = models.BooleanField(
+        default=False,
+        help_text=(
+            "If checked, this represents a multiple/plural recording session "
+            "with no precise start date."
+        ),
+    )
+    protocol = models.ForeignKey(
+        Protocol, on_delete=models.SET_NULL, null=True, blank=True
+    )
     studies = models.ManyToManyField(
         Study, blank=True, related_name="recording_sessions"
     )
     description = models.TextField(blank=True, null=True)
     date = models.DateTimeField(blank=True, null=True)
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS,
+        default="draft",
+    )
     duration = models.PositiveIntegerField(
         blank=True, null=True, help_text="Duration in seconds"
     )
@@ -783,43 +804,54 @@ class RecordingSession(models.Model):
         return self.name
 
     def clean(self):
-        # Check if the software is valid for acquisition
-        for software_version in self.equipment_acquisition_software.all():
-            if software_version.software.type not in [
-                "acquisition",
-                "acquisition and analysis",
-            ]:
-                raise ValidationError(
-                    f"Software {software_version} is not valid for acquisition."
-                )
+        if self.pk:
+            for software_version in self.equipment_acquisition_software.all():
+                if software_version.software.type not in [
+                    "acquisition",
+                    "acquisition and analysis",
+                ]:
+                    raise ValidationError(
+                        f"Software {software_version} is not valid for acquisition."
+                    )
 
-        # Check if the hardware soundcard is valid for acquisition
-        for hardware in self.equipment_acquisition_hardware_soundcards.all():
-            if hardware.type not in ["soundcard"]:
-                raise ValidationError(
-                    f"Hardware {hardware.name} is not valid for acquisition."
-                )
+            for hardware in self.equipment_acquisition_hardware_soundcards.all():
+                if hardware.type not in ["soundcard"]:
+                    raise ValidationError(
+                        f"Hardware {hardware.name} is not valid for acquisition."
+                    )
 
-        # Check if the hardware speaker is valid for acquisition
-        for hardware in self.equipment_acquisition_hardware_speakers.all():
-            if hardware.type not in ["speaker"]:
-                raise ValidationError(
-                    f"Hardware {hardware.name} is not valid for acquisition."
-                )
+            for hardware in self.equipment_acquisition_hardware_speakers.all():
+                if hardware.type not in ["speaker"]:
+                    raise ValidationError(
+                        f"Hardware {hardware.name} is not valid for acquisition."
+                    )
 
-        # Check if the hardware amplifier is valid for acquisition
-        for hardware in self.equipment_acquisition_hardware_amplifiers.all():
-            if hardware.type not in ["amplifier"]:
-                raise ValidationError(
-                    f"Hardware {hardware.name} is not valid for acquisition."
-                )
+            for hardware in self.equipment_acquisition_hardware_amplifiers.all():
+                if hardware.type not in ["amplifier"]:
+                    raise ValidationError(
+                        f"Hardware {hardware.name} is not valid for acquisition."
+                    )
 
-        # Check if the hardware microphone is valid for acquisition
-        for hardware in self.equipment_acquisition_hardware_microphones.all():
-            if hardware.type not in ["microphone"]:
-                raise ValidationError(
-                    f"Hardware {hardware.name} is not valid for acquisition."
-                )
+            for hardware in self.equipment_acquisition_hardware_microphones.all():
+                if hardware.type not in ["microphone"]:
+                    raise ValidationError(
+                        f"Hardware {hardware.name} is not valid for acquisition."
+                    )
+
+        #  Check if protocol exist before recording session publication
+        if self.status == "published" and self.protocol is None:
+            raise ValidationError(
+                "Cannot publish a recording session without a protocol."
+            )
+        #  Check date for multiple sessions
+        if not self.is_multiple and self.date is None:
+            raise ValidationError(
+                "A single recording session must have a precise start date."
+            )
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
 
     class Meta:
         verbose_name = "Recording Session"

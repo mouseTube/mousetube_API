@@ -10,15 +10,21 @@ Code under GPL v3.0 licence
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.pagination import PageNumberPagination
+from rest_framework import permissions
 import json
-from rest_framework import status
+from rest_framework import viewsets, status, filters
+from django_filters.rest_framework import DjangoFilterBackend
 from django.http import Http404
+from rest_framework.exceptions import PermissionDenied
+from django.db.models import Count, Q, Sum
+from rest_framework.generics import GenericAPIView
 from .models import (
     Repository,
     Reference,
     LegacyUser,
     UserProfile,
     Software,
+    SoftwareVersion,
     Hardware,
     Species,
     Strain,
@@ -28,17 +34,22 @@ from .models import (
     RecordingSession,
     PageView,
     Study,
+    AnimalProfile,
+    Laboratory,
 )
 from .serializers import (
     SpeciesSerializer,
     StrainSerializer,
+    AnimalProfileSerializer,
+    LaboratorySerializer,
     ProtocolSerializer,
     FileSerializer,
     HardwareSerializer,
     SoftwareSerializer,
+    SoftwareVersionSerializer,
     RepositorySerializer,
     ReferenceSerializer,
-    UserSerializer,
+    LegacyUserSerializer,
     UserProfileSerializer,
     TrackPageSerializer,
     SubjectSerializer,
@@ -47,19 +58,32 @@ from .serializers import (
     StudySerializer,
 )
 from django_countries import countries
-from django.db.models import Q
 from django.utils.timezone import now
 from django.db.models import F
 from django.core.cache import cache
 from django.core.management import call_command
-from drf_spectacular.utils import extend_schema, OpenApiParameter
+from drf_spectacular.utils import (
+    extend_schema,
+    OpenApiParameter,
+    extend_schema_serializer,
+)
 from django.shortcuts import render
 from django.conf import settings
 import os
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import (
+    IsAuthenticated,
+    AllowAny,
+)
 from django.shortcuts import get_object_or_404
 
 
+# ----------------------------
+# Link ORCID
+# ----------------------------
+@extend_schema(
+    request=None,
+    responses={200: dict, 400: dict, 409: dict},
+)
 class LinkOrcidView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -125,18 +149,63 @@ class LinkOrcidView(APIView):
         return Response({"status": "linked"}, status=status.HTTP_200_OK)
 
 
+# ----------------------------
+# Pagination
+# ----------------------------
 class FilePagination(PageNumberPagination):
-    page_size = 5
+    page_size = 10
     page_size_query_param = "page_size"
     max_page_size = 100
 
 
+# ----------------------------
+# Permissions
+# ----------------------------
+class IsCreatorOrReadOnly(permissions.BasePermission):
+    """
+    Custom permission to only allow the creator of an object to edit or delete it.
+    """
+
+    def has_object_permission(self, request, view, obj):
+        if request.method in permissions.SAFE_METHODS:
+            return True
+        return obj.created_by == request.user
+
+
+# ----------------------------
+# Country
+# ----------------------------
+@extend_schema(
+    request=None,
+    responses={200: dict},
+)
 class CountryAPIView(APIView):
-    def get(self, *arg, **kwargs):
-        country = countries
-        return Response(country)
+    def get(self, request, *args, **kwargs):
+        return Response(countries)
 
 
+# ----------------------------
+# Laboratory
+# ----------------------------
+class LaboratoryAPIView(viewsets.ModelViewSet):
+    queryset = Laboratory.objects.all()
+    serializer_class = LaboratorySerializer
+
+    def get_permissions(self):
+        if self.action in ["create"]:
+            return [permissions.IsAuthenticated()]
+        if self.action in ["update", "partial_update", "destroy"]:
+            return [permissions.IsAuthenticated(), IsCreatorOrReadOnly()]
+        # list / retrieve
+        return [permissions.AllowAny()]
+
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
+
+
+# ----------------------------
+# Repository
+# ----------------------------
 class RepositoryAPIView(APIView):
     serializer_class = RepositorySerializer
 
@@ -171,8 +240,20 @@ class RepositoryAPIView(APIView):
         return paginator.get_paginated_response(serializer.data)
 
 
-class ReferenceAPIView(APIView):
-    serializer_class = ReferenceSerializer
+# ----------------------------
+# Reference
+# ----------------------------
+@extend_schema_serializer(component_name="ReferenceNested")
+class ReferenceSerializerNested(ReferenceSerializer):
+    pass
+
+
+@extend_schema(
+    request=None,
+    responses={200: ReferenceSerializerNested(many=True)},
+)
+class ReferenceAPIView(GenericAPIView):
+    serializer_class = ReferenceSerializerNested
 
     def get(self, request, *args, **kwargs):
         queryset = Reference.objects.all()
@@ -180,8 +261,11 @@ class ReferenceAPIView(APIView):
         return Response(serializer.data)
 
 
-class LegacyUserAPIView(APIView):
-    serializer_class = UserSerializer
+# ----------------------------
+# LegacyUser
+# ----------------------------
+class LegacyUserAPIView(GenericAPIView):
+    serializer_class = LegacyUserSerializer
 
     def get(self, request, *args, **kwargs):
         queryset = LegacyUser.objects.all()
@@ -189,10 +273,14 @@ class LegacyUserAPIView(APIView):
         return Response(serializer.data)
 
 
-class UserProfileAPIView(APIView):
+# ----------------------------
+# UserProfile
+# ----------------------------
+class UserProfileListAPIView(GenericAPIView):
     serializer_class = UserProfileSerializer
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(operation_id="api_user_profile_list_get")
     def get(self, request, *args, **kwargs):
         queryset = UserProfile.objects.all()
         user_id = request.query_params.get("user_id")
@@ -201,6 +289,12 @@ class UserProfileAPIView(APIView):
         serializer = self.serializer_class(queryset, many=True)
         return Response(serializer.data)
 
+
+class UserProfileDetailAPIView(GenericAPIView):
+    serializer_class = UserProfileSerializer
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(operation_id="api_user_profile_detail_patch")
     def patch(self, request, *args, **kwargs):
         profile_id = kwargs.get("pk")
         if not profile_id:
@@ -225,28 +319,19 @@ class UserProfileAPIView(APIView):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-class SpeciesAPIView(APIView):
-    serializer_class = SpeciesSerializer
-
-    def get(self, request, *args, **kwargs):
-        queryset = Species.objects.all()
-        serializer = self.serializer_class(queryset, many=True)
-        return Response(serializer.data)
-
-
-class StrainAPIView(APIView):
-    serializer_class = StrainSerializer
-
-    def get(self, request, *args, **kwargs):
-        queryset = Strain.objects.all()
-        serializer = self.serializer_class(queryset, many=True)
-        return Response(serializer.data)
-
-
-class HardwareAPIView(APIView):
+# ----------------------------
+# Hardware
+# ----------------------------
+class HardwareAPIView(GenericAPIView):
     serializer_class = HardwareSerializer
 
+    def get_permissions(self):
+        if self.request.method == "POST":
+            return [IsAuthenticated()]
+        return [AllowAny()]
+
     @extend_schema(
+        operation_id="api_hardware_list",
         parameters=[
             OpenApiParameter(
                 name="search", description="text search", required=False, type=str
@@ -254,7 +339,7 @@ class HardwareAPIView(APIView):
             OpenApiParameter(
                 name="filter", description="filter by type", required=False, type=str
             ),
-        ]
+        ],
     )
     def get(self, request, *args, **kwargs):
         search_query = request.GET.get("search", "")
@@ -288,47 +373,161 @@ class HardwareAPIView(APIView):
         serializer = self.serializer_class(paginated_hardware, many=True)
         return paginator.get_paginated_response(serializer.data)
 
-
-class SubjectAPIView(APIView):
-    serializer_class = SubjectSerializer
-
-    def get(self, *arg, **kwargs):
-        subject = Subject.objects.all()
-        serializers = self.serializer_class(subject, many=True)
-        return Response(serializers.data)
-
-
-class ProtocolAPIView(APIView):
-    serializer_class = ProtocolSerializer
-
-    def get(self, *arg, **kwargs):
-        protocol = Protocol.objects.all()
-        serializers = self.serializer_class(protocol, many=True)
-        return Response(serializers.data)
+    def post(self, request, *args, **kwargs):
+        serializer = self.serializer_class(data=request.data)
+        if serializer.is_valid():
+            hardware = serializer.save()
+            return Response(
+                self.serializer_class(hardware).data, status=status.HTTP_201_CREATED
+            )
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-class StudyAPIView(APIView):
-    serializer_class = StudySerializer
+# ----------------------------
+# HardwareDetail
+# ----------------------------
+class HardwareDetailAPIView(GenericAPIView):
+    serializer_class = HardwareSerializer
 
-    def get(self, request, *args, **kwargs):
-        queryset = Study.objects.all()
-        serializer = self.serializer_class(queryset, many=True)
+    def get_permissions(self):
+        if self.request.method in ["PUT", "PATCH", "DELETE"]:
+            return [IsAuthenticated()]
+        return [AllowAny()]
+
+    def get(self, request, pk, *args, **kwargs):
+        hardware = get_object_or_404(Hardware, pk=pk)
+        serializer = self.serializer_class(hardware)
         return Response(serializer.data)
 
+    def put(self, request, pk, *args, **kwargs):
+        hardware = get_object_or_404(Hardware, pk=pk)
+        serializer = self.serializer_class(hardware, data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-class RecordingSessionAPIView(APIView):
+    def patch(self, request, pk, *args, **kwargs):
+        hardware = get_object_or_404(Hardware, pk=pk)
+        serializer = self.serializer_class(hardware, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    def delete(self, request, pk, *args, **kwargs):
+        hardware = get_object_or_404(Hardware, pk=pk)
+        hardware.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class SubjectViewSet(viewsets.ModelViewSet):
+    queryset = Subject.objects.all()
+    serializer_class = SubjectSerializer
+
+    def get_permissions(self):
+        if self.action == "create":
+            return [IsAuthenticated()]
+        if self.action in ["update", "partial_update", "destroy"]:
+            return [IsAuthenticated(), IsCreatorOrReadOnly()]
+        return [permissions.AllowAny()]
+
+
+class ProtocolViewSet(viewsets.ModelViewSet):
+    queryset = Protocol.objects.all()
+    serializer_class = ProtocolSerializer
+
+    def get_permissions(self):
+        if self.action == "create":
+            return [IsAuthenticated()]
+        if self.action in ["update", "partial_update", "destroy"]:
+            return [IsAuthenticated(), IsCreatorOrReadOnly()]
+        return [permissions.AllowAny()]
+
+
+class SpeciesViewSet(viewsets.ModelViewSet):
+    queryset = Species.objects.all()
+    serializer_class = SpeciesSerializer
+
+    def get_permissions(self):
+        if self.action == "create":
+            return [IsAuthenticated()]
+        if self.action in ["update", "partial_update", "destroy"]:
+            return [IsAuthenticated(), IsCreatorOrReadOnly()]
+        return [permissions.AllowAny()]
+
+
+class StrainViewSet(viewsets.ModelViewSet):
+    queryset = Strain.objects.all()
+    serializer_class = StrainSerializer
+
+    def get_permissions(self):
+        if self.action == "create":
+            return [IsAuthenticated()]
+        if self.action in ["update", "partial_update", "destroy"]:
+            return [IsAuthenticated(), IsCreatorOrReadOnly()]
+        return [permissions.AllowAny()]
+
+
+class AnimalProfileViewSet(viewsets.ModelViewSet):
+    queryset = AnimalProfile.objects.all()
+    serializer_class = AnimalProfileSerializer
+
+    def get_permissions(self):
+        if self.action == "create":
+            return [IsAuthenticated()]
+        if self.action in ["update", "partial_update", "destroy"]:
+            return [IsAuthenticated(), IsCreatorOrReadOnly()]
+        return [permissions.AllowAny()]
+
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
+
+
+class StudyViewSet(viewsets.ModelViewSet):
+    queryset = Study.objects.all()
+    serializer_class = StudySerializer
+
+    def get_permissions(self):
+        if self.action == "create":
+            return [IsAuthenticated()]
+        if self.action in ["update", "partial_update", "destroy"]:
+            return [IsAuthenticated(), IsCreatorOrReadOnly()]
+        return [permissions.AllowAny()]
+
+
+class RecordingSessionViewSet(viewsets.ModelViewSet):
+    queryset = RecordingSession.objects.all()
     serializer_class = RecordingSessionSerializer
+    permission_classes = [IsAuthenticated]
 
-    def get(self, *arg, **kwargs):
-        recording_session = RecordingSession.objects.all()
-        serializers = self.serializer_class(recording_session, many=True)
-        return Response(serializers.data)
+    filter_backends = [
+        filters.SearchFilter,
+        DjangoFilterBackend,
+        filters.OrderingFilter,
+    ]
+    search_fields = ["name", "description"]
+    filterset_fields = ["is_multiple"]
+    ordering_fields = ["name", "date", "status", "protocol__name", "laboratory__name"]
+    ordering = ["name"]
+
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
+
+    def get_queryset(self):
+        return RecordingSession.objects.filter(created_by=self.request.user)
 
 
-class FileAPIView(APIView):
+class FileAPIView(GenericAPIView):
     serializer_class = FileSerializer
 
+    def get_permissions(self):
+        if self.request.method == "POST":
+            return [IsAuthenticated()]
+        return [AllowAny()]
+
     @extend_schema(
+        operation_id="api_file_list",
         parameters=[
             OpenApiParameter(
                 name="search", description="text search", required=False, type=str
@@ -336,12 +535,20 @@ class FileAPIView(APIView):
             OpenApiParameter(
                 name="filter", description="filter", required=False, type=str
             ),
-        ]
+        ],
     )
     def get(self, request, *args, **kwargs):
         search_query = request.GET.get("search", "")
         filter_query = request.GET.get("filter", "")
+        recording_session_id = request.GET.get("recording_session")
         files = File.objects.all()
+        if recording_session_id:
+            try:
+                recording_session_id_int = int(recording_session_id)
+                files = files.filter(recording_session__id=recording_session_id_int)
+            except ValueError:
+                pass
+
         if search_query:
             file_fields = ["number", "link", "notes", "doi"]
 
@@ -508,8 +715,51 @@ class FileAPIView(APIView):
         serializer = self.serializer_class(paginated_files, many=True)
         return paginator.get_paginated_response(serializer.data)
 
+    def post(self, request, *args, **kwargs):
+        serializer = self.serializer_class(data=request.data)
+        if serializer.is_valid():
+            file = serializer.save()
+            return Response(
+                self.serializer_class(file).data, status=status.HTTP_201_CREATED
+            )
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-class FileDetailAPIView(APIView):
+
+class FileDetailAPIView(GenericAPIView):
+    serializer_class = FileSerializer
+
+    def get_permissions(self):
+        if self.request.method in ["PUT", "PATCH", "DELETE"]:
+            return [IsAuthenticated()]
+        return [AllowAny()]
+
+    def get_object(self, pk):
+        try:
+            return File.objects.get(pk=pk)
+        except File.DoesNotExist:
+            return None
+
+    def get(self, request, *args, **kwargs):
+        file = self.get_object(kwargs["pk"])
+        if not file:
+            return Response(
+                {"detail": "File not found"}, status=status.HTTP_404_NOT_FOUND
+            )
+        serializer = self.serializer_class(file)
+        return Response(serializer.data)
+
+    def put(self, request, *args, **kwargs):
+        file = self.get_object(kwargs["pk"])
+        if not file:
+            return Response(
+                {"detail": "File not found"}, status=status.HTTP_404_NOT_FOUND
+            )
+        serializer = self.serializer_class(file, data=request.data)
+        if serializer.is_valid():
+            file = serializer.save()
+            return Response(self.serializer_class(file).data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
     @extend_schema(exclude=True)
     def patch(self, request, *args, **kwargs):
         try:
@@ -535,25 +785,33 @@ class FileDetailAPIView(APIView):
             {"detail": "Invalid request body"}, status=status.HTTP_400_BAD_REQUEST
         )
 
+    def delete(self, request, *args, **kwargs):
+        file = self.get_object(kwargs["pk"])
+        if not file:
+            return Response(
+                {"detail": "File not found"}, status=status.HTTP_404_NOT_FOUND
+            )
+        file.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
-class SoftwareAPIView(APIView):
+
+@extend_schema(
+    parameters=[OpenApiParameter("id", type=int, location=OpenApiParameter.PATH)]
+)
+class SoftwareViewSet(viewsets.ModelViewSet):
     serializer_class = SoftwareSerializer
+    lookup_field = "pk"
 
-    @extend_schema(
-        parameters=[
-            OpenApiParameter(
-                name="search", description="text search", required=False, type=str
-            ),
-            OpenApiParameter(
-                name="filter", description="filter", required=False, type=str
-            ),
-        ]
-    )
-    def get(self, request, *args, **kwargs):
-        search_query = request.GET.get("search", "")
-        filter_query = request.GET.get("filter", "")
-        softwares = Software.objects.all()
+    def get_permissions(self):
+        if self.action in ["create"]:
+            return [permissions.IsAuthenticated()]
+        if self.action in ["update", "partial_update", "destroy"]:
+            return [permissions.IsAuthenticated(), IsCreatorOrReadOnly()]
+        return [permissions.AllowAny()]
 
+    def get_queryset(self):
+        qs = Software.objects.all()
+        search_query = self.request.GET.get("search", "")
         if search_query:
             software_fields = [
                 "name",
@@ -562,14 +820,7 @@ class SoftwareAPIView(APIView):
                 "description",
                 "technical_requirements",
             ]
-
-            reference_fields = [
-                "name",
-                "description",
-                "url",
-                "doi",
-            ]
-
+            reference_fields = ["name", "description", "url", "doi"]
             user_fields = [
                 "name_user",
                 "first_name_user",
@@ -580,39 +831,173 @@ class SoftwareAPIView(APIView):
                 "country_user",
             ]
 
-            # Build Q objects
-            software_query = Q()
-            for field in software_fields:
-                software_query |= Q(**{f"{field}__icontains": search_query})
+            q = Q()
+            for f in software_fields:
+                q |= Q(**{f"{f}__icontains": search_query})
+            for f in reference_fields:
+                q |= Q(**{f"references__{f}__icontains": search_query})
+            for f in user_fields:
+                q |= Q(**{f"users__{f}__icontains": search_query})
 
-            reference_query = Q()
-            for field in reference_fields:
-                reference_query |= Q(
-                    **{f"references__{field}__icontains": search_query}
-                )
+            qs = qs.filter(q).distinct()
 
-            user_query = Q()
-            for field in user_fields:
-                user_query |= Q(**{f"users__{field}__icontains": search_query})
-
-            # Combine all
-            softwares = softwares.filter(
-                software_query | reference_query | user_query
-            ).distinct()
-
+        filter_query = self.request.GET.get("filter")
         ALLOWED_FILTERS = ["acquisition", "analysis", "acquisition and analysis"]
+        if filter_query in ALLOWED_FILTERS:
+            qs = qs.filter(type=filter_query)
 
-        if filter_query and filter_query in ALLOWED_FILTERS:
-            softwares = softwares.filter(type=filter_query)
+        if self.action == "retrieve":
+            qs = SoftwareSerializer.annotate_queryset(
+                qs, user=self.request.user, detail=True
+            )
 
-        softwares = softwares.order_by("name")
+        return qs.order_by("name")
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context["detail"] = self.action == "retrieve"
+        context["user"] = self.request.user
+        return context
+
+    @extend_schema(
+        parameters=[
+            OpenApiParameter(
+                name="search", description="Text search", required=False, type=str
+            ),
+            OpenApiParameter(
+                name="filter", description="Type filter", required=False, type=str
+            ),
+        ]
+    )
+    def _check_editable(self, software):
+        other_sessions_count = (
+            software.versions.annotate(
+                cnt=Count(
+                    "recording_sessions_as_software",
+                    filter=~Q(
+                        recording_sessions_as_software__created_by=self.request.user
+                    ),
+                )
+            ).aggregate(total=Sum("cnt"))["total"]
+            or 0
+        )
+
+        if other_sessions_count > 0:
+            raise PermissionDenied(
+                "This software is linked to recording sessions from other users and cannot be edited or deleted."
+            )
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.get_queryset()
         paginator = FilePagination()
-        paginated_softwares = paginator.paginate_queryset(softwares, request)
-        serializer = self.serializer_class(paginated_softwares, many=True)
+        paginated = paginator.paginate_queryset(queryset, request)
+        serializer = self.get_serializer(paginated, many=True)
         return paginator.get_paginated_response(serializer.data)
 
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        software = serializer.save(created_by=request.user)
+        return Response(
+            self.get_serializer(software).data, status=status.HTTP_201_CREATED
+        )
 
-class TrackPageView(APIView):
+    def retrieve(self, request, *args, **kwargs):
+        software = self.get_object()
+        serializer = self.get_serializer(software)
+        return Response(serializer.data)
+
+    def update(self, request, *args, **kwargs):
+        software = self.get_object()
+        self._check_editable(software)
+        serializer = self.get_serializer(software, data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data)
+
+    def partial_update(self, request, *args, **kwargs):
+        software = self.get_object()
+        self._check_editable(software)
+        serializer = self.get_serializer(software, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data)
+
+    def destroy(self, request, *args, **kwargs):
+        software = self.get_object()
+        self._check_editable(software)
+        software.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+@extend_schema(
+    parameters=[OpenApiParameter("id", type=int, location=OpenApiParameter.PATH)]
+)
+class SoftwareVersionViewSet(viewsets.ModelViewSet):
+    serializer_class = SoftwareVersionSerializer
+    pagination_class = FilePagination
+    filterset_fields = ["software"]
+
+    def get_permissions(self):
+        if self.action in ["create"]:
+            return [permissions.IsAuthenticated()]
+        if self.action in ["update", "partial_update", "destroy"]:
+            return [permissions.IsAuthenticated(), IsCreatorOrReadOnly()]
+        return [permissions.AllowAny()]
+
+    def get_queryset(self):
+        queryset = SoftwareVersion.objects.all().order_by("software__name", "version")
+
+        search_query = self.request.query_params.get("search")
+        if search_query:
+            queryset = queryset.filter(
+                Q(software__name__icontains=search_query)
+                | Q(version__icontains=search_query)
+            )
+
+        if self.action == "retrieve":
+            queryset = queryset.annotate(
+                linked_sessions_count=Count("recording_sessions_as_software"),
+                linked_sessions_from_other_users=Count(
+                    "recording_sessions_as_software",
+                    filter=~Q(
+                        recording_sessions_as_software__created_by=self.request.user
+                    ),
+                ),
+            )
+
+        return queryset
+
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
+
+    def _check_editable(self, version: SoftwareVersion):
+        other_sessions_count = version.recording_sessions_as_software.exclude(
+            created_by=self.request.user
+        ).count()
+        if other_sessions_count > 0:
+            raise PermissionDenied(
+                "This software version is linked to recording sessions from other users "
+                "and cannot be edited or deleted."
+            )
+
+    def update(self, request, *args, **kwargs):
+        version = self.get_object()
+        self._check_editable(version)
+        return super().update(request, *args, **kwargs)
+
+    def partial_update(self, request, *args, **kwargs):
+        version = self.get_object()
+        self._check_editable(version)
+        return super().partial_update(request, *args, **kwargs)
+
+    def destroy(self, request, *args, **kwargs):
+        version = self.get_object()
+        self._check_editable(version)
+        return super().destroy(request, *args, **kwargs)
+
+
+class TrackPageView(GenericAPIView):
     serializer_class = TrackPageSerializer
 
     @extend_schema(exclude=True)
@@ -653,6 +1038,7 @@ def stats_view(request):
     return render(request, "stats_view.html", {"content": content})
 
 
+@extend_schema(exclude=True)
 class SchemaDetailView(APIView):
     """
     Return the content of a JSON schema file from static/json/schemas/,

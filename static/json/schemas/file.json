@@ -1,64 +1,74 @@
 {
-    "$schema": "http://json-schema.org/draft-07/schema#",
-    "title": "File",
-    "description": "Metadata for a single recording file.",
-    "type": "object",
-    "properties": {
-      "name": {
-        "description": "Name of the file.",
-        "type": "string"
-      },
-      "date": {
-        "description": "Date when the recording was made (ISO format).",
-        "type": "string",
-        "format": "date"
-      },
-      "duration": {
-        "description": "Duration of the recording in seconds.",
-        "type": "integer",
-        "minimum": 0
-      },
-      "format": {
-        "description": "File format of the recording (e.g., WAV, AVI).",
-        "type": "string",
-        "enum": ["WAV", "MP3", "FLAC", "OGG", "AIFF", "AVI", "MP4", "MOV", "MKV"]
-      },
-      "sampling_rate": {
-        "description": "Sampling rate of the recording in Hz (e.g., 300000).",
-        "type": "number",
-        "minimum": 1
-      },
-      "bit_depth": {
-        "description": "Bit depth of the recording (e.g., 16, 24).",
-        "type": "number",
-        "enum": [8, 16, 24, 32]
-      },
-      "notes": {
-        "description": "Optional notes about this specific file.",
-        "type": "string"
-      },
-      "size": {
-        "description": "Size of the file in bytes.",
-        "type": "integer",
-        "minimum": 0
-      },
-      "doi": {
-        "description": "Digital Object Identifier (DOI) for the file, if applicable.",
-        "type": "string",
-        "format": "uri"
-      },
-      "number": {
-        "description": "Number of vocalization in the recording, if applicable.",
-        "type": "integer",
-        "minimum": 1
-      },
-      "subjects": {
-        "description": "List of subjects (e.g., animals) involved in the recording.",
-        "type": "array",
-        "items": {
-				  "$ref": "subjects.json"
-			  }
-      }
+  "title": "File",
+  "description": "Metadata for a single recording file.",
+  "type": "object",
+  "properties": {
+    "name": {
+      "title": "File Name",
+      "description": "Name of the file.",
+      "type": "string"
     },
-    "required": ["sampling_rate", "bit_depth", "date", "name"]
-  }
+    "date": {
+      "title": "Recording Date",
+      "description": "Date when the recording was made (ISO format).",
+      "type": "string",
+      "format": "date"
+    },
+    "duration": {
+      "title": "Duration (seconds)",
+      "description": "Duration of the recording in seconds.",
+      "type": "integer",
+      "minimum": 0
+    },
+    "format": {
+      "title": "File Format",
+      "description": "File format of the recording (e.g., WAV, AVI).",
+      "type": "string",
+      "enum": ["WAV", "MP3", "FLAC", "OGG", "AIFF", "AVI", "MP4", "MOV", "MKV"]
+    },
+    "sampling_rate": {
+      "title": "Sampling Rate (Hz)",
+      "description": "Sampling rate of the recording in Hz (e.g., 300000).",
+      "type": "number",
+      "minimum": 1
+    },
+    "bit_depth": {
+      "title": "Bit Depth",
+      "description": "Bit depth of the recording (e.g., 16, 24).",
+      "type": "number",
+      "enum": [8, 16, 24, 32]
+    },
+    "notes": {
+      "title": "Notes",
+      "description": "Optional notes about this specific file.",
+      "type": "string"
+    },
+    "size": {
+      "title": "File Size (bytes)",
+      "description": "Size of the file in bytes.",
+      "type": "integer",
+      "minimum": 0
+    },
+    "doi": {
+      "title": "DOI",
+      "description": "Digital Object Identifier (DOI) for the file, if applicable.",
+      "type": "string",
+      "format": "uri"
+    },
+    "number": {
+      "title": "Vocalization Number",
+      "description": "Number of vocalizations in the recording, if applicable.",
+      "type": "integer",
+      "minimum": 1
+    },
+    "subjects": {
+      "title": "Subjects",
+      "description": "List of subjects (e.g., animals) involved in the recording.",
+      "type": "array",
+      "items": {
+        "$ref": "subjects.json"
+      }
+    }
+  },
+  "required": ["name", "date"]
+}

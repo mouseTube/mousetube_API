@@ -104,6 +104,7 @@ INSTALLED_APPS = [
     "drf_spectacular",
     "django_extensions",
     "django_countries",
+    "django_filters",
     "allauth",
     "allauth.account",
     "allauth.socialaccount",
@@ -236,6 +237,16 @@ REST_FRAMEWORK = {
         # 'rest_framework.permissions.DjangoModelPermissionsOrAnonReadOnly',
         "rest_framework.permissions.AllowAny",
     ],
+}
+
+SPECTACULAR_SETTINGS = {
+    "TITLE": "Mousetube API",
+    "DESCRIPTION": "API Documentation",
+    "VERSION": "1.0.0",
+    "PREPROCESSING_HOOKS": [
+        "mousetube_api.utils.swagger_hooks.remove_auth_paths",
+    ],
+    "SERVE_INCLUDE_SCHEMA": False,
 }
 
 SITE_ID = 1
