@@ -431,7 +431,7 @@ class SubjectViewSet(viewsets.ModelViewSet):
         if self.action in ["update", "partial_update", "destroy"]:
             return [IsAuthenticated(), IsCreatorOrReadOnly()]
         return [permissions.AllowAny()]
-    
+
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
 
@@ -453,7 +453,7 @@ class ProtocolViewSet(viewsets.ModelViewSet):
         if self.action in ["update", "partial_update", "destroy"]:
             return [IsAuthenticated(), IsCreatorOrReadOnly()]
         return [permissions.AllowAny()]
-    
+
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
 
@@ -468,7 +468,7 @@ class SpeciesViewSet(viewsets.ModelViewSet):
         if self.action in ["update", "partial_update", "destroy"]:
             return [IsAuthenticated(), IsCreatorOrReadOnly()]
         return [permissions.AllowAny()]
-    
+
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
 
@@ -483,7 +483,7 @@ class StrainViewSet(viewsets.ModelViewSet):
         if self.action in ["update", "partial_update", "destroy"]:
             return [IsAuthenticated(), IsCreatorOrReadOnly()]
         return [permissions.AllowAny()]
-    
+
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
 

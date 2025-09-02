@@ -333,7 +333,9 @@ class Protocol(models.Model):
 
     name = models.CharField(max_length=255)
     description = models.TextField(blank=True, null=True)
-    user = models.ForeignKey(LegacyUser, on_delete=models.CASCADE, null=True, blank=True)
+    user = models.ForeignKey(
+        LegacyUser, on_delete=models.CASCADE, null=True, blank=True
+    )
     # Animals
     animals_sex = models.CharField(
         max_length=32,
@@ -361,7 +363,9 @@ class Protocol(models.Model):
         blank=True,
         null=True,
     )
-    animals_species = models.ForeignKey(Species, on_delete=models.CASCADE, null=True, blank=True)
+    animals_species = models.ForeignKey(
+        Species, on_delete=models.CASCADE, null=True, blank=True
+    )
 
     # Context
     context_number_of_animals = models.PositiveIntegerField(blank=True, null=True)
