@@ -224,12 +224,26 @@ class SoftwareSerializer(serializers.ModelSerializer):
         return instance
 
 
+class SpeciesSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Species
+        fields = "__all__"
+
+
+
 class ProtocolSerializer(serializers.ModelSerializer):
     user = LegacyUserSerializer(read_only=True)
+    animals_species = SpeciesSerializer(read_only=True)
+    animals_species_id = serializers.PrimaryKeyRelatedField(  # écriture via l'id
+        queryset=Species.objects.all(),
+        source="animals_species",
+        write_only=True
+    )
 
     class Meta:
         model = Protocol
         fields = "__all__"
+        read_only_fields = ("created_by", "created_at", "modified_at")
 
 
 class SoftwareVersionSerializer(serializers.ModelSerializer):
@@ -266,12 +280,6 @@ class SoftwareVersionSerializer(serializers.ModelSerializer):
             "linked_sessions_count",
             "linked_sessions_from_other_users",
         ]
-
-
-class SpeciesSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Species
-        fields = "__all__"
 
 
 class StrainSerializer(serializers.ModelSerializer):

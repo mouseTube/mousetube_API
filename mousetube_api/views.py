@@ -445,7 +445,7 @@ class ProtocolViewSet(viewsets.ModelViewSet):
         DjangoFilterBackend,
         filters.OrderingFilter,
     ]
-    search_fields = ["name", "description"]
+    search_fields = ["name"]
 
     def get_permissions(self):
         if self.action == "create":
