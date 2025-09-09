@@ -326,15 +326,21 @@ class Protocol(models.Model):
         context_temperature_value (str, optional): The temperature value during the experiment.
         context_temperature_unit (str, optional): The unit of temperature measurement.
         context_brightness (float, optional): The brightness level during the experiment.
+        status (str): The status of the protocol (draft, waiting validation, validated).
         created_at (DateTimeField): Timestamp when the protocol was created.
         modified_at (DateTimeField): Last modification timestamp.
         created_by (ForeignKey): User who created the protocol entry.
     """
 
+    STATUS = [
+        ("draft", "Draft"),
+        ("waiting validation", "Waiting validation"),
+        ("validated", "Validated"),
+    ]
     name = models.CharField(max_length=255)
-    description = models.TextField(blank=True, null=True)
+    description = models.TextField(max_length=5000)
     user = models.ForeignKey(
-        LegacyUser, on_delete=models.CASCADE, null=True, blank=True
+        LegacyUser, models.SET_NULL, null=True, blank=True
     )
     # Animals
     animals_sex = models.CharField(
@@ -364,7 +370,7 @@ class Protocol(models.Model):
         null=True,
     )
     animals_species = models.ForeignKey(
-        Species, on_delete=models.CASCADE, null=True, blank=True
+        Species, on_delete=models.SET_NULL, null=True, blank=True
     )
 
     # Context
@@ -406,6 +412,7 @@ class Protocol(models.Model):
         max_length=4, choices=[("°C", "°C"), ("°F", "°F")], blank=True, null=True
     )
     context_brightness = models.FloatField(help_text="in Lux", blank=True, null=True)
+    status = models.CharField(max_length=20, choices=STATUS, default="draft")
     created_at = models.DateTimeField(auto_now_add=True, null=True)
     modified_at = models.DateTimeField(auto_now=True, null=True)
     created_by = models.ForeignKey(

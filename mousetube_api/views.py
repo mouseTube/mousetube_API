@@ -454,6 +454,15 @@ class ProtocolViewSet(viewsets.ModelViewSet):
             return [IsAuthenticated(), IsCreatorOrReadOnly()]
         return [permissions.AllowAny()]
 
+    def get_queryset(self):
+        user = self.request.user
+        if user.is_authenticated:
+            return Protocol.objects.filter(
+                Q(created_by=user) | Q(status="validated")
+            ).order_by("name")
+        else:
+            return Protocol.objects.filter(status="validated").order_by("name")
+
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
 
@@ -516,9 +525,9 @@ class StudyViewSet(viewsets.ModelViewSet):
 
 
 class RecordingSessionViewSet(viewsets.ModelViewSet):
-    queryset = RecordingSession.objects.all()
+    queryset = RecordingSession.objects.all().order_by("name")
     serializer_class = RecordingSessionSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsCreatorOrReadOnly]
 
     filter_backends = [
         filters.SearchFilter,
@@ -531,7 +540,7 @@ class RecordingSessionViewSet(viewsets.ModelViewSet):
     ordering = ["name"]
 
     def perform_create(self, serializer):
-        serializer.save(created_by=self.request.user)
+        serializer.save(created_by=self.request.user).order_by("name")
 
     def get_queryset(self):
         return RecordingSession.objects.filter(created_by=self.request.user)
