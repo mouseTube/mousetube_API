@@ -447,6 +447,17 @@ class ProtocolViewSet(viewsets.ModelViewSet):
     ]
     search_fields = ["name"]
 
+    filterset_fields = [
+        "animals_sex",
+        "animals_age",
+        "animals_housing",
+        "context_duration",
+        "context_cage",
+        "context_bedding",
+        "context_light_cycle",
+        "status",
+    ]
+
     def get_permissions(self):
         if self.action == "create":
             return [IsAuthenticated()]
@@ -456,12 +467,14 @@ class ProtocolViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
+        qs = None
         if user.is_authenticated:
-            return Protocol.objects.filter(
+            qs = Protocol.objects.filter(
                 Q(created_by=user) | Q(status="validated")
             ).order_by("name")
         else:
-            return Protocol.objects.filter(status="validated").order_by("name")
+            qs = Protocol.objects.filter(status="validated").order_by("name")
+        return qs
 
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
@@ -540,7 +553,7 @@ class RecordingSessionViewSet(viewsets.ModelViewSet):
     ordering = ["name"]
 
     def perform_create(self, serializer):
-        serializer.save(created_by=self.request.user).order_by("name")
+        serializer.save(created_by=self.request.user)
 
     def get_queryset(self):
         return RecordingSession.objects.filter(created_by=self.request.user)

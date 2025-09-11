@@ -317,7 +317,6 @@ class Protocol(models.Model):
         animals_sex (str, optional): The sex of the animals used in the protocol.
         animals_age (str, optional): The age of the animals used in the protocol.
         animals_housing (str, optional): The housing conditions of the animals.
-        animals_species (str, optional): The species of the animals used in the protocol.
         context_number_of_animals (int, optional): The number of animals in the context.
         context_duration (str, optional): The duration of the context.
         context_cage (str, optional): The type of cage used in the context.
@@ -338,7 +337,7 @@ class Protocol(models.Model):
         ("validated", "Validated"),
     ]
     name = models.CharField(max_length=255)
-    description = models.TextField(max_length=5000)
+    description = models.TextField(max_length=5000, blank=True, null=True)
     user = models.ForeignKey(
         LegacyUser, models.SET_NULL, null=True, blank=True
     )
@@ -368,9 +367,6 @@ class Protocol(models.Model):
         ],
         blank=True,
         null=True,
-    )
-    animals_species = models.ForeignKey(
-        Species, on_delete=models.SET_NULL, null=True, blank=True
     )
 
     # Context

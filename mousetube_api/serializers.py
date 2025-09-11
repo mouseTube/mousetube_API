@@ -232,10 +232,6 @@ class SpeciesSerializer(serializers.ModelSerializer):
 
 class ProtocolSerializer(serializers.ModelSerializer):
     user = LegacyUserSerializer(read_only=True)
-    animals_species = SpeciesSerializer(read_only=True)
-    animals_species_id = serializers.PrimaryKeyRelatedField(  # écriture via l'id
-        queryset=Species.objects.all(), source="animals_species", write_only=True
-    )
 
     class Meta:
         model = Protocol
