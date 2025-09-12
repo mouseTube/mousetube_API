@@ -234,44 +234,11 @@ class SpeciesSerializer(serializers.ModelSerializer):
 
 class ProtocolSerializer(serializers.ModelSerializer):
     user = LegacyUserSerializer(read_only=True)
-    is_favorite = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = Protocol
-        fields = [
-            "id",
-            "name",
-            "description",
-            "user",
-            "animals_sex",
-            "animals_age",
-            "animals_housing",
-            "context_number_of_animals",
-            "context_duration",
-            "context_cage",
-            "context_bedding",
-            "context_light_cycle",
-            "context_temperature_value",
-            "context_temperature_unit",
-            "context_brightness",
-            "status",
-            "created_at",
-            "modified_at",
-            "created_by",
-            "is_favorite",
-        ]
+        fields = "__all__"
         read_only_fields = ("created_by", "created_at", "modified_at")
-
-    def get_is_favorite(self, obj):
-        user = self.context["request"].user
-        if not user.is_authenticated:
-            return False
-        protocol_ct = ContentType.objects.get_for_model(Protocol)
-        return Favorite.objects.filter(
-            user=user,
-            content_type=protocol_ct,
-            object_id=obj.id
-        ).exists()
 
 
 class SoftwareVersionSerializer(serializers.ModelSerializer):
@@ -685,11 +652,13 @@ class DatasetSerializer(serializers.ModelSerializer):
         model = Dataset
         fields = "__all__"
 
+
 MODEL_MAP = {
     "protocol": Protocol,
     "software": Software,
     "hardware": Hardware,
 }
+
 
 class FavoriteSerializer(serializers.ModelSerializer):
     content_type = serializers.SerializerMethodField()
@@ -704,7 +673,7 @@ class FavoriteSerializer(serializers.ModelSerializer):
         return obj.content_type.model.lower()
 
     def validate(self, data):
-        user = self.context['request'].user
+        user = self.context["request"].user
         model_name = (data.get("content_type_name") or "").lower()
 
         if model_name not in Favorite.ALLOWED_MODELS:
@@ -713,9 +682,13 @@ class FavoriteSerializer(serializers.ModelSerializer):
             )
 
         try:
-            content_type = ContentType.objects.get(app_label='mousetube_api', model=model_name)
+            content_type = ContentType.objects.get(
+                app_label="mousetube_api", model=model_name
+            )
         except ContentType.DoesNotExist:
-            raise serializers.ValidationError(f"ContentType '{model_name}' does not exist.")
+            raise serializers.ValidationError(
+                f"ContentType '{model_name}' does not exist."
+            )
 
         object_id = data.get("object_id")
         if object_id is None:
@@ -725,7 +698,9 @@ class FavoriteSerializer(serializers.ModelSerializer):
         try:
             obj = ModelClass.objects.get(pk=object_id)
         except ModelClass.DoesNotExist:
-            raise serializers.ValidationError(f"{model_name.capitalize()} with id {object_id} does not exist.")
+            raise serializers.ValidationError(
+                f"{model_name.capitalize()} with id {object_id} does not exist."
+            )
 
         is_owner = getattr(obj, "created_by", None) == user
         is_validated = getattr(obj, "status", None) == "validated"
@@ -738,7 +713,7 @@ class FavoriteSerializer(serializers.ModelSerializer):
         return data
 
     def create(self, validated_data):
-        validated_data["user"] = self.context['request'].user
+        validated_data["user"] = self.context["request"].user
         validated_data.pop("content_type_name", None)
         return super().create(validated_data)
 

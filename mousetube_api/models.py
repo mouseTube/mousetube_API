@@ -340,9 +340,7 @@ class Protocol(models.Model):
     ]
     name = models.CharField(max_length=255)
     description = models.TextField(max_length=5000, blank=True, null=True)
-    user = models.ForeignKey(
-        LegacyUser, models.SET_NULL, null=True, blank=True
-    )
+    user = models.ForeignKey(LegacyUser, models.SET_NULL, null=True, blank=True)
     # Animals
     animals_sex = models.CharField(
         max_length=32,
@@ -1037,7 +1035,7 @@ class Dataset(models.Model):
     class Meta:
         verbose_name = "Dataset"
         verbose_name_plural = "Datasets"
-    
+
 
 class Favorite(models.Model):
     """
@@ -1049,12 +1047,11 @@ class Favorite(models.Model):
         content_object (GenericForeignKey): The actual favorited item.
         created_at (DateTimeField): Timestamp when the favorite was created.
     """
+
     ALLOWED_MODELS = ["protocol", "hardware", "software"]
 
     user = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.CASCADE,
-        related_name="favorites"
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="favorites"
     )
     content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
     object_id = models.PositiveIntegerField()
@@ -1065,7 +1062,7 @@ class Favorite(models.Model):
         model_name = self.content_type.model
         if model_name not in self.ALLOWED_MODELS:
             raise ValidationError(f"Favorites of type '{model_name}' are not allowed.")
-    
+
     def save(self, *args, **kwargs):
         self.clean()
         super().save(*args, **kwargs)

@@ -49,7 +49,7 @@ from .views import (
     StrainViewSet,
     LaboratoryAPIView,
     SoftwareViewSet,
-    FavoriteViewSet
+    FavoriteViewSet,
 )
 from django.views.static import serve
 from rest_framework.routers import DefaultRouter

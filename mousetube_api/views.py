@@ -443,11 +443,16 @@ class SubjectViewSet(viewsets.ModelViewSet):
 
 PROTOCOL_CT = ContentType.objects.get_for_model(Protocol)
 
+
 class ProtocolViewSet(viewsets.ModelViewSet):
     queryset = Protocol.objects.all()
     serializer_class = ProtocolSerializer
 
-    filter_backends = [filters.SearchFilter, DjangoFilterBackend, filters.OrderingFilter]
+    filter_backends = [
+        filters.SearchFilter,
+        DjangoFilterBackend,
+        filters.OrderingFilter,
+    ]
     search_fields = ["name"]
     filterset_fields = [
         "animals_sex",
@@ -459,7 +464,7 @@ class ProtocolViewSet(viewsets.ModelViewSet):
         "context_light_cycle",
         "status",
     ]
-    ordering_fields = ["name", "is_favorite_int"]
+    ordering_fields = ["name", "created_at", "is_favorite_int"]
     ordering = ["-is_favorite_int", "name"]
 
     def get_permissions(self):
@@ -471,22 +476,19 @@ class ProtocolViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
-        qs = Protocol.objects.all()
 
         if user.is_authenticated:
             qs = Protocol.objects.filter(Q(created_by=user) | Q(status="validated"))
             favorite_subquery = Favorite.objects.filter(
-                user=user,
-                content_type=PROTOCOL_CT,
-                object_id=OuterRef("pk")
+                user=user, content_type=PROTOCOL_CT, object_id=OuterRef("pk")
             )
             qs = qs.annotate(
                 is_favorite_int=Cast(Exists(favorite_subquery), IntegerField())
             )
-            qs = qs.order_by('-is_favorite_int', 'name')
         else:
-            qs = Protocol.objects.filter(status="validated").order_by("name")
-            return qs
+            qs = Protocol.objects.filter(status="validated")
+
+        return qs
 
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
@@ -1056,6 +1058,7 @@ class FavoriteViewSet(viewsets.ModelViewSet):
     - Only authenticated users can access.
     - Users can only see, add, or remove their own favorites.
     """
+
     serializer_class = FavoriteSerializer
     permission_classes = [permissions.IsAuthenticated]
 
@@ -1068,13 +1071,18 @@ class FavoriteViewSet(viewsets.ModelViewSet):
     def destroy(self, request, *args, **kwargs):
         favorite = self.get_object()
         obj = favorite.content_object
-        if favorite.user != request.user and getattr(obj, "status", None) != "validated":
+        if (
+            favorite.user != request.user
+            and getattr(obj, "status", None) != "validated"
+        ):
             return Response(
-                {"detail": "You can only remove favorites for validated objects of other users."},
-                status=status.HTTP_403_FORBIDDEN
+                {
+                    "detail": "You can only remove favorites for validated objects of other users."
+                },
+                status=status.HTTP_403_FORBIDDEN,
             )
         return super().destroy(request, *args, **kwargs)
-    
+
 
 class TrackPageView(GenericAPIView):
     serializer_class = TrackPageSerializer
