@@ -11,6 +11,8 @@ from django.db import models
 from django.conf import settings
 from django_countries.fields import CountryField
 from django.core.exceptions import ValidationError
+from django.contrib.contenttypes.fields import GenericForeignKey
+from django.contrib.contenttypes.models import ContentType
 
 
 class Laboratory(models.Model):
@@ -1035,6 +1037,45 @@ class Dataset(models.Model):
     class Meta:
         verbose_name = "Dataset"
         verbose_name_plural = "Datasets"
+    
+
+class Favorite(models.Model):
+    """
+    Represents a user's favorite item, which can be of any model type.
+    Attributes:
+        user (ForeignKey): The user who marked the item as a favorite.
+        content_type (ForeignKey): The type of the favorited item.
+        object_id (PositiveIntegerField): The ID of the favorited item.
+        content_object (GenericForeignKey): The actual favorited item.
+        created_at (DateTimeField): Timestamp when the favorite was created.
+    """
+    ALLOWED_MODELS = ["protocol", "hardware", "software"]
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="favorites"
+    )
+    content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
+    object_id = models.PositiveIntegerField()
+    content_object = GenericForeignKey("content_type", "object_id")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def clean(self):
+        model_name = self.content_type.model
+        if model_name not in self.ALLOWED_MODELS:
+            raise ValidationError(f"Favorites of type '{model_name}' are not allowed.")
+    
+    def save(self, *args, **kwargs):
+        self.clean()
+        super().save(*args, **kwargs)
+
+    class Meta:
+        unique_together = ("user", "content_type", "object_id")
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.user} favorite {self.content_object}"
 
 
 class PageView(models.Model):

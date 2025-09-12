@@ -18,6 +18,9 @@ from django.http import Http404
 from rest_framework.exceptions import PermissionDenied
 from django.db.models import Count, Q, Sum
 from rest_framework.generics import GenericAPIView
+from django.db.models import OuterRef, Exists, IntegerField
+from django.db.models.functions import Cast
+from django.contrib.contenttypes.models import ContentType
 from .models import (
     Repository,
     Reference,
@@ -36,6 +39,7 @@ from .models import (
     Study,
     AnimalProfile,
     Laboratory,
+    Favorite,
 )
 from .serializers import (
     SpeciesSerializer,
@@ -56,6 +60,7 @@ from .serializers import (
     RecordingSessionSerializer,
     PageViewSerializer,
     StudySerializer,
+    FavoriteSerializer,
 )
 from django_countries import countries
 from django.utils.timezone import now
@@ -436,17 +441,14 @@ class SubjectViewSet(viewsets.ModelViewSet):
         serializer.save(created_by=self.request.user)
 
 
+PROTOCOL_CT = ContentType.objects.get_for_model(Protocol)
+
 class ProtocolViewSet(viewsets.ModelViewSet):
-    queryset = Protocol.objects.all().order_by("name")
+    queryset = Protocol.objects.all()
     serializer_class = ProtocolSerializer
 
-    filter_backends = [
-        filters.SearchFilter,
-        DjangoFilterBackend,
-        filters.OrderingFilter,
-    ]
+    filter_backends = [filters.SearchFilter, DjangoFilterBackend, filters.OrderingFilter]
     search_fields = ["name"]
-
     filterset_fields = [
         "animals_sex",
         "animals_age",
@@ -457,6 +459,8 @@ class ProtocolViewSet(viewsets.ModelViewSet):
         "context_light_cycle",
         "status",
     ]
+    ordering_fields = ["name", "is_favorite_int"]
+    ordering = ["-is_favorite_int", "name"]
 
     def get_permissions(self):
         if self.action == "create":
@@ -467,14 +471,22 @@ class ProtocolViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
-        qs = None
+        qs = Protocol.objects.all()
+
         if user.is_authenticated:
-            qs = Protocol.objects.filter(
-                Q(created_by=user) | Q(status="validated")
-            ).order_by("name")
+            qs = Protocol.objects.filter(Q(created_by=user) | Q(status="validated"))
+            favorite_subquery = Favorite.objects.filter(
+                user=user,
+                content_type=PROTOCOL_CT,
+                object_id=OuterRef("pk")
+            )
+            qs = qs.annotate(
+                is_favorite_int=Cast(Exists(favorite_subquery), IntegerField())
+            )
+            qs = qs.order_by('-is_favorite_int', 'name')
         else:
             qs = Protocol.objects.filter(status="validated").order_by("name")
-        return qs
+            return qs
 
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
@@ -1037,6 +1049,32 @@ class SoftwareVersionViewSet(viewsets.ModelViewSet):
         self._check_editable(version)
         return super().destroy(request, *args, **kwargs)
 
+
+class FavoriteViewSet(viewsets.ModelViewSet):
+    """
+    Manage user favorites (protocol, software, hardware).
+    - Only authenticated users can access.
+    - Users can only see, add, or remove their own favorites.
+    """
+    serializer_class = FavoriteSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        return Favorite.objects.filter(user=self.request.user)
+
+    def perform_create(self, serializer):
+        serializer.save()
+
+    def destroy(self, request, *args, **kwargs):
+        favorite = self.get_object()
+        obj = favorite.content_object
+        if favorite.user != request.user and getattr(obj, "status", None) != "validated":
+            return Response(
+                {"detail": "You can only remove favorites for validated objects of other users."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        return super().destroy(request, *args, **kwargs)
+    
 
 class TrackPageView(GenericAPIView):
     serializer_class = TrackPageSerializer
