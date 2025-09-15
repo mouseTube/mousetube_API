@@ -324,9 +324,6 @@ class Protocol(models.Model):
         context_cage (str, optional): The type of cage used in the context.
         context_bedding (str, optional): Whether bedding is used in the context.
         context_light_cycle (str, optional): The light cycle during the experiment.
-        context_temperature_value (str, optional): The temperature value during the experiment.
-        context_temperature_unit (str, optional): The unit of temperature measurement.
-        context_brightness (float, optional): The brightness level during the experiment.
         status (str): The status of the protocol (draft, waiting validation, validated).
         created_at (DateTimeField): Timestamp when the protocol was created.
         modified_at (DateTimeField): Last modification timestamp.
@@ -399,15 +396,10 @@ class Protocol(models.Model):
     )
     context_light_cycle = models.CharField(
         max_length=8,
-        choices=[("day", "day"), ("night", "night")],
+        choices=[("day", "day"), ("night", "night"), ("both", "both")],
         blank=True,
         null=True,
     )
-    context_temperature_value = models.CharField(max_length=16, blank=True, null=True)
-    context_temperature_unit = models.CharField(
-        max_length=4, choices=[("°C", "°C"), ("°F", "°F")], blank=True, null=True
-    )
-    context_brightness = models.FloatField(help_text="in Lux", blank=True, null=True)
     status = models.CharField(max_length=20, choices=STATUS, default="draft")
     created_at = models.DateTimeField(auto_now_add=True, null=True)
     modified_at = models.DateTimeField(auto_now=True, null=True)
