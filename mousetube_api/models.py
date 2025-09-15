@@ -11,6 +11,8 @@ from django.db import models
 from django.conf import settings
 from django_countries.fields import CountryField
 from django.core.exceptions import ValidationError
+from django.contrib.contenttypes.fields import GenericForeignKey
+from django.contrib.contenttypes.models import ContentType
 
 
 class Laboratory(models.Model):
@@ -317,23 +319,25 @@ class Protocol(models.Model):
         animals_sex (str, optional): The sex of the animals used in the protocol.
         animals_age (str, optional): The age of the animals used in the protocol.
         animals_housing (str, optional): The housing conditions of the animals.
-        animals_species (str, optional): The species of the animals used in the protocol.
         context_number_of_animals (int, optional): The number of animals in the context.
         context_duration (str, optional): The duration of the context.
         context_cage (str, optional): The type of cage used in the context.
         context_bedding (str, optional): Whether bedding is used in the context.
         context_light_cycle (str, optional): The light cycle during the experiment.
-        context_temperature_value (str, optional): The temperature value during the experiment.
-        context_temperature_unit (str, optional): The unit of temperature measurement.
-        context_brightness (float, optional): The brightness level during the experiment.
+        status (str): The status of the protocol (draft, waiting validation, validated).
         created_at (DateTimeField): Timestamp when the protocol was created.
         modified_at (DateTimeField): Last modification timestamp.
         created_by (ForeignKey): User who created the protocol entry.
     """
 
+    STATUS = [
+        ("draft", "Draft"),
+        ("waiting validation", "Waiting validation"),
+        ("validated", "Validated"),
+    ]
     name = models.CharField(max_length=255)
-    description = models.TextField(default="")
-    user = models.ForeignKey(LegacyUser, on_delete=models.CASCADE)
+    description = models.TextField(max_length=5000, blank=True, null=True)
+    user = models.ForeignKey(LegacyUser, models.SET_NULL, null=True, blank=True)
     # Animals
     animals_sex = models.CharField(
         max_length=32,
@@ -361,7 +365,6 @@ class Protocol(models.Model):
         blank=True,
         null=True,
     )
-    animals_species = models.CharField(max_length=255, blank=True, null=True)
 
     # Context
     context_number_of_animals = models.PositiveIntegerField(blank=True, null=True)
@@ -393,15 +396,11 @@ class Protocol(models.Model):
     )
     context_light_cycle = models.CharField(
         max_length=8,
-        choices=[("day", "day"), ("night", "night")],
+        choices=[("day", "day"), ("night", "night"), ("both", "both")],
         blank=True,
         null=True,
     )
-    context_temperature_value = models.CharField(max_length=16, blank=True, null=True)
-    context_temperature_unit = models.CharField(
-        max_length=4, choices=[("°C", "°C"), ("°F", "°F")], blank=True, null=True
-    )
-    context_brightness = models.FloatField(help_text="in Lux", blank=True, null=True)
+    status = models.CharField(max_length=20, choices=STATUS, default="draft")
     created_at = models.DateTimeField(auto_now_add=True, null=True)
     modified_at = models.DateTimeField(auto_now=True, null=True)
     created_by = models.ForeignKey(
@@ -732,7 +731,7 @@ class RecordingSession(models.Model):
         null=True,
         default="°C",
     )
-    context_brightness = models.FloatField(blank=True, null=True)
+    context_brightness = models.FloatField(help_text="in Lux", blank=True, null=True)
     equipment_acquisition_software = models.ManyToManyField(
         SoftwareVersion,
         blank=True,
@@ -1028,6 +1027,44 @@ class Dataset(models.Model):
     class Meta:
         verbose_name = "Dataset"
         verbose_name_plural = "Datasets"
+
+
+class Favorite(models.Model):
+    """
+    Represents a user's favorite item, which can be of any model type.
+    Attributes:
+        user (ForeignKey): The user who marked the item as a favorite.
+        content_type (ForeignKey): The type of the favorited item.
+        object_id (PositiveIntegerField): The ID of the favorited item.
+        content_object (GenericForeignKey): The actual favorited item.
+        created_at (DateTimeField): Timestamp when the favorite was created.
+    """
+
+    ALLOWED_MODELS = ["protocol", "hardware", "software"]
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="favorites"
+    )
+    content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
+    object_id = models.PositiveIntegerField()
+    content_object = GenericForeignKey("content_type", "object_id")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def clean(self):
+        model_name = self.content_type.model
+        if model_name not in self.ALLOWED_MODELS:
+            raise ValidationError(f"Favorites of type '{model_name}' are not allowed.")
+
+    def save(self, *args, **kwargs):
+        self.clean()
+        super().save(*args, **kwargs)
+
+    class Meta:
+        unique_together = ("user", "content_type", "object_id")
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.user} favorite {self.content_object}"
 
 
 class PageView(models.Model):

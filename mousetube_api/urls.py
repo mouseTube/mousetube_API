@@ -49,6 +49,7 @@ from .views import (
     StrainViewSet,
     LaboratoryAPIView,
     SoftwareViewSet,
+    FavoriteViewSet,
 )
 from django.views.static import serve
 from rest_framework.routers import DefaultRouter
@@ -72,6 +73,7 @@ router.register(
 )
 router.register(r"study", StudyViewSet, basename="study")
 router.register(r"software", SoftwareViewSet, basename="software")
+router.register(r"favorite", FavoriteViewSet, basename="favorite")
 
 urlpatterns = [
     path(

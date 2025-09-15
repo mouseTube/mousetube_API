@@ -1,7 +1,6 @@
 def remove_auth_paths(endpoints):
     """
-    endpoints: liste de tuples (path, path_regex, method, callback)
-    On retourne la liste filtrée pour enlever /auth/ et /accounts/
+    endpoints: list of tuples (path, path_regex, method, callback)
     """
     filtered = [
         (path, path_regex, method, callback)

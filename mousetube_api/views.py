@@ -18,6 +18,9 @@ from django.http import Http404
 from rest_framework.exceptions import PermissionDenied
 from django.db.models import Count, Q, Sum
 from rest_framework.generics import GenericAPIView
+from django.db.models import OuterRef, Exists, IntegerField
+from django.db.models.functions import Cast
+from django.contrib.contenttypes.models import ContentType
 from .models import (
     Repository,
     Reference,
@@ -36,6 +39,7 @@ from .models import (
     Study,
     AnimalProfile,
     Laboratory,
+    Favorite,
 )
 from .serializers import (
     SpeciesSerializer,
@@ -56,6 +60,7 @@ from .serializers import (
     RecordingSessionSerializer,
     PageViewSerializer,
     StudySerializer,
+    FavoriteSerializer,
 )
 from django_countries import countries
 from django.utils.timezone import now
@@ -188,7 +193,7 @@ class CountryAPIView(APIView):
 # Laboratory
 # ----------------------------
 class LaboratoryAPIView(viewsets.ModelViewSet):
-    queryset = Laboratory.objects.all()
+    queryset = Laboratory.objects.all().order_by("name")
     serializer_class = LaboratorySerializer
 
     def get_permissions(self):
@@ -432,10 +437,35 @@ class SubjectViewSet(viewsets.ModelViewSet):
             return [IsAuthenticated(), IsCreatorOrReadOnly()]
         return [permissions.AllowAny()]
 
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
+
+
+PROTOCOL_CT = ContentType.objects.get_for_model(Protocol)
+
 
 class ProtocolViewSet(viewsets.ModelViewSet):
     queryset = Protocol.objects.all()
     serializer_class = ProtocolSerializer
+
+    filter_backends = [
+        filters.SearchFilter,
+        DjangoFilterBackend,
+        filters.OrderingFilter,
+    ]
+    search_fields = ["name"]
+    filterset_fields = [
+        "animals_sex",
+        "animals_age",
+        "animals_housing",
+        "context_duration",
+        "context_cage",
+        "context_bedding",
+        "context_light_cycle",
+        "status",
+    ]
+    ordering_fields = ["name", "created_at", "is_favorite_int"]
+    ordering = ["-is_favorite_int", "name"]
 
     def get_permissions(self):
         if self.action == "create":
@@ -443,6 +473,25 @@ class ProtocolViewSet(viewsets.ModelViewSet):
         if self.action in ["update", "partial_update", "destroy"]:
             return [IsAuthenticated(), IsCreatorOrReadOnly()]
         return [permissions.AllowAny()]
+
+    def get_queryset(self):
+        user = self.request.user
+
+        if user.is_authenticated:
+            qs = Protocol.objects.filter(Q(created_by=user) | Q(status="validated"))
+            favorite_subquery = Favorite.objects.filter(
+                user=user, content_type=PROTOCOL_CT, object_id=OuterRef("pk")
+            )
+            qs = qs.annotate(
+                is_favorite_int=Cast(Exists(favorite_subquery), IntegerField())
+            )
+        else:
+            qs = Protocol.objects.filter(status="validated")
+
+        return qs
+
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
 
 
 class SpeciesViewSet(viewsets.ModelViewSet):
@@ -456,6 +505,9 @@ class SpeciesViewSet(viewsets.ModelViewSet):
             return [IsAuthenticated(), IsCreatorOrReadOnly()]
         return [permissions.AllowAny()]
 
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
+
 
 class StrainViewSet(viewsets.ModelViewSet):
     queryset = Strain.objects.all()
@@ -467,6 +519,9 @@ class StrainViewSet(viewsets.ModelViewSet):
         if self.action in ["update", "partial_update", "destroy"]:
             return [IsAuthenticated(), IsCreatorOrReadOnly()]
         return [permissions.AllowAny()]
+
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
 
 
 class AnimalProfileViewSet(viewsets.ModelViewSet):
@@ -485,7 +540,7 @@ class AnimalProfileViewSet(viewsets.ModelViewSet):
 
 
 class StudyViewSet(viewsets.ModelViewSet):
-    queryset = Study.objects.all()
+    queryset = Study.objects.all().order_by("name")
     serializer_class = StudySerializer
 
     def get_permissions(self):
@@ -497,9 +552,9 @@ class StudyViewSet(viewsets.ModelViewSet):
 
 
 class RecordingSessionViewSet(viewsets.ModelViewSet):
-    queryset = RecordingSession.objects.all()
+    queryset = RecordingSession.objects.all().order_by("name")
     serializer_class = RecordingSessionSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsCreatorOrReadOnly]
 
     filter_backends = [
         filters.SearchFilter,
@@ -994,6 +1049,38 @@ class SoftwareVersionViewSet(viewsets.ModelViewSet):
     def destroy(self, request, *args, **kwargs):
         version = self.get_object()
         self._check_editable(version)
+        return super().destroy(request, *args, **kwargs)
+
+
+class FavoriteViewSet(viewsets.ModelViewSet):
+    """
+    Manage user favorites (protocol, software, hardware).
+    - Only authenticated users can access.
+    - Users can only see, add, or remove their own favorites.
+    """
+
+    serializer_class = FavoriteSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        return Favorite.objects.filter(user=self.request.user)
+
+    def perform_create(self, serializer):
+        serializer.save()
+
+    def destroy(self, request, *args, **kwargs):
+        favorite = self.get_object()
+        obj = favorite.content_object
+        if (
+            favorite.user != request.user
+            and getattr(obj, "status", None) != "validated"
+        ):
+            return Response(
+                {
+                    "detail": "You can only remove favorites for validated objects of other users."
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
         return super().destroy(request, *args, **kwargs)
 
 

@@ -29,10 +29,12 @@ from .models import (
     Dataset,
     Laboratory,
     Study,
+    Favorite,
 )
 
 from django.contrib.auth.models import User
 from djoser.serializers import UserCreateSerializer as BaseUserCreateSerializer
+from django.contrib.contenttypes.models import ContentType
 
 
 class CustomUserCreateSerializer(BaseUserCreateSerializer):
@@ -224,12 +226,19 @@ class SoftwareSerializer(serializers.ModelSerializer):
         return instance
 
 
+class SpeciesSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Species
+        fields = "__all__"
+
+
 class ProtocolSerializer(serializers.ModelSerializer):
     user = LegacyUserSerializer(read_only=True)
 
     class Meta:
         model = Protocol
         fields = "__all__"
+        read_only_fields = ("created_by", "created_at", "modified_at")
 
 
 class SoftwareVersionSerializer(serializers.ModelSerializer):
@@ -266,12 +275,6 @@ class SoftwareVersionSerializer(serializers.ModelSerializer):
             "linked_sessions_count",
             "linked_sessions_from_other_users",
         ]
-
-
-class SpeciesSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Species
-        fields = "__all__"
 
 
 class StrainSerializer(serializers.ModelSerializer):
@@ -648,6 +651,71 @@ class DatasetSerializer(serializers.ModelSerializer):
     class Meta:
         model = Dataset
         fields = "__all__"
+
+
+MODEL_MAP = {
+    "protocol": Protocol,
+    "software": Software,
+    "hardware": Hardware,
+}
+
+
+class FavoriteSerializer(serializers.ModelSerializer):
+    content_type = serializers.SerializerMethodField()
+    content_type_name = serializers.CharField(write_only=True)
+
+    class Meta:
+        model = Favorite
+        fields = "__all__"
+        read_only_fields = ("user", "created_at")
+
+    def get_content_type(self, obj):
+        return obj.content_type.model.lower()
+
+    def validate(self, data):
+        user = self.context["request"].user
+        model_name = (data.get("content_type_name") or "").lower()
+
+        if model_name not in Favorite.ALLOWED_MODELS:
+            raise serializers.ValidationError(
+                f"Favorites of type '{model_name}' are not allowed."
+            )
+
+        try:
+            content_type = ContentType.objects.get(
+                app_label="mousetube_api", model=model_name
+            )
+        except ContentType.DoesNotExist:
+            raise serializers.ValidationError(
+                f"ContentType '{model_name}' does not exist."
+            )
+
+        object_id = data.get("object_id")
+        if object_id is None:
+            raise serializers.ValidationError("object_id is required.")
+
+        ModelClass = MODEL_MAP[model_name]
+        try:
+            obj = ModelClass.objects.get(pk=object_id)
+        except ModelClass.DoesNotExist:
+            raise serializers.ValidationError(
+                f"{model_name.capitalize()} with id {object_id} does not exist."
+            )
+
+        is_owner = getattr(obj, "created_by", None) == user
+        is_validated = getattr(obj, "status", None) == "validated"
+        if not (is_owner or is_validated):
+            raise serializers.ValidationError(
+                f"You can only favorite your own {model_name}s or validated ones."
+            )
+        data["content_type"] = content_type
+
+        return data
+
+    def create(self, validated_data):
+        validated_data["user"] = self.context["request"].user
+        validated_data.pop("content_type_name", None)
+        return super().create(validated_data)
 
 
 class PageViewSerializer(serializers.ModelSerializer):
