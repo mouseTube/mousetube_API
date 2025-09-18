@@ -525,7 +525,7 @@ class StrainViewSet(viewsets.ModelViewSet):
 
 
 class AnimalProfileViewSet(viewsets.ModelViewSet):
-    queryset = AnimalProfile.objects.all()
+    queryset = AnimalProfile.objects.all().order_by("name")
     serializer_class = AnimalProfileSerializer
 
     def get_permissions(self):

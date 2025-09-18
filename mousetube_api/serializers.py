@@ -657,6 +657,7 @@ MODEL_MAP = {
     "protocol": Protocol,
     "software": Software,
     "hardware": Hardware,
+    "animalprofile": AnimalProfile,
 }
 
 
@@ -675,6 +676,7 @@ class FavoriteSerializer(serializers.ModelSerializer):
     def validate(self, data):
         user = self.context["request"].user
         model_name = (data.get("content_type_name") or "").lower()
+        print(f"Validating favorite for model: {model_name}")
 
         if model_name not in Favorite.ALLOWED_MODELS:
             raise serializers.ValidationError(
@@ -683,7 +685,7 @@ class FavoriteSerializer(serializers.ModelSerializer):
 
         try:
             content_type = ContentType.objects.get(
-                app_label="mousetube_api", model=model_name
+                app_label="mousetube_api", model=MODEL_MAP[model_name]._meta.model_name
             )
         except ContentType.DoesNotExist:
             raise serializers.ValidationError(

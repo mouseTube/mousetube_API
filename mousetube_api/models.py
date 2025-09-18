@@ -229,6 +229,7 @@ class AnimalProfile(models.Model):
         sex (str, optional): The sex of the subject.
         genotype (str, optional): The genotype of the animal.
         treatment (str, optional): The treatment applied to the animal.
+        status (str): The status of the animal profil (draft, waiting validation, validated).
         created_at (DateTimeField): Timestamp when the animal profil was created.
         modified_at (DateTimeField): Last modification timestamp.
         created_by (ForeignKey): User who created the animal profil entry.
@@ -239,12 +240,19 @@ class AnimalProfile(models.Model):
         ("female", "Female"),
     ]
 
+    STATUS_CHOICES = [
+        ("draft", "Draft"),
+        ("waiting_validation", "Waiting Validation"),
+        ("validated", "Validated"),
+    ]
+
     name = models.CharField(max_length=255, unique=True)
     description = models.TextField(blank=True, null=True)
     strain = models.ForeignKey(Strain, on_delete=models.CASCADE)
     sex = models.CharField(max_length=6, choices=SEX_CHOICES, blank=True, null=True)
     genotype = models.CharField(max_length=255, blank=True, null=True)
     treatment = models.CharField(max_length=255, blank=True, null=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="draft")
     created_at = models.DateTimeField(auto_now_add=True, null=True)
     modified_at = models.DateTimeField(auto_now=True, null=True)
     created_by = models.ForeignKey(
@@ -1040,7 +1048,7 @@ class Favorite(models.Model):
         created_at (DateTimeField): Timestamp when the favorite was created.
     """
 
-    ALLOWED_MODELS = ["protocol", "hardware", "software"]
+    ALLOWED_MODELS = ["protocol", "hardware", "software", "animalprofile"]
 
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="favorites"
