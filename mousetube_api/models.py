@@ -186,15 +186,22 @@ class Strain(models.Model):
         background (str): The genetic background of the strain.
         species (Species): The species associated with the strain.
         bibliography (str, optional): Bibliographical references related to the strain.
+        status (str): The status of the strain (draft, waiting validation, validated).
         created_at (DateTimeField): Timestamp when the species entry was created.
         modified_at (DateTimeField): Last modification timestamp.
         created_by (ForeignKey): User who created the species entry.
     """
+    STATUS_CHOICES = [
+        ("draft", "Draft"),
+        ("waiting_validation", "Waiting Validation"),
+        ("validated", "Validated"),
+    ]
 
     name = models.CharField(max_length=255, unique=True)
     background = models.CharField(max_length=255)
     species = models.ForeignKey(Species, on_delete=models.CASCADE, null=True)
     bibliography = models.TextField(blank=True, null=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="draft")
     created_at = models.DateTimeField(auto_now_add=True, null=True)
     modified_at = models.DateTimeField(auto_now=True, null=True)
     created_by = models.ForeignKey(

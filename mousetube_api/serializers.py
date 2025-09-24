@@ -277,66 +277,226 @@ class SoftwareVersionSerializer(serializers.ModelSerializer):
         ]
 
 
-class StrainSerializer(serializers.ModelSerializer):
+class StrainReadSerializer(serializers.ModelSerializer):
     species = SpeciesSerializer()
 
     class Meta:
         model = Strain
         fields = "__all__"
 
+
+class StrainWriteSerializer(serializers.ModelSerializer):
+    species = serializers.PrimaryKeyRelatedField(queryset=Species.objects.all())
+
+    class Meta:
+        model = Strain
+        fields = "__all__"
+
     def create(self, validated_data):
-        species_data = validated_data.pop("species")
-        species = Species.objects.create(**species_data)
-        strain = Strain.objects.create(species=species, **validated_data)
-        return strain
+        return Strain.objects.create(**validated_data)
 
     def update(self, instance, validated_data):
-        species_data = validated_data.pop("species", None)
-        if species_data:
-            species = instance.species
-            for attr, value in species_data.items():
-                setattr(species, attr, value)
-            species.save()
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         instance.save()
         return instance
 
 
+# class StrainSerializer(serializers.ModelSerializer):
+#     species = SpeciesSerializer()
+
+#     class Meta:
+#         model = Strain
+#         fields = "__all__"
+
+#     def create(self, validated_data):
+#         species_data = validated_data.pop("species")
+#         species = Species.objects.create(**species_data)
+#         strain = Strain.objects.create(species=species, **validated_data)
+#         return strain
+
+#     def update(self, instance, validated_data):
+#         species_data = validated_data.pop("species", None)
+#         if species_data:
+#             species = instance.species
+#             for attr, value in species_data.items():
+#                 setattr(species, attr, value)
+#             species.save()
+#         for attr, value in validated_data.items():
+#             setattr(instance, attr, value)
+#         instance.save()
+#         return instance
+
+
+# class AnimalProfileWriteSerializer(serializers.ModelSerializer):
+#     strain = serializers.PrimaryKeyRelatedField(queryset=Strain.objects.all())
+
+#     class Meta:
+#         model = AnimalProfile
+#         fields = "__all__"
+
+
+# class AnimalProfileReadSerializer(serializers.ModelSerializer):
+#     strain = StrainReadSerializer()
+
+#     class Meta:
+#         model = AnimalProfile
+#         fields = "__all__"
+
+
 class AnimalProfileSerializer(serializers.ModelSerializer):
-    strain = StrainSerializer()
+    strain = StrainReadSerializer(read_only=True)
+    strain_id = serializers.PrimaryKeyRelatedField(
+        queryset=Strain.objects.all(), write_only=True, source='strain'
+    )
 
     class Meta:
         model = AnimalProfile
         fields = "__all__"
 
-    def create(self, validated_data):
-        strain_data = validated_data.pop("strain")
-        strain = StrainSerializer.create(StrainSerializer(), validated_data=strain_data)
-        animal_profile = AnimalProfile.objects.create(strain=strain, **validated_data)
-        return animal_profile
 
-    def update(self, instance, validated_data):
-        strain_data = validated_data.pop("strain", None)
-        if strain_data:
-            strain_serializer = StrainSerializer(instance.strain, data=strain_data)
-            if strain_serializer.is_valid():
-                strain_serializer.save()
-        for attr, value in validated_data.items():
-            setattr(instance, attr, value)
-        instance.save()
-        return instance
+# class AnimalProfileSerializer(serializers.ModelSerializer):
+#     strain = StrainSerializer()
+
+#     class Meta:
+#         model = AnimalProfile
+#         fields = "__all__"
+
+#     def create(self, validated_data):
+#         strain_data = validated_data.pop("strain")
+#         strain = StrainSerializer.create(StrainSerializer(), validated_data=strain_data)
+#         animal_profile = AnimalProfile.objects.create(strain=strain, **validated_data)
+#         return animal_profile
+
+#     def update(self, instance, validated_data):
+#         strain_data = validated_data.pop("strain", None)
+#         if strain_data:
+#             strain_serializer = StrainSerializer(instance.strain, data=strain_data)
+#             if strain_serializer.is_valid():
+#                 strain_serializer.save()
+#         for attr, value in validated_data.items():
+#             setattr(instance, attr, value)
+#         instance.save()
+#         return instance
 
 
+# class SubjectSerializer(serializers.ModelSerializer):
+#     user = LegacyUserSerializer(read_only=True)
+#     strain = StrainSerializer(read_only=True)
+#     animal_profile = AnimalProfileSerializer()
+
+#     class Meta:
+#         model = Subject
+#         fields = "__all__"
+
+#     def update(self, instance, validated_data):
+#         animal_profile_data = validated_data.pop("animal_profile", None)
+
+#         for attr, value in validated_data.items():
+#             setattr(instance, attr, value)
+#         instance.save()
+
+#         if animal_profile_data:
+#             animal_profile = instance.animal_profile
+
+#             if animal_profile:
+#                 for attr, value in animal_profile_data.items():
+#                     setattr(animal_profile, attr, value)
+#                 animal_profile.save()
+#             else:
+#                 new_animal_profile = AnimalProfile.objects.create(**animal_profile_data)
+#                 instance.animal_profile = new_animal_profile
+#                 instance.save()
+
+#         return instance
+
+#     def create(self, validated_data):
+#         animal_profile_data = validated_data.pop("animal_profile", None)
+
+#         subject = Subject.objects.create(**validated_data)
+
+#         if animal_profile_data:
+#             animal_profile = AnimalProfile.objects.create(**animal_profile_data)
+#             subject.animal_profile = animal_profile
+#             subject.save()
+
+#         return subject
+
+
+# class SubjectReadSerializer(serializers.ModelSerializer):
+#     user = LegacyUserSerializer(read_only=True)
+#     strain = StrainReadSerializer(read_only=True)
+#     animal_profile = AnimalProfileReadSerializer()
+
+#     class Meta:
+#         model = Subject
+#         fields = "__all__"
+
+
+# class SubjectWriteSerializer(serializers.ModelSerializer):
+#     animal_profile = AnimalProfileWriteSerializer()
+
+#     class Meta:
+#         model = Subject
+#         fields = "__all__"
+
+#     def create(self, validated_data):
+#         animal_profile_data = validated_data.pop("animal_profile", None)
+
+#         subject = Subject.objects.create(**validated_data)
+
+#         if animal_profile_data:
+#             animal_profile = AnimalProfileWriteSerializer().create(animal_profile_data)
+#             subject.animal_profile = animal_profile
+#             subject.save()
+
+#         return subject
+
+#     def update(self, instance, validated_data):
+#         animal_profile_data = validated_data.pop("animal_profile", None)
+
+#         for attr, value in validated_data.items():
+#             setattr(instance, attr, value)
+#         instance.save()
+
+#         if animal_profile_data:
+#             if instance.animal_profile:
+#                 serializer = AnimalProfileWriteSerializer(
+#                     instance=instance.animal_profile, data=animal_profile_data, partial=True
+#                 )
+#                 serializer.is_valid(raise_exception=True)
+#                 serializer.save()
+#             else:
+#                 instance.animal_profile = AnimalProfileWriteSerializer().create(animal_profile_data)
+#                 instance.save()
+
+#         return instance
+
+
+# ------------------------
+# Subject Serializer
+# ------------------------
 class SubjectSerializer(serializers.ModelSerializer):
     user = LegacyUserSerializer(read_only=True)
-    strain = StrainSerializer(read_only=True)
     animal_profile = AnimalProfileSerializer()
 
     class Meta:
         model = Subject
         fields = "__all__"
 
+    def create(self, validated_data):
+        animal_profile_data = validated_data.pop("animal_profile", None)
+        subject = Subject.objects.create(**validated_data)
+
+        if animal_profile_data:
+            serializer = AnimalProfileSerializer(data=animal_profile_data)
+            serializer.is_valid(raise_exception=True)
+            animal_profile = serializer.save()
+            subject.animal_profile = animal_profile
+            subject.save()
+
+        return subject
+
     def update(self, instance, validated_data):
         animal_profile_data = validated_data.pop("animal_profile", None)
 
@@ -345,31 +505,19 @@ class SubjectSerializer(serializers.ModelSerializer):
         instance.save()
 
         if animal_profile_data:
-            animal_profile = instance.animal_profile
-
-            if animal_profile:
-                for attr, value in animal_profile_data.items():
-                    setattr(animal_profile, attr, value)
-                animal_profile.save()
+            if instance.animal_profile:
+                serializer = AnimalProfileSerializer(
+                    instance=instance.animal_profile, data=animal_profile_data, partial=True
+                )
+                serializer.is_valid(raise_exception=True)
+                serializer.save()
             else:
-                new_animal_profile = AnimalProfile.objects.create(**animal_profile_data)
-                instance.animal_profile = new_animal_profile
+                serializer = AnimalProfileSerializer(data=animal_profile_data)
+                serializer.is_valid(raise_exception=True)
+                instance.animal_profile = serializer.save()
                 instance.save()
 
         return instance
-
-    def create(self, validated_data):
-        animal_profile_data = validated_data.pop("animal_profile", None)
-
-        subject = Subject.objects.create(**validated_data)
-
-        if animal_profile_data:
-            animal_profile = AnimalProfile.objects.create(**animal_profile_data)
-            subject.animal_profile = animal_profile
-            subject.save()
-
-        return subject
-
 
 class StudyShortSerializer(serializers.ModelSerializer):
     class Meta:
@@ -676,7 +824,6 @@ class FavoriteSerializer(serializers.ModelSerializer):
     def validate(self, data):
         user = self.context["request"].user
         model_name = (data.get("content_type_name") or "").lower()
-        print(f"Validating favorite for model: {model_name}")
 
         if model_name not in Favorite.ALLOWED_MODELS:
             raise serializers.ValidationError(

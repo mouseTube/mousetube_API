@@ -43,7 +43,8 @@ from .models import (
 )
 from .serializers import (
     SpeciesSerializer,
-    StrainSerializer,
+    StrainReadSerializer,
+    StrainWriteSerializer,
     AnimalProfileSerializer,
     LaboratorySerializer,
     ProtocolSerializer,
@@ -441,18 +442,19 @@ class SubjectViewSet(viewsets.ModelViewSet):
         serializer.save(created_by=self.request.user)
 
 
+class ProtocolPagination(PageNumberPagination):
+    page_size = 10
+    page_size_query_param = "page_size"
+    max_page_size = 100
+
+
 PROTOCOL_CT = ContentType.objects.get_for_model(Protocol)
 
 
 class ProtocolViewSet(viewsets.ModelViewSet):
     queryset = Protocol.objects.all()
     serializer_class = ProtocolSerializer
-
-    filter_backends = [
-        filters.SearchFilter,
-        DjangoFilterBackend,
-        filters.OrderingFilter,
-    ]
+    filter_backends = [filters.SearchFilter, DjangoFilterBackend]
     search_fields = ["name"]
     filterset_fields = [
         "animals_sex",
@@ -464,38 +466,67 @@ class ProtocolViewSet(viewsets.ModelViewSet):
         "context_light_cycle",
         "status",
     ]
-    ordering_fields = ["name", "created_at", "is_favorite_int"]
-    ordering = ["-is_favorite_int", "name"]
+    pagination_class = ProtocolPagination
 
     def get_permissions(self):
         if self.action == "create":
-            return [IsAuthenticated()]
+            return [permissions.IsAuthenticated()]
         if self.action in ["update", "partial_update", "destroy"]:
-            return [IsAuthenticated(), IsCreatorOrReadOnly()]
+            return [permissions.IsAuthenticated(), IsCreatorOrReadOnly()]
         return [permissions.AllowAny()]
 
     def get_queryset(self):
         user = self.request.user
+        ordering = self.request.query_params.get("ordering")
 
         if user.is_authenticated:
             qs = Protocol.objects.filter(Q(created_by=user) | Q(status="validated"))
+            # annotation is_favorite_int
             favorite_subquery = Favorite.objects.filter(
                 user=user, content_type=PROTOCOL_CT, object_id=OuterRef("pk")
             )
             qs = qs.annotate(
                 is_favorite_int=Cast(Exists(favorite_subquery), IntegerField())
             )
+            # Appliquer ordering si demandé, sinon par défaut
+            if ordering:
+                ordering_fields = []
+                for field in ordering.split(","):
+                    field = field.strip()
+                    if field.lstrip("-") in ["name", "created_at", "is_favorite_int"]:
+                        ordering_fields.append(field)
+                if ordering_fields:
+                    qs = qs.order_by(*ordering_fields)
+                else:
+                    qs = qs.order_by("-is_favorite_int", "name")
+            else:
+                qs = qs.order_by("-is_favorite_int", "name")
         else:
             qs = Protocol.objects.filter(status="validated")
+            if ordering:
+                ordering_fields = []
+                for field in ordering.split(","):
+                    field = field.strip()
+                    if field.lstrip("-") in ["name", "created_at"]:
+                        ordering_fields.append(field)
+                if ordering_fields:
+                    qs = qs.order_by(*ordering_fields)
+                else:
+                    qs = qs.order_by("name")
+            else:
+                qs = qs.order_by("name")
 
         return qs
 
+    # -------------------------
+    # Création
+    # -------------------------
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
 
 
 class SpeciesViewSet(viewsets.ModelViewSet):
-    queryset = Species.objects.all()
+    queryset = Species.objects.all().order_by("name")
     serializer_class = SpeciesSerializer
 
     def get_permissions(self):
@@ -510,8 +541,12 @@ class SpeciesViewSet(viewsets.ModelViewSet):
 
 
 class StrainViewSet(viewsets.ModelViewSet):
-    queryset = Strain.objects.all()
-    serializer_class = StrainSerializer
+    queryset = Strain.objects.all().order_by("name")
+
+    def get_serializer_class(self):
+        if self.action in ["create", "update", "partial_update"]:
+            return StrainWriteSerializer
+        return StrainReadSerializer
 
     def get_permissions(self):
         if self.action == "create":
@@ -527,6 +562,11 @@ class StrainViewSet(viewsets.ModelViewSet):
 class AnimalProfileViewSet(viewsets.ModelViewSet):
     queryset = AnimalProfile.objects.all().order_by("name")
     serializer_class = AnimalProfileSerializer
+
+    # def get_serializer_class(self):
+    #     if self.action in ["create", "update", "partial_update"]:
+    #         return AnimalProfileWriteSerializer
+    #     return AnimalProfileReadSerializer
 
     def get_permissions(self):
         if self.action == "create":
