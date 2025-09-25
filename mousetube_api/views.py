@@ -43,8 +43,7 @@ from .models import (
 )
 from .serializers import (
     SpeciesSerializer,
-    StrainReadSerializer,
-    StrainWriteSerializer,
+    StrainSerializer,
     AnimalProfileSerializer,
     LaboratorySerializer,
     ProtocolSerializer,
@@ -542,11 +541,7 @@ class SpeciesViewSet(viewsets.ModelViewSet):
 
 class StrainViewSet(viewsets.ModelViewSet):
     queryset = Strain.objects.all().order_by("name")
-
-    def get_serializer_class(self):
-        if self.action in ["create", "update", "partial_update"]:
-            return StrainWriteSerializer
-        return StrainReadSerializer
+    serializer_class = StrainSerializer
 
     def get_permissions(self):
         if self.action == "create":
@@ -562,11 +557,6 @@ class StrainViewSet(viewsets.ModelViewSet):
 class AnimalProfileViewSet(viewsets.ModelViewSet):
     queryset = AnimalProfile.objects.all().order_by("name")
     serializer_class = AnimalProfileSerializer
-
-    # def get_serializer_class(self):
-    #     if self.action in ["create", "update", "partial_update"]:
-    #         return AnimalProfileWriteSerializer
-    #     return AnimalProfileReadSerializer
 
     def get_permissions(self):
         if self.action == "create":

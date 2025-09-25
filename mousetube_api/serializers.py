@@ -277,20 +277,15 @@ class SoftwareVersionSerializer(serializers.ModelSerializer):
         ]
 
 
-class StrainReadSerializer(serializers.ModelSerializer):
-    species = SpeciesSerializer()
+class StrainSerializer(serializers.ModelSerializer):
+    species = SpeciesSerializer(read_only=True)  # lecture complète
+    species_id = serializers.PrimaryKeyRelatedField(
+        queryset=Species.objects.all(), write_only=True, source='species'
+    )
 
     class Meta:
         model = Strain
-        fields = "__all__"
-
-
-class StrainWriteSerializer(serializers.ModelSerializer):
-    species = serializers.PrimaryKeyRelatedField(queryset=Species.objects.all())
-
-    class Meta:
-        model = Strain
-        fields = "__all__"
+        fields = '__all__'
 
     def create(self, validated_data):
         return Strain.objects.create(**validated_data)
@@ -345,7 +340,7 @@ class StrainWriteSerializer(serializers.ModelSerializer):
 
 
 class AnimalProfileSerializer(serializers.ModelSerializer):
-    strain = StrainReadSerializer(read_only=True)
+    strain = StrainSerializer(read_only=True)
     strain_id = serializers.PrimaryKeyRelatedField(
         queryset=Strain.objects.all(), write_only=True, source='strain'
     )
@@ -806,6 +801,8 @@ MODEL_MAP = {
     "software": Software,
     "hardware": Hardware,
     "animalprofile": AnimalProfile,
+    "strain": Strain,
+    "species": Species,
 }
 
 

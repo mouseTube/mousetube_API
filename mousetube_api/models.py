@@ -199,7 +199,7 @@ class Strain(models.Model):
 
     name = models.CharField(max_length=255, unique=True)
     background = models.CharField(max_length=255)
-    species = models.ForeignKey(Species, on_delete=models.CASCADE, null=True)
+    species = models.ForeignKey(Species, on_delete=models.CASCADE)
     bibliography = models.TextField(blank=True, null=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="draft")
     created_at = models.DateTimeField(auto_now_add=True, null=True)
@@ -1055,7 +1055,7 @@ class Favorite(models.Model):
         created_at (DateTimeField): Timestamp when the favorite was created.
     """
 
-    ALLOWED_MODELS = ["protocol", "hardware", "software", "animalprofile"]
+    ALLOWED_MODELS = ["protocol", "hardware", "software", "animalprofile", "strain"]
 
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="favorites"
