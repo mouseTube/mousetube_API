@@ -280,12 +280,12 @@ class SoftwareVersionSerializer(serializers.ModelSerializer):
 class StrainSerializer(serializers.ModelSerializer):
     species = SpeciesSerializer(read_only=True)  # lecture complète
     species_id = serializers.PrimaryKeyRelatedField(
-        queryset=Species.objects.all(), write_only=True, source='species'
+        queryset=Species.objects.all(), write_only=True, source="species"
     )
 
     class Meta:
         model = Strain
-        fields = '__all__'
+        fields = "__all__"
 
     def create(self, validated_data):
         return Strain.objects.create(**validated_data)
@@ -342,7 +342,7 @@ class StrainSerializer(serializers.ModelSerializer):
 class AnimalProfileSerializer(serializers.ModelSerializer):
     strain = StrainSerializer(read_only=True)
     strain_id = serializers.PrimaryKeyRelatedField(
-        queryset=Strain.objects.all(), write_only=True, source='strain'
+        queryset=Strain.objects.all(), write_only=True, source="strain"
     )
 
     class Meta:
@@ -502,7 +502,9 @@ class SubjectSerializer(serializers.ModelSerializer):
         if animal_profile_data:
             if instance.animal_profile:
                 serializer = AnimalProfileSerializer(
-                    instance=instance.animal_profile, data=animal_profile_data, partial=True
+                    instance=instance.animal_profile,
+                    data=animal_profile_data,
+                    partial=True,
                 )
                 serializer.is_valid(raise_exception=True)
                 serializer.save()
@@ -513,6 +515,7 @@ class SubjectSerializer(serializers.ModelSerializer):
                 instance.save()
 
         return instance
+
 
 class StudyShortSerializer(serializers.ModelSerializer):
     class Meta:

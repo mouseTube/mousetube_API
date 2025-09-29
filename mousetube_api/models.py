@@ -191,6 +191,7 @@ class Strain(models.Model):
         modified_at (DateTimeField): Last modification timestamp.
         created_by (ForeignKey): User who created the species entry.
     """
+
     STATUS_CHOICES = [
         ("draft", "Draft"),
         ("waiting_validation", "Waiting Validation"),
