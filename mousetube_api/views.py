@@ -12,6 +12,7 @@ from rest_framework.response import Response
 from rest_framework.pagination import PageNumberPagination
 from rest_framework import permissions
 import json
+import django_filters
 from rest_framework import viewsets, status, filters
 from django_filters.rest_framework import DjangoFilterBackend
 from django.http import Http404
@@ -554,9 +555,19 @@ class StrainViewSet(viewsets.ModelViewSet):
         serializer.save(created_by=self.request.user)
 
 
+class AnimalProfileFilter(django_filters.FilterSet):
+    species = django_filters.CharFilter(field_name="strain__species__id", lookup_expr="iexact")
+
+    class Meta:
+        model = AnimalProfile
+        fields = ["sex", "genotype", "status", "strain", "treatment", "species"]
+
 class AnimalProfileViewSet(viewsets.ModelViewSet):
     queryset = AnimalProfile.objects.all().order_by("name")
     serializer_class = AnimalProfileSerializer
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter]
+    filterset_class = AnimalProfileFilter
+    search_fields = ["name"]
 
     def get_permissions(self):
         if self.action == "create":
