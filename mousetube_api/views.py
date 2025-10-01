@@ -7,80 +7,90 @@ PHENOMIN, CNRS UMR7104, INSERM U964, Université de Strasbourg
 Code under GPL v3.0 licence
 """
 
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework.pagination import PageNumberPagination
-from rest_framework import permissions
 import json
+import os
+
 import django_filters
-from rest_framework import viewsets, status, filters
-from django_filters.rest_framework import DjangoFilterBackend
-from django.http import Http404
-from rest_framework.exceptions import PermissionDenied
-from django.db.models import Count, Q, Sum
-from rest_framework.generics import GenericAPIView
-from django.db.models import OuterRef, Exists, IntegerField
-from django.db.models.functions import Cast
+from django.apps import apps
+from django.conf import settings
 from django.contrib.contenttypes.models import ContentType
-from .models import (
-    Repository,
-    Reference,
-    LegacyUser,
-    UserProfile,
-    Software,
-    SoftwareVersion,
-    Hardware,
-    Species,
-    Strain,
-    Protocol,
-    File,
-    Subject,
-    RecordingSession,
-    PageView,
-    Study,
-    AnimalProfile,
-    Laboratory,
-    Favorite,
-)
-from .serializers import (
-    SpeciesSerializer,
-    StrainSerializer,
-    AnimalProfileSerializer,
-    LaboratorySerializer,
-    ProtocolSerializer,
-    FileSerializer,
-    HardwareSerializer,
-    SoftwareSerializer,
-    SoftwareVersionSerializer,
-    RepositorySerializer,
-    ReferenceSerializer,
-    LegacyUserSerializer,
-    UserProfileSerializer,
-    TrackPageSerializer,
-    SubjectSerializer,
-    RecordingSessionSerializer,
-    PageViewSerializer,
-    StudySerializer,
-    FavoriteSerializer,
-)
-from django_countries import countries
-from django.utils.timezone import now
-from django.db.models import F
 from django.core.cache import cache
 from django.core.management import call_command
+from django.db.models import (
+    Case,
+    Count,
+    Exists,
+    F,
+    IntegerField,
+    OuterRef,
+    Q,
+    Sum,
+    Value,
+    When,
+)
+from django.db.models.functions import Cast
+from django.http import Http404
+from django.shortcuts import get_object_or_404, render
+from django.utils.timezone import now
+from django_countries import countries
+from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.utils import (
-    extend_schema,
     OpenApiParameter,
+    extend_schema,
     extend_schema_serializer,
 )
-from django.shortcuts import render
-from django.conf import settings
-import os
+from rest_framework import filters, permissions, status, viewsets
+from rest_framework.exceptions import PermissionDenied
+from rest_framework.generics import GenericAPIView
+from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import (
-    IsAuthenticated,
     AllowAny,
+    IsAuthenticated,
 )
-from django.shortcuts import get_object_or_404
+from rest_framework.response import Response
+from rest_framework.views import APIView
+
+from .models import (
+    AnimalProfile,
+    Favorite,
+    File,
+    Hardware,
+    Laboratory,
+    LegacyUser,
+    PageView,
+    Protocol,
+    RecordingSession,
+    Reference,
+    Repository,
+    Software,
+    SoftwareVersion,
+    Species,
+    Strain,
+    Study,
+    Subject,
+    UserProfile,
+)
+from .serializers import (
+    AnimalProfileSerializer,
+    FavoriteSerializer,
+    FileSerializer,
+    HardwareSerializer,
+    LaboratorySerializer,
+    LegacyUserSerializer,
+    PageViewSerializer,
+    ProtocolSerializer,
+    RecordingSessionSerializer,
+    ReferenceSerializer,
+    RepositorySerializer,
+    SoftwareSerializer,
+    SoftwareVersionSerializer,
+    SpeciesSerializer,
+    StrainSerializer,
+    StudySerializer,
+    SubjectSerializer,
+    TrackPageSerializer,
+    UserProfileSerializer,
+)
 
 
 # ----------------------------
@@ -427,6 +437,9 @@ class HardwareDetailAPIView(GenericAPIView):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
+# ----------------------------
+# Subject
+# ----------------------------
 class SubjectViewSet(viewsets.ModelViewSet):
     queryset = Subject.objects.all()
     serializer_class = SubjectSerializer
@@ -442,13 +455,18 @@ class SubjectViewSet(viewsets.ModelViewSet):
         serializer.save(created_by=self.request.user)
 
 
+# ----------------------------
+# Protocol
+# ----------------------------
 class ProtocolPagination(PageNumberPagination):
     page_size = 10
     page_size_query_param = "page_size"
     max_page_size = 100
 
 
-PROTOCOL_CT = ContentType.objects.get_for_model(Protocol)
+def get_protocol_ct():
+    Protocol = apps.get_model("mousetube_api", "Protocol")
+    return ContentType.objects.get_for_model(Protocol)
 
 
 class ProtocolViewSet(viewsets.ModelViewSet):
@@ -481,14 +499,12 @@ class ProtocolViewSet(viewsets.ModelViewSet):
 
         if user.is_authenticated:
             qs = Protocol.objects.filter(Q(created_by=user) | Q(status="validated"))
-            # annotation is_favorite_int
             favorite_subquery = Favorite.objects.filter(
-                user=user, content_type=PROTOCOL_CT, object_id=OuterRef("pk")
+                user=user, content_type=get_protocol_ct(), object_id=OuterRef("pk")
             )
             qs = qs.annotate(
                 is_favorite_int=Cast(Exists(favorite_subquery), IntegerField())
             )
-            # Appliquer ordering si demandé, sinon par défaut
             if ordering:
                 ordering_fields = []
                 for field in ordering.split(","):
@@ -518,55 +534,17 @@ class ProtocolViewSet(viewsets.ModelViewSet):
 
         return qs
 
-    # -------------------------
-    # Création
-    # -------------------------
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
 
 
+# ----------------------------
+# Species
+# ----------------------------
 class SpeciesViewSet(viewsets.ModelViewSet):
     queryset = Species.objects.all().order_by("name")
     serializer_class = SpeciesSerializer
-
-    def get_permissions(self):
-        if self.action == "create":
-            return [IsAuthenticated()]
-        if self.action in ["update", "partial_update", "destroy"]:
-            return [IsAuthenticated(), IsCreatorOrReadOnly()]
-        return [permissions.AllowAny()]
-
-    def perform_create(self, serializer):
-        serializer.save(created_by=self.request.user)
-
-
-class StrainViewSet(viewsets.ModelViewSet):
-    queryset = Strain.objects.all().order_by("name")
-    serializer_class = StrainSerializer
-
-    def get_permissions(self):
-        if self.action == "create":
-            return [IsAuthenticated()]
-        if self.action in ["update", "partial_update", "destroy"]:
-            return [IsAuthenticated(), IsCreatorOrReadOnly()]
-        return [permissions.AllowAny()]
-
-    def perform_create(self, serializer):
-        serializer.save(created_by=self.request.user)
-
-
-class AnimalProfileFilter(django_filters.FilterSet):
-    species = django_filters.CharFilter(field_name="strain__species__id", lookup_expr="iexact")
-
-    class Meta:
-        model = AnimalProfile
-        fields = ["sex", "genotype", "status", "strain", "treatment", "species"]
-
-class AnimalProfileViewSet(viewsets.ModelViewSet):
-    queryset = AnimalProfile.objects.all().order_by("name")
-    serializer_class = AnimalProfileSerializer
-    filter_backends = [DjangoFilterBackend, filters.SearchFilter]
-    filterset_class = AnimalProfileFilter
+    filter_backends = [filters.SearchFilter]
     search_fields = ["name"]
 
     def get_permissions(self):
@@ -580,6 +558,100 @@ class AnimalProfileViewSet(viewsets.ModelViewSet):
         serializer.save(created_by=self.request.user)
 
 
+# ----------------------------
+# Strain
+# ----------------------------
+class StrainViewSet(viewsets.ModelViewSet):
+    queryset = Strain.objects.all()
+    serializer_class = StrainSerializer
+    filter_backends = [filters.SearchFilter]
+    search_fields = ["name"]
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        user = self.request.user
+        if user.is_authenticated:
+            content_type = ContentType.objects.get_for_model(Strain)
+            favorite_ids = Favorite.objects.filter(
+                user=user, content_type=content_type
+            ).values_list("object_id", flat=True)
+            qs = qs.annotate(
+                is_favorite=Case(
+                    When(id__in=favorite_ids, then=Value(1)),
+                    default=Value(0),
+                    output_field=IntegerField(),
+                )
+            ).order_by("-is_favorite", "name")
+        else:
+            qs = qs.order_by("name")
+        return qs
+
+    def get_permissions(self):
+        if self.action == "create":
+            return [IsAuthenticated()]
+        if self.action in ["update", "partial_update", "destroy"]:
+            return [IsAuthenticated(), IsCreatorOrReadOnly()]
+        return [permissions.AllowAny()]
+
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
+
+
+# ----------------------------
+# Animal Profile
+# ----------------------------
+class AnimalProfileFilter(django_filters.FilterSet):
+    species = django_filters.CharFilter(
+        field_name="strain__species__id", lookup_expr="iexact"
+    )
+    strain = django_filters.CharFilter(field_name="strain__id", lookup_expr="iexact")
+
+    class Meta:
+        model = AnimalProfile
+        fields = ["sex", "genotype", "status", "strain", "treatment", "species"]
+
+
+class AnimalProfileViewSet(viewsets.ModelViewSet):
+    queryset = AnimalProfile.objects.all()
+    serializer_class = AnimalProfileSerializer
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter]
+    filterset_class = AnimalProfileFilter
+    search_fields = ["name"]
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        user = self.request.user
+        if user.is_authenticated:
+            content_type = ContentType.objects.get_for_model(AnimalProfile)
+            favorite_ids = Favorite.objects.filter(
+                user=user, content_type=content_type
+            ).values_list("object_id", flat=True)
+
+            qs = qs.annotate(
+                is_favorite=Case(
+                    When(id__in=favorite_ids, then=Value(1)),
+                    default=Value(0),
+                    output_field=IntegerField(),
+                )
+            ).order_by("-is_favorite", "name")
+        else:
+            qs = qs.order_by("name")
+        return qs
+
+    def get_permissions(self):
+        if self.action == "create":
+            return [IsAuthenticated()]
+        if self.action in ["update", "partial_update", "destroy"]:
+            return [IsAuthenticated(), IsCreatorOrReadOnly()]
+        return [permissions.AllowAny()]
+
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
+
+
+# ----------------------------
+# Study
+# ----------------------------
 class StudyViewSet(viewsets.ModelViewSet):
     queryset = Study.objects.all().order_by("name")
     serializer_class = StudySerializer
@@ -592,6 +664,9 @@ class StudyViewSet(viewsets.ModelViewSet):
         return [permissions.AllowAny()]
 
 
+# ----------------------------
+# Recording Session
+# ----------------------------
 class RecordingSessionViewSet(viewsets.ModelViewSet):
     queryset = RecordingSession.objects.all().order_by("name")
     serializer_class = RecordingSessionSerializer
@@ -614,6 +689,9 @@ class RecordingSessionViewSet(viewsets.ModelViewSet):
         return RecordingSession.objects.filter(created_by=self.request.user)
 
 
+# ----------------------------
+# File
+# ----------------------------
 class FileAPIView(GenericAPIView):
     serializer_class = FileSerializer
 
@@ -891,6 +969,9 @@ class FileDetailAPIView(GenericAPIView):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
+# ----------------------------
+# Software
+# ----------------------------
 @extend_schema(
     parameters=[OpenApiParameter("id", type=int, location=OpenApiParameter.PATH)]
 )
@@ -1093,6 +1174,9 @@ class SoftwareVersionViewSet(viewsets.ModelViewSet):
         return super().destroy(request, *args, **kwargs)
 
 
+# ----------------------------
+# Favorite
+# ----------------------------
 class FavoriteViewSet(viewsets.ModelViewSet):
     """
     Manage user favorites (protocol, software, hardware).
@@ -1125,6 +1209,9 @@ class FavoriteViewSet(viewsets.ModelViewSet):
         return super().destroy(request, *args, **kwargs)
 
 
+# ----------------------------
+# Track Page
+# ----------------------------
 class TrackPageView(GenericAPIView):
     serializer_class = TrackPageSerializer
 

@@ -1,9 +1,11 @@
 import logging
-import requests
-import time
-from django.core.management.base import BaseCommand
-from urllib.parse import urlparse, unquote
 import os
+import time
+from urllib.parse import unquote, urlparse
+
+import requests
+from django.core.management.base import BaseCommand
+
 from mousetube_api.models import File
 
 logger = logging.getLogger("check_dead_links")

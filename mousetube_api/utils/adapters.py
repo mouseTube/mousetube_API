@@ -1,13 +1,14 @@
+from allauth.core.exceptions import ImmediateHttpResponse
 from allauth.socialaccount.adapter import DefaultSocialAccountAdapter
 from allauth.socialaccount.models import SocialApp
+from django.conf import settings
+from django.contrib.auth import get_user_model
 from django.contrib.sites.shortcuts import get_current_site
 from django.core.exceptions import MultipleObjectsReturned
 from django.http import HttpResponseRedirect
-from allauth.core.exceptions import ImmediateHttpResponse
 from rest_framework_simplejwt.tokens import RefreshToken
+
 from mousetube_api.models import UserProfile
-from django.conf import settings
-from django.contrib.auth import get_user_model
 
 User = get_user_model()
 

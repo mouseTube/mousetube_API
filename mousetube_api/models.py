@@ -7,12 +7,12 @@
 # PHENOMIN, CNRS UMR7104, INSERM U964, Université de Strasbourg
 # Code under GPL v3.0 licence
 
-from django.db import models
 from django.conf import settings
-from django_countries.fields import CountryField
-from django.core.exceptions import ValidationError
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
+from django.core.exceptions import ValidationError
+from django.db import models
+from django_countries.fields import CountryField
 
 
 class Laboratory(models.Model):

@@ -1,9 +1,9 @@
-from django.db.models.signals import post_save, post_delete
-from django.dispatch import receiver
 from django.contrib.auth import get_user_model
-from mousetube_api.models import UserProfile
-from mousetube_api.models import Software, SoftwareVersion
 from django.core.exceptions import ObjectDoesNotExist
+from django.db.models.signals import post_delete, post_save
+from django.dispatch import receiver
+
+from mousetube_api.models import Software, SoftwareVersion, UserProfile
 
 User = get_user_model()
 

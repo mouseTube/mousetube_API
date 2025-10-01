@@ -7,34 +7,34 @@ PHENOMIN, CNRS UMR7104, INSERM U964, Université de Strasbourg
 Code under GPL v3.0 licence
 """
 
-from rest_framework import serializers
-from django_countries.serializer_fields import CountryField
+from django.contrib.auth.models import User
+from django.contrib.contenttypes.models import ContentType
 from django.db.models import Count, Q
+from django_countries.serializer_fields import CountryField
+from djoser.serializers import UserCreateSerializer as BaseUserCreateSerializer
+from rest_framework import serializers
+
 from .models import (
-    Repository,
-    Reference,
-    LegacyUser,
-    UserProfile,
-    Hardware,
-    Software,
-    Species,
-    Strain,
-    Protocol,
-    File,
-    RecordingSession,
-    Subject,
-    PageView,
-    SoftwareVersion,
     AnimalProfile,
     Dataset,
-    Laboratory,
-    Study,
     Favorite,
+    File,
+    Hardware,
+    Laboratory,
+    LegacyUser,
+    PageView,
+    Protocol,
+    RecordingSession,
+    Reference,
+    Repository,
+    Software,
+    SoftwareVersion,
+    Species,
+    Strain,
+    Study,
+    Subject,
+    UserProfile,
 )
-
-from django.contrib.auth.models import User
-from djoser.serializers import UserCreateSerializer as BaseUserCreateSerializer
-from django.contrib.contenttypes.models import ContentType
 
 
 class CustomUserCreateSerializer(BaseUserCreateSerializer):

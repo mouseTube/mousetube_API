@@ -1,7 +1,9 @@
 import os
+
 from django.core.management.base import BaseCommand
-from django.utils import timezone
 from django.db.models import Sum
+from django.utils import timezone
+
 from mousetube_api.models import PageView
 
 LOGS_DIR = "logs/"
