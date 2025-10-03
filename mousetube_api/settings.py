@@ -10,11 +10,12 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/4.2/ref/settings/
 """
 
-from django.core.management.utils import get_random_secret_key
-from pathlib import Path
 import os
-import environ
 from datetime import timedelta
+from pathlib import Path
+
+import environ
+from django.core.management.utils import get_random_secret_key
 
 # Add two custom countries to django_countries
 COUNTRIES_OVERRIDE = {

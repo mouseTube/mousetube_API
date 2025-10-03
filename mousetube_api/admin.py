@@ -10,23 +10,23 @@ Code under GPL v3.0 licence
 from django.contrib import admin
 
 from .models import (
-    UserProfile,
+    AnimalProfile,
+    Dataset,
+    File,
+    Hardware,
+    Laboratory,
     LegacyUser,
-    Repository,
+    Protocol,
+    RecordingSession,
     Reference,
+    Repository,
+    Software,
+    SoftwareVersion,
     Species,
     Strain,
-    Protocol,
-    File,
-    Dataset,
-    Software,
-    Hardware,
-    RecordingSession,
-    Subject,
-    AnimalProfile,
-    SoftwareVersion,
-    Laboratory,
     Study,
+    Subject,
+    UserProfile,
 )
 
 

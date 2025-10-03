@@ -22,41 +22,43 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 
-from django.contrib import admin
-from django.urls import path, include
+import os
+
+from django.conf import settings
 from django.conf.urls.static import static
+from django.contrib import admin
+from django.contrib.admin.views.decorators import staff_member_required
+from django.urls import include, path
+from django.views.static import serve
+from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
+from rest_framework.routers import DefaultRouter
+
 from .views import (
-    RepositoryAPIView,
-    LegacyUserAPIView,
-    UserProfileListAPIView,
-    UserProfileDetailAPIView,
-    ProtocolViewSet,
+    AnimalProfileViewSet,
+    CountryAPIView,
+    FavoriteViewSet,
     FileAPIView,
     FileDetailAPIView,
-    HardwareDetailAPIView,
-    SoftwareVersionViewSet,
     HardwareAPIView,
-    CountryAPIView,
-    ReferenceAPIView,
-    SubjectViewSet,
-    SchemaDetailView,
-    StudyViewSet,
+    HardwareDetailAPIView,
+    LaboratoryAPIView,
+    LegacyUserAPIView,
     LinkOrcidView,
-    TrackPageView,
+    ProtocolViewSet,
     RecordingSessionViewSet,
-    AnimalProfileViewSet,
+    ReferenceAPIView,
+    RepositoryAPIView,
+    SchemaDetailView,
+    SoftwareVersionViewSet,
+    SoftwareViewSet,
     SpeciesViewSet,
     StrainViewSet,
-    LaboratoryAPIView,
-    SoftwareViewSet,
-    FavoriteViewSet,
+    StudyViewSet,
+    SubjectViewSet,
+    TrackPageView,
+    UserProfileDetailAPIView,
+    UserProfileListAPIView,
 )
-from django.views.static import serve
-from rest_framework.routers import DefaultRouter
-from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
-from django.contrib.admin.views.decorators import staff_member_required
-import os
-from django.conf import settings
 
 router = DefaultRouter()
 router.register(r"protocol", ProtocolViewSet, basename="protocol")

@@ -1,5 +1,5 @@
-from djoser.email import ActivationEmail
 from django.conf import settings
+from djoser.email import ActivationEmail
 
 
 class CustomActivationEmail(ActivationEmail):

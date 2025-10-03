@@ -7,12 +7,12 @@
 # PHENOMIN, CNRS UMR7104, INSERM U964, Université de Strasbourg
 # Code under GPL v3.0 licence
 
-from django.db import models
 from django.conf import settings
-from django_countries.fields import CountryField
-from django.core.exceptions import ValidationError
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
+from django.core.exceptions import ValidationError
+from django.db import models
+from django_countries.fields import CountryField
 
 
 class Laboratory(models.Model):
@@ -186,15 +186,23 @@ class Strain(models.Model):
         background (str): The genetic background of the strain.
         species (Species): The species associated with the strain.
         bibliography (str, optional): Bibliographical references related to the strain.
+        status (str): The status of the strain (draft, waiting validation, validated).
         created_at (DateTimeField): Timestamp when the species entry was created.
         modified_at (DateTimeField): Last modification timestamp.
         created_by (ForeignKey): User who created the species entry.
     """
 
+    STATUS_CHOICES = [
+        ("draft", "Draft"),
+        ("waiting_validation", "Waiting Validation"),
+        ("validated", "Validated"),
+    ]
+
     name = models.CharField(max_length=255, unique=True)
     background = models.CharField(max_length=255)
-    species = models.ForeignKey(Species, on_delete=models.CASCADE, null=True)
+    species = models.ForeignKey(Species, on_delete=models.CASCADE)
     bibliography = models.TextField(blank=True, null=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="draft")
     created_at = models.DateTimeField(auto_now_add=True, null=True)
     modified_at = models.DateTimeField(auto_now=True, null=True)
     created_by = models.ForeignKey(
@@ -229,6 +237,7 @@ class AnimalProfile(models.Model):
         sex (str, optional): The sex of the subject.
         genotype (str, optional): The genotype of the animal.
         treatment (str, optional): The treatment applied to the animal.
+        status (str): The status of the animal profil (draft, waiting validation, validated).
         created_at (DateTimeField): Timestamp when the animal profil was created.
         modified_at (DateTimeField): Last modification timestamp.
         created_by (ForeignKey): User who created the animal profil entry.
@@ -239,12 +248,19 @@ class AnimalProfile(models.Model):
         ("female", "Female"),
     ]
 
+    STATUS_CHOICES = [
+        ("draft", "Draft"),
+        ("waiting_validation", "Waiting Validation"),
+        ("validated", "Validated"),
+    ]
+
     name = models.CharField(max_length=255, unique=True)
     description = models.TextField(blank=True, null=True)
     strain = models.ForeignKey(Strain, on_delete=models.CASCADE)
     sex = models.CharField(max_length=6, choices=SEX_CHOICES, blank=True, null=True)
     genotype = models.CharField(max_length=255, blank=True, null=True)
     treatment = models.CharField(max_length=255, blank=True, null=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="draft")
     created_at = models.DateTimeField(auto_now_add=True, null=True)
     modified_at = models.DateTimeField(auto_now=True, null=True)
     created_by = models.ForeignKey(
@@ -1040,7 +1056,7 @@ class Favorite(models.Model):
         created_at (DateTimeField): Timestamp when the favorite was created.
     """
 
-    ALLOWED_MODELS = ["protocol", "hardware", "software"]
+    ALLOWED_MODELS = ["protocol", "hardware", "software", "animalprofile", "strain"]
 
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="favorites"
