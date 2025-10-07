@@ -946,6 +946,12 @@ class File(models.Model):
         ("MOV", "MOV"),
         ("MKV", "MKV"),
     ]
+    STATUS_CHOICES = [
+        ("pending", "Pending"),
+        ("processing", "Processing"),
+        ("done", "Done"),
+        ("error", "Error"),
+    ]
     name = models.CharField(max_length=255, blank=True, null=True)
     link = models.URLField(blank=True, null=True)
     recording_session = models.ForeignKey(
@@ -981,6 +987,12 @@ class File(models.Model):
     repository = models.ForeignKey(
         Repository, on_delete=models.SET_NULL, null=True, blank=True
     )
+    status = models.CharField(
+        max_length=10,
+        choices=STATUS_CHOICES,
+        default="pending",
+    )
+    celery_task_id = models.CharField(max_length=255, blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True, null=True)
     modified_at = models.DateTimeField(auto_now=True, null=True)
     created_by = models.ForeignKey(

@@ -49,7 +49,7 @@ from rest_framework.permissions import (
 )
 from rest_framework.response import Response
 from rest_framework.views import APIView
-
+from rest_framework.decorators import api_view
 from .models import (
     AnimalProfile,
     Favorite,
@@ -91,6 +91,9 @@ from .serializers import (
     TrackPageSerializer,
     UserProfileSerializer,
 )
+from celery.result import AsyncResult
+from .celery import app
+from .tasks import process_file
 
 
 # ----------------------------
@@ -719,7 +722,7 @@ class FileAPIView(GenericAPIView):
         if recording_session_id:
             try:
                 recording_session_id_int = int(recording_session_id)
-                files = files.filter(recording_session__id=recording_session_id_int)
+                files = files.filter(recording_session_id=recording_session_id_int)
             except ValueError:
                 pass
 
@@ -897,6 +900,49 @@ class FileAPIView(GenericAPIView):
                 self.serializer_class(file).data, status=status.HTTP_201_CREATED
             )
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    def perform_create(self, serializer):
+        file_obj = self.request.FILES.get("file")
+        instance = serializer.save(file=file_obj)
+        task = process_file.delay(instance.id)
+        instance.celery_task_id = task.id
+        instance.save()
+    
+# ----------------------------
+# File status endpoint
+# ----------------------------
+@api_view(['GET'])
+def file_task_status(request, file_id):
+    file = get_object_or_404(File, id=file_id)
+
+    if not file.celery_task_id:
+        return Response({'error': 'No task associated'}, status=404)
+
+    result = AsyncResult(file.celery_task_id, app=app)
+
+    response = {
+        'id': file.id,
+        'task_state': result.state,  # PENDING, STARTED, SUCCESS, FAILURE
+        'status': file.status,
+    }
+
+    if result.failed():
+        response['task_error'] = str(result.result)
+        response['task_traceback'] = result.traceback
+
+    return Response(response)
+
+
+class FileUploadAsyncView(APIView):
+    def post(self, request):
+        uploaded_file = request.FILES.get("file")
+        temp_dir = os.path.join(settings.MEDIA_ROOT, "temp")
+        os.makedirs(temp_dir, exist_ok=True)
+        temp_path = os.path.join(temp_dir, uploaded_file.name)
+        with open(temp_path, "wb+") as dest:
+            for chunk in uploaded_file.chunks():
+                dest.write(chunk)
+        return Response({"temp_path": f"/media/temp/{uploaded_file.name}"})
 
 
 class FileDetailAPIView(GenericAPIView):

@@ -58,6 +58,8 @@ from .views import (
     TrackPageView,
     UserProfileDetailAPIView,
     UserProfileListAPIView,
+    file_task_status,
+    FileUploadAsyncView,
 )
 
 router = DefaultRouter()
@@ -99,6 +101,8 @@ urlpatterns = [
         name="user_profile-detail",
     ),
     path("api/file/", FileAPIView.as_view(), name="file"),
+    path("api/file/<int:file_id>/status/", file_task_status, name="file-status"),
+    path("api/file/upload_async/", FileUploadAsyncView.as_view(), name="file-upload"),
     path("api/hardware/", HardwareAPIView.as_view(), name="hardware"),
     path(
         "api/hardware/<int:pk>/",
