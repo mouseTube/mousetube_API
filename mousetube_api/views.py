@@ -11,6 +11,7 @@ import json
 import os
 
 import django_filters
+from celery.result import AsyncResult
 from django.apps import apps
 from django.conf import settings
 from django.contrib.contenttypes.models import ContentType
@@ -40,6 +41,7 @@ from drf_spectacular.utils import (
     extend_schema_serializer,
 )
 from rest_framework import filters, permissions, status, viewsets
+from rest_framework.decorators import api_view
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.generics import GenericAPIView
 from rest_framework.pagination import PageNumberPagination
@@ -49,7 +51,10 @@ from rest_framework.permissions import (
 )
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from rest_framework.decorators import api_view
+
+from mousetube_api.tasks import process_file, publish_session_deposition
+
+from .celery import app
 from .models import (
     AnimalProfile,
     Favorite,
@@ -91,9 +96,6 @@ from .serializers import (
     TrackPageSerializer,
     UserProfileSerializer,
 )
-from celery.result import AsyncResult
-from .celery import app
-from .tasks import process_file
 
 
 # ----------------------------
@@ -698,27 +700,23 @@ class RecordingSessionViewSet(viewsets.ModelViewSet):
 class FileAPIView(GenericAPIView):
     serializer_class = FileSerializer
 
+    # -----------------------------
+    # Permissions
+    # -----------------------------
     def get_permissions(self):
         if self.request.method == "POST":
             return [IsAuthenticated()]
         return [AllowAny()]
 
-    @extend_schema(
-        operation_id="api_file_list",
-        parameters=[
-            OpenApiParameter(
-                name="search", description="text search", required=False, type=str
-            ),
-            OpenApiParameter(
-                name="filter", description="filter", required=False, type=str
-            ),
-        ],
-    )
-    def get(self, request, *args, **kwargs):
-        search_query = request.GET.get("search", "")
-        filter_query = request.GET.get("filter", "")
-        recording_session_id = request.GET.get("recording_session")
+    # -----------------------------
+    # Queryset dynamique
+    # -----------------------------
+    def get_queryset(self):
         files = File.objects.all()
+        request = self.request
+
+        # --- Filtrage par RecordingSession ---
+        recording_session_id = request.GET.get("recording_session")
         if recording_session_id:
             try:
                 recording_session_id_int = int(recording_session_id)
@@ -726,10 +724,11 @@ class FileAPIView(GenericAPIView):
             except ValueError:
                 pass
 
+        # --- Recherche textuelle globale ---
+        search_query = request.GET.get("search", "").strip()
         if search_query:
             file_fields = ["number", "link", "notes", "doi"]
 
-            # Fields for RecordingSession model
             recording_session_fields = [
                 "name",
                 "equipment_acquisition_software__software__name",
@@ -742,15 +741,8 @@ class FileAPIView(GenericAPIView):
                 "duration",
             ]
 
-            # Fields for Subject model
-            subject_fields = [
-                "name",
-                "identifier",
-                "origin",
-                "cohort",
-            ]
+            subject_fields = ["name", "identifier", "origin", "cohort"]
 
-            # Fields for User model (related to Subject)
             user_fields = [
                 "name_user",
                 "first_name_user",
@@ -761,7 +753,6 @@ class FileAPIView(GenericAPIView):
                 "country_user",
             ]
 
-            # Fields for Strain model (related to Subject)
             strain_fields = [
                 "animal_profile__strain__name",
                 "animal_profile__strain__background",
@@ -769,7 +760,6 @@ class FileAPIView(GenericAPIView):
                 "animal_profile__strain__species__name",
             ]
 
-            # Fields for Protocol model (related to RecordingSession)
             protocol_fields = [
                 "name",
                 "description",
@@ -807,132 +797,118 @@ class FileAPIView(GenericAPIView):
 
             study_fields = ["name", "description"]
 
-            # Build dynamic Q objects for File fields
-            file_query = Q()
-            for field in file_fields:
-                lookup = f"{field}__icontains"
-                file_query |= Q(**{lookup: search_query})
+            # Construction dynamique des Q() pour tous les groupes
+            def build_query(prefix, fields):
+                q = Q()
+                for f in fields:
+                    lookup = f"{prefix}{f}__icontains" if prefix else f"{f}__icontains"
+                    q |= Q(**{lookup: search_query})
+                return q
 
-            # Build dynamic Q objects for RecordingSession fields
-            recording_session_query = Q()
-            for field in recording_session_fields:
-                lookup = f"recording_session__{field}__icontains"
-                recording_session_query |= Q(**{lookup: search_query})
-
-            # Build dynamic Q objects for Subject fields
-            subject_query = Q()
-            for field in subject_fields:
-                lookup = f"subjects__{field}__icontains"
-                subject_query |= Q(**{lookup: search_query})
-
-            # Build dynamic Q objects for User fields (via Subject)
-            user_query = Q()
-            for field in user_fields:
-                lookup = f"subjects__user__{field}__icontains"
-                user_query |= Q(**{lookup: search_query})
-
-            # Build dynamic Q objects for Strain fields (via Subject)
-            strain_query = Q()
-            for field in strain_fields:
-                lookup = f"subjects__{field}__icontains"
-                strain_query |= Q(**{lookup: search_query})
-
-            # Build dynamic Q objects for Protocol fields (via RecordingSession)
-            protocol_query = Q()
-            for field in protocol_fields:
-                lookup = f"recording_session__protocol__{field}__icontains"
-                protocol_query |= Q(**{lookup: search_query})
-
-            # Build dynamic Q objects for AnimalProfile fields (via Subject)
-            animal_profile_query = Q()
-            for field in animal_profile_fields:
-                lookup = f"subjects__animal_profile__{field}__icontains"
-                animal_profile_query |= Q(**{lookup: search_query})
-
-            # Build dynamic Q objects for Laboratory fields (via RecordingSession)
-            laboratory_query = Q()
-            for field in laboratory_fields:
-                lookup = f"recording_session__laboratory__{field}__icontains"
-                laboratory_query |= Q(**{lookup: search_query})
-
-            # Build dynamic Q objects for Study fields (via RecordingSession)
-            study_query = Q()
-            for field in study_fields:
-                lookup = f"recording_session__studies__{field}__icontains"
-                study_query |= Q(**{lookup: search_query})
-
-            # Combine all queries
-            files = files.filter(
-                file_query
-                | recording_session_query
-                | subject_query
-                | user_query
-                | strain_query
-                | protocol_query
-                | animal_profile_query
-                | laboratory_query
-                | study_query
+            combined_query = (
+                build_query("", file_fields)
+                | build_query("recording_session__", recording_session_fields)
+                | build_query("subjects__", subject_fields)
+                | build_query("subjects__user__", user_fields)
+                | build_query("subjects__", strain_fields)
+                | build_query("recording_session__protocol__", protocol_fields)
+                | build_query("subjects__animal_profile__", animal_profile_fields)
+                | build_query("recording_session__laboratory__", laboratory_fields)
+                | build_query("recording_session__studies__", study_fields)
             )
 
-        ALLOWED_FILTERS = ["is_valid_link"]
+            files = files.filter(combined_query).distinct()
 
-        # Apply filters
+        # --- Filtres simples ---
+        ALLOWED_FILTERS = ["is_valid_link"]
+        filter_query = request.GET.get("filter", "")
         if filter_query:
             for filter_name in filter_query.split(","):
-                if filter_name not in ALLOWED_FILTERS:
-                    continue  # Ignore invalid filters
-
-                if filter_name == "is_valid_link":
+                if filter_name in ALLOWED_FILTERS and filter_name == "is_valid_link":
                     files = files.filter(is_valid_link=True)
 
-        # Add explicit ordering to avoid UnorderedObjectListWarning
+        # --- Tri explicite pour éviter UnorderedObjectListWarning ---
         files = files.order_by(F("name").asc(nulls_last=True))
+        return files
+
+    # -----------------------------
+    # GET avec pagination
+    # -----------------------------
+    @extend_schema(
+        operation_id="api_file_list",
+        parameters=[
+            OpenApiParameter(
+                name="search",
+                description="Recherche textuelle globale",
+                required=False,
+                type=str,
+            ),
+            OpenApiParameter(
+                name="filter",
+                description="Filtre (ex: is_valid_link)",
+                required=False,
+                type=str,
+            ),
+            OpenApiParameter(
+                name="recording_session",
+                description="Filtrer par ID de session d’enregistrement",
+                required=False,
+                type=int,
+            ),
+        ],
+    )
+    def get(self, request, *args, **kwargs):
+        queryset = self.get_queryset()
         paginator = FilePagination()
-        paginated_files = paginator.paginate_queryset(files, request)
+        paginated_files = paginator.paginate_queryset(queryset, request)
         serializer = self.serializer_class(paginated_files, many=True)
         return paginator.get_paginated_response(serializer.data)
 
+    # -----------------------------
+    # POST avec Celery
+    # -----------------------------
     def post(self, request, *args, **kwargs):
         serializer = self.serializer_class(data=request.data)
         if serializer.is_valid():
-            file = serializer.save()
-            return Response(
-                self.serializer_class(file).data, status=status.HTTP_201_CREATED
-            )
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
-    def perform_create(self, serializer):
-        file_obj = self.request.FILES.get("file")
-        instance = serializer.save(file=file_obj)
-        task = process_file.delay(instance.id)
-        instance.celery_task_id = task.id
-        instance.save()
-    
+            file = serializer.save(created_by=request.user)
+
+            # Déclenche la tâche Celery
+            task = process_file.delay(file.id)
+            file.celery_task_id = task.id
+            file.save(update_fields=["celery_task_id"])
+
+            return Response(self.serializer_class(file).data, status=201)
+        return Response(serializer.errors, status=400)
+
+
 # ----------------------------
 # File status endpoint
 # ----------------------------
-@api_view(['GET'])
+@api_view(["GET"])
 def file_task_status(request, file_id):
     file = get_object_or_404(File, id=file_id)
 
     if not file.celery_task_id:
-        return Response({'error': 'No task associated'}, status=404)
+        return Response({"error": "No task associated"}, status=404)
 
     result = AsyncResult(file.celery_task_id, app=app)
 
     response = {
-        'id': file.id,
-        'task_state': result.state,  # PENDING, STARTED, SUCCESS, FAILURE
-        'status': file.status,
+        "id": file.id,
+        "task_state": result.state,  # PENDING, STARTED, SUCCESS, FAILURE
+        "status": file.status,
     }
 
     if result.failed():
-        response['task_error'] = str(result.result)
-        response['task_traceback'] = result.traceback
+        response["task_error"] = str(result.result)
+        response["task_traceback"] = result.traceback
 
     return Response(response)
 
 
+# ----------------------------
+# File Upload endpoint
+# ----------------------------
 class FileUploadAsyncView(APIView):
     def post(self, request):
         uploaded_file = request.FILES.get("file")
@@ -943,6 +919,48 @@ class FileUploadAsyncView(APIView):
             for chunk in uploaded_file.chunks():
                 dest.write(chunk)
         return Response({"temp_path": f"/media/temp/{uploaded_file.name}"})
+
+
+# ----------------------------
+# File Publish session endpoint
+# ----------------------------
+class PublishSessionView(APIView):
+    def post(self, request):
+        recording_session_id = request.data.get("recording_session_id")
+        if not recording_session_id:
+            return Response({"error": "recording_session_id required"}, status=400)
+
+        # Lance le task Celery
+        task = publish_session_deposition.delay(recording_session_id)
+        return Response(
+            {
+                "message": "Publishing started. You’ll be notified when complete.",
+                "task_id": task.id,
+            },
+            status=202,
+        )
+
+
+@api_view(["GET"])
+def get_task_status(request):
+    task_id = request.query_params.get("task_id")
+    if not task_id:
+        return Response({"error": "Missing task_id"}, status=400)
+
+    result = AsyncResult(task_id)
+
+    response_data = {
+        "task_id": task_id,
+        "state": result.state,  # PENDING, STARTED, SUCCESS, FAILURE
+        "success": result.successful(),
+        "error": str(result.result) if result.failed() else None,
+        "progress": 0,
+    }
+
+    if result.info and isinstance(result.info, dict):
+        response_data["progress"] = result.info.get("progress", 0)
+
+    return Response(response_data)
 
 
 class FileDetailAPIView(GenericAPIView):

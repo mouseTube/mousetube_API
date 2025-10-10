@@ -1,84 +1,135 @@
+import logging
+import os
+
+import soundfile as sf
 from celery import shared_task
 from django.conf import settings
-from django.core.files.storage import default_storage
-from .models import File
-from .utils.zenodo import publish_to_zenodo
-import soundfile as sf
-import os
-import traceback
+
+from mousetube_api.models import File, RecordingSession, Repository
+from mousetube_api.utils.file_handler import link_to_local_path
+from mousetube_api.utils.zenodo import (
+    prepare_zenodo_deposition_for_session,
+    publish_zenodo_deposition,
+)
+
+logger = logging.getLogger(__name__)
 
 
-@shared_task(bind=True)
+def extract_metadata(file_instance, local_path):
+    """Extract duration, sample rate, bit depth, format from the audio file.
+    Only fills empty attributes on the File instance.
+    """
+    updated_fields = []
+
+    with sf.SoundFile(local_path) as f:
+        if not file_instance.sampling_rate:
+            file_instance.sampling_rate = f.samplerate
+            updated_fields.append("sampling_rate")
+
+        if not file_instance.duration:
+            file_instance.duration = int(len(f) / f.samplerate)
+            updated_fields.append("duration")
+
+        if not file_instance.bit_depth:
+            bit_depth_map = {
+                "PCM_16": 16,
+                "PCM_24": 24,
+                "PCM_32": 32,
+                "FLOAT": 32,
+                "DOUBLE": 64,
+            }
+            file_instance.bit_depth = bit_depth_map.get(f.subtype)
+            updated_fields.append("bit_depth")
+
+    if not file_instance.format:
+        _, ext = os.path.splitext(local_path)
+        file_instance.format = ext.lower().lstrip(".").upper()
+        updated_fields.append("format")
+
+    if updated_fields:
+        file_instance.save(update_fields=updated_fields)
+
+
+@shared_task(bind=True, max_retries=1)
 def process_file(self, file_id):
     """
-    Celery task to:
-    1. Prepare the file locally
-    2. Extract metadata
-    3. Publish to Zenodo
-    Handles all errors and updates file status.
+    Process a single file:
+    1️⃣ Extract metadata
+    2️⃣ Prepare the repository deposition (Zenodo or future repo)
     """
     file_instance = File.objects.get(id=file_id)
-
     try:
         # ---- 1. Start processing ----
         file_instance.status = "processing"
         file_instance.save(update_fields=["status"])
 
-        local_path = move_or_prepare_file(file_instance)
-
-        # ---- 2. Extract metadata ----
+        # ---- 2. Get local path and extract metadata ----
+        local_path = link_to_local_path(file_instance)
         extract_metadata(file_instance, local_path)
-        file_instance.status = "metadata_extracted"
+
+        # ---- 3. Prepare repository deposition for the recording session ----
+        rs = file_instance.recording_session
+        if not rs:
+            raise ValueError("File has no recording session assigned.")
+        deposition_id = prepare_zenodo_deposition_for_session(rs, file_instance)
+
+        # ---- 4. Mark file as done ----
+        file_instance.status = "done"
         file_instance.save(update_fields=["status"])
 
-        # ---- 3. Publish to Zenodo ----
-        publish_to_zenodo(file_instance, local_path)
-        file_instance.status = "published"
-        file_instance.save(update_fields=["status"])
-
-        return f"✅ File {file_instance.id} processed successfully."
+        return f"✅ File {file_instance.id} processed successfully, deposition {deposition_id} used."
 
     except Exception as e:
-        # ---- Error handling ----
         file_instance.status = "error"
-        # Enregistrer une trace utile pour le debug (sans champ dédié)
-        file_instance.status_detail = str(e)[:500]  # si tu as ce champ
-        file_instance.save(update_fields=["status", "status_detail"])
-        # Optionnel : log complet côté Celery
-        self.retry(exc=e, countdown=10, max_retries=1)  # ou retire si tu ne veux pas de retry
+        file_instance.save(update_fields=["status"])
+        logger.exception(f"Error processing file {file_instance.id}: {e}")
         raise
 
 
-def move_or_prepare_file(file_instance):
-    """Prépare un fichier localement."""
-    if hasattr(file_instance, "file") and file_instance.file:
-        return file_instance.file.path
+@shared_task(bind=True)
+def publish_session_deposition(self, recording_session_id):
+    self.update_state(state="STARTED", meta={"progress": 5})
+    print(recording_session_id)
 
-    temp_path = os.path.join(settings.MEDIA_ROOT, f"tmp_{file_instance.id}")
-    if not default_storage.exists(file_instance.link):
-        raise FileNotFoundError(f"Remote file not found: {file_instance.link}")
+    rs = RecordingSession.objects.get(id=recording_session_id)
+    files = File.objects.filter(recording_session=rs)
+    print(files)
 
-    with default_storage.open(file_instance.link, "rb") as f_in, open(temp_path, "wb") as f_out:
-        f_out.write(f_in.read())
+    if not files.exists():
+        raise ValueError("No files found for this recording session.")
 
-    return temp_path
+    # Step 1 — Start publication
+    self.update_state(state="STARTED", meta={"progress": 20})
 
+    # Step 2 — Publishing
+    first_file = files.first()
+    print(first_file)
+    doi = publish_zenodo_deposition(first_file)
+    self.update_state(state="STARTED", meta={"progress": 60})
 
-def extract_metadata(file_instance, local_path):
-    """Extract duration, sample rate, bit depth."""
-    with sf.SoundFile(local_path) as f:
-        file_instance.sampling_rate = f.samplerate
-        file_instance.duration = int(len(f) / f.samplerate)
-        file_instance.bit_depth = _subtype_to_bitdepth(f.subtype)
-    file_instance.save(update_fields=["sampling_rate", "duration", "bit_depth"])
+    # Step 3 — Update status
+    RecordingSession.objects.filter(id=rs.id).update(status="published")
+    if rs.protocol:
+        rs.protocol.__class__.objects.filter(id=rs.protocol.id).update(
+            status="validated"
+        )
+    if rs.laboratory:
+        rs.laboratory.__class__.objects.filter(id=rs.laboratory.id).update(
+            status="validated"
+        )
 
+    rs.studies.update(status="validated")
+    rs.animal_profiles.update(status="validated")
 
-def _subtype_to_bitdepth(subtype):
-    mapping = {
-        "PCM_16": 16,
-        "PCM_24": 24,
-        "PCM_32": 32,
-        "FLOAT": 32,
-        "DOUBLE": 64,
-    }
-    return mapping.get(subtype)
+    strain_ids = rs.animal_profiles.exclude(strain__isnull=True).values_list(
+        "strain_id", flat=True
+    )
+    if strain_ids:
+        from .models import Strain
+
+        Strain.objects.filter(id__in=strain_ids).update(status="validated")
+
+    self.update_state(state="STARTED", meta={"progress": 90})
+
+    # Étape finale
+    return {"message": f"✅ Session {rs.id} published with DOI {doi}.", "progress": 100}

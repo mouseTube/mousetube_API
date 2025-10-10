@@ -31,12 +31,18 @@ class Laboratory(models.Model):
         created_by (ForeignKey): User who created the laboratory record.
     """
 
+    STATUS_CHOICES = [
+        ("draft", "Draft"),
+        ("waiting validation", "Waiting validation"),
+        ("validated", "Validated"),
+    ]
     name = models.CharField(max_length=255)
     institution = models.CharField(max_length=255, blank=True, null=True)
     unit = models.CharField(max_length=255, blank=True, null=True)
     address = models.CharField(max_length=255, blank=True, null=True)
     country = CountryField(blank=True, null=True)
     contact = models.CharField(max_length=255, blank=True, null=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="draft")
     created_at = models.DateTimeField(auto_now_add=True, null=True)
     modified_at = models.DateTimeField(auto_now=True, null=True)
     created_by = models.ForeignKey(
@@ -634,10 +640,17 @@ class Study(models.Model):
         created_by (ForeignKey): User who created the experiment record.
     """
 
+    STATUS_CHOICES = [
+        ("draft", "Draft"),
+        ("waiting validation", "Waiting validation"),
+        ("validated", "Validated"),
+    ]
+
     name = models.CharField(max_length=255)
     description = models.TextField(blank=True, null=True)
     start_date = models.DateField(blank=True, null=True)
     end_date = models.DateField(blank=True, null=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="draft")
     created_at = models.DateTimeField(auto_now_add=True, null=True)
     modified_at = models.DateTimeField(auto_now=True, null=True)
     created_by = models.ForeignKey(
@@ -986,6 +999,12 @@ class File(models.Model):
     downloads = models.IntegerField(default=0)
     repository = models.ForeignKey(
         Repository, on_delete=models.SET_NULL, null=True, blank=True
+    )
+    external_id = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+        help_text="external ID of the repository (Zenodo, Figshare...)",
     )
     status = models.CharField(
         max_length=10,

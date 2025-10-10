@@ -32,6 +32,7 @@ dependencies = [
     "django-extensions==4.1",
     "django-allauth>=65.9.0",
     "django-filter>=25.1",
+    "soundfile==0.13.1",
 ]
 license = { text = "GPL-3.0" }
 

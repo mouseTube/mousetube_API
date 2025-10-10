@@ -39,12 +39,14 @@ from .views import (
     FavoriteViewSet,
     FileAPIView,
     FileDetailAPIView,
+    FileUploadAsyncView,
     HardwareAPIView,
     HardwareDetailAPIView,
     LaboratoryAPIView,
     LegacyUserAPIView,
     LinkOrcidView,
     ProtocolViewSet,
+    PublishSessionView,
     RecordingSessionViewSet,
     ReferenceAPIView,
     RepositoryAPIView,
@@ -59,7 +61,7 @@ from .views import (
     UserProfileDetailAPIView,
     UserProfileListAPIView,
     file_task_status,
-    FileUploadAsyncView,
+    get_task_status,
 )
 
 router = DefaultRouter()
@@ -103,6 +105,12 @@ urlpatterns = [
     path("api/file/", FileAPIView.as_view(), name="file"),
     path("api/file/<int:file_id>/status/", file_task_status, name="file-status"),
     path("api/file/upload_async/", FileUploadAsyncView.as_view(), name="file-upload"),
+    path(
+        "api/file/publish_session/",
+        PublishSessionView.as_view(),
+        name="publish-session",
+    ),
+    path("api/recording-session/get_task_status", get_task_status, name="file-status"),
     path("api/hardware/", HardwareAPIView.as_view(), name="hardware"),
     path(
         "api/hardware/<int:pk>/",

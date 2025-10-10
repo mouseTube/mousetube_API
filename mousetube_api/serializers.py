@@ -68,6 +68,8 @@ class CustomUserCreateSerializer(BaseUserCreateSerializer):
 
 
 class RepositorySerializer(serializers.ModelSerializer):
+    area = serializers.CharField(source="area.name")
+
     class Meta:
         model = Repository
         fields = "__all__"
@@ -742,53 +744,13 @@ class StudySerializer(serializers.ModelSerializer):
 
 class FileSerializer(serializers.ModelSerializer):
     repository = RepositorySerializer(required=False)
-    recording_session = RecordingSessionSerializer()
-    subjects = SubjectSerializer(many=True, required=False)
+    recording_session = serializers.PrimaryKeyRelatedField(
+        queryset=RecordingSession.objects.all(), required=False, allow_null=True
+    )
 
     class Meta:
         model = File
         fields = "__all__"
-
-    def create(self, validated_data):
-        subjects_data = validated_data.pop("subjects", [])
-        file = File.objects.create(**validated_data)
-
-        for subject_data in subjects_data:
-            subject_id = subject_data.get("id")
-            if subject_id:
-                subject_obj = Subject.objects.get(id=subject_id)
-                for attr, value in subject_data.items():
-                    if attr != "id":
-                        setattr(subject_obj, attr, value)
-                subject_obj.save()
-            else:
-                subject_obj = Subject.objects.create(**subject_data)
-            file.subjects.add(subject_obj)
-        return file
-
-    def update(self, instance, validated_data):
-        subjects_data = validated_data.pop("subjects", None)
-
-        for attr, value in validated_data.items():
-            setattr(instance, attr, value)
-        instance.save()
-
-        if subjects_data is not None:
-            subject_objs = []
-            for subject_data in subjects_data:
-                subject_id = subject_data.get("id")
-                if subject_id:
-                    subject_obj = Subject.objects.get(id=subject_id)
-                    for attr, value in subject_data.items():
-                        if attr != "id":
-                            setattr(subject_obj, attr, value)
-                    subject_obj.save()
-                else:
-                    subject_obj = Subject.objects.create(**subject_data)
-                subject_objs.append(subject_obj)
-            instance.subjects.set(subject_objs)
-
-        return instance
 
 
 class DatasetSerializer(serializers.ModelSerializer):
