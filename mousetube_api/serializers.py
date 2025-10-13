@@ -743,7 +743,9 @@ class StudySerializer(serializers.ModelSerializer):
 
 
 class FileSerializer(serializers.ModelSerializer):
-    repository = RepositorySerializer(required=False)
+    repository = serializers.PrimaryKeyRelatedField(
+        queryset=Repository.objects.all(), required=False, allow_null=True
+    )
     recording_session = serializers.PrimaryKeyRelatedField(
         queryset=RecordingSession.objects.all(), required=False, allow_null=True
     )

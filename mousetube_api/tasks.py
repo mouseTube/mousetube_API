@@ -7,10 +7,7 @@ from django.conf import settings
 
 from mousetube_api.models import File, RecordingSession, Repository
 from mousetube_api.utils.file_handler import link_to_local_path
-from mousetube_api.utils.zenodo import (
-    prepare_zenodo_deposition_for_session,
-    publish_zenodo_deposition,
-)
+from mousetube_api.utils.repository import publish_repository_deposition
 
 logger = logging.getLogger(__name__)
 
@@ -51,33 +48,43 @@ def extract_metadata(file_instance, local_path):
 
 
 @shared_task(bind=True, max_retries=1)
-def process_file(self, file_id):
+def process_file(self, file_id, repository_id):
     """
     Process a single file:
     1️⃣ Extract metadata
-    2️⃣ Prepare the repository deposition (Zenodo or future repo)
+    2️⃣ Prepare the repository deposition (Zenodo or other)
     """
+    from mousetube_api.utils.repository import prepare_repository_deposition_for_session
+
     file_instance = File.objects.get(id=file_id)
+    # ✅ Si aucun repository_id n'est fourni, fallback sur celui du fichier
+    if not repository_id and file_instance.repository_id:
+        repository_id = file_instance.repository_id
+
+    # ✅ Si toujours rien, utiliser repo par défaut
+    if not repository_id:
+        repository_id = 1
+    repository = Repository.objects.get(id=repository_id)
+
     try:
-        # ---- 1. Start processing ----
         file_instance.status = "processing"
         file_instance.save(update_fields=["status"])
 
-        # ---- 2. Get local path and extract metadata ----
         local_path = link_to_local_path(file_instance)
         extract_metadata(file_instance, local_path)
 
-        # ---- 3. Prepare repository deposition for the recording session ----
         rs = file_instance.recording_session
         if not rs:
             raise ValueError("File has no recording session assigned.")
-        deposition_id = prepare_zenodo_deposition_for_session(rs, file_instance)
 
-        # ---- 4. Mark file as done ----
+        deposition_id = prepare_repository_deposition_for_session(
+            repository, rs, file_instance
+        )
+
         file_instance.status = "done"
         file_instance.save(update_fields=["status"])
 
-        return f"✅ File {file_instance.id} processed successfully, deposition {deposition_id} used."
+        return f"✅ File {file_instance.id} processed successfully on {repository.name}, deposition {deposition_id}."
 
     except Exception as e:
         file_instance.status = "error"
@@ -87,24 +94,18 @@ def process_file(self, file_id):
 
 
 @shared_task(bind=True)
-def publish_session_deposition(self, recording_session_id):
-    self.update_state(state="STARTED", meta={"progress": 5})
-    print(recording_session_id)
-
+def publish_session_deposition(self, recording_session_id, repository_id):
+    repository = Repository.objects.get(id=repository_id)
     rs = RecordingSession.objects.get(id=recording_session_id)
     files = File.objects.filter(recording_session=rs)
-    print(files)
 
     if not files.exists():
         raise ValueError("No files found for this recording session.")
 
-    # Step 1 — Start publication
     self.update_state(state="STARTED", meta={"progress": 20})
 
-    # Step 2 — Publishing
     first_file = files.first()
-    print(first_file)
-    doi = publish_zenodo_deposition(first_file)
+    doi = publish_repository_deposition(repository, first_file)
     self.update_state(state="STARTED", meta={"progress": 60})
 
     # Step 3 — Update status
@@ -131,5 +132,4 @@ def publish_session_deposition(self, recording_session_id):
 
     self.update_state(state="STARTED", meta={"progress": 90})
 
-    # Étape finale
     return {"message": f"✅ Session {rs.id} published with DOI {doi}.", "progress": 100}

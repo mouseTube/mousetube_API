@@ -206,6 +206,8 @@ def publish_zenodo_deposition(file_instance: File):
         raise ValueError("Zenodo did not return a DOI after publishing.")
     base_url = ZENODO_API.split("/api")[0]
     File.objects.filter(recording_session=file_instance.recording_session).update(
-        doi=doi, link=f"{base_url}/records/{deposition_id}"
+        doi=doi,
+        link=f"{base_url}/records/{deposition_id}/files/{file_instance.name}?download=1",
+        external_url=f"{base_url}/records/{deposition_id}",
     )
     return doi

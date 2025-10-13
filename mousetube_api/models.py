@@ -1006,6 +1006,11 @@ class File(models.Model):
         null=True,
         help_text="external ID of the repository (Zenodo, Figshare...)",
     )
+    external_url = models.URLField(
+        blank=True,
+        null=True,
+        help_text="Public URL of the file on the external repository (e.g., Zenodo record link).",
+    )
     status = models.CharField(
         max_length=10,
         choices=STATUS_CHOICES,

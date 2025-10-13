@@ -871,9 +871,17 @@ class FileAPIView(GenericAPIView):
         serializer = self.serializer_class(data=request.data)
         if serializer.is_valid():
             file = serializer.save(created_by=request.user)
-
-            # Déclenche la tâche Celery
-            task = process_file.delay(file.id)
+            if not file.repository:
+                try:
+                    default_repo = Repository.objects.get(id=1)
+                    file.repository = default_repo
+                    file.save(update_fields=["repository"])
+                except Repository.DoesNotExist:
+                    return Response(
+                        {"error": "Default repository (id=1) not found."},
+                        status=500,
+                    )
+            task = process_file.delay(file.id, file.repository.id)
             file.celery_task_id = task.id
             file.save(update_fields=["celery_task_id"])
 
@@ -930,8 +938,11 @@ class PublishSessionView(APIView):
         if not recording_session_id:
             return Response({"error": "recording_session_id required"}, status=400)
 
-        # Lance le task Celery
-        task = publish_session_deposition.delay(recording_session_id)
+        repository_id = request.data.get("repository_id")
+        if not repository_id:
+            return Response({"error": "repository_id required"}, status=400)
+        # Launch Celery task
+        task = publish_session_deposition.delay(recording_session_id, repository_id)
         return Response(
             {
                 "message": "Publishing started. You’ll be notified when complete.",
