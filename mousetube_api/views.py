@@ -767,15 +767,10 @@ class FileAPIView(GenericAPIView):
                 "animals_sex",
                 "animals_age",
                 "animals_housing",
-                "animals_species",
-                "context_number_of_animals",
-                "context_duration",
                 "context_cage",
-                "context_bedding",
+                "context_duration",
                 "context_light_cycle",
-                "context_temperature_value",
-                "context_temperature_unit",
-                "context_brightness",
+                "status",
             ]
 
             animal_profile_fields = [
@@ -797,7 +792,6 @@ class FileAPIView(GenericAPIView):
 
             study_fields = ["name", "description"]
 
-            # Construction dynamique des Q() pour tous les groupes
             def build_query(prefix, fields):
                 q = Q()
                 for f in fields:
@@ -819,7 +813,7 @@ class FileAPIView(GenericAPIView):
 
             files = files.filter(combined_query).distinct()
 
-        # --- Filtres simples ---
+        # --- Filtres ---
         ALLOWED_FILTERS = ["is_valid_link"]
         filter_query = request.GET.get("filter", "")
         if filter_query:
@@ -827,12 +821,11 @@ class FileAPIView(GenericAPIView):
                 if filter_name in ALLOWED_FILTERS and filter_name == "is_valid_link":
                     files = files.filter(is_valid_link=True)
 
-        # --- Tri explicite pour éviter UnorderedObjectListWarning ---
         files = files.order_by(F("name").asc(nulls_last=True))
         return files
 
     # -----------------------------
-    # GET avec pagination
+    # GET with pagination
     # -----------------------------
     @extend_schema(
         operation_id="api_file_list",
@@ -865,7 +858,7 @@ class FileAPIView(GenericAPIView):
         return paginator.get_paginated_response(serializer.data)
 
     # -----------------------------
-    # POST avec Celery
+    # POST Celery
     # -----------------------------
     def post(self, request, *args, **kwargs):
         serializer = self.serializer_class(data=request.data)

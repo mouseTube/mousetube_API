@@ -1,4 +1,5 @@
 import os
+import urllib.parse
 
 from django.conf import settings
 
@@ -11,18 +12,26 @@ def link_to_local_path(file_instance):
       - /media/ paths
       - /temp/ paths
       - absolute local paths
+    Decodes URL-encoded characters and normalizes the path.
     """
     link = file_instance.link
     if not link:
         raise ValueError("File link is empty")
+
     link = link.strip()
 
-    if link.startswith("http://") or link.startswith("https://"):
-        path_part = "/" + link.split("/", 3)[-1]  # keep /media/... or /temp/...
-        link = path_part
+    if link.startswith(("http://", "https://")):
+        parts = urllib.parse.urlsplit(link)
+        link = parts.path
 
     if link.startswith("/media/"):
-        return os.path.join(settings.MEDIA_ROOT, link.replace("/media/", ""))
+        path = os.path.join(settings.MEDIA_ROOT, link[len("/media/") :])
     elif link.startswith("/temp/"):
-        return os.path.join(settings.TEMP_ROOT, link.replace("/temp/", ""))
-    return link
+        path = os.path.join(settings.TEMP_ROOT, link[len("/temp/") :])
+    else:
+        path = link
+
+    path = urllib.parse.unquote(path)
+    path = os.path.normpath(path)
+
+    return path

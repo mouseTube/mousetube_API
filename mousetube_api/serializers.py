@@ -743,12 +743,21 @@ class StudySerializer(serializers.ModelSerializer):
 
 
 class FileSerializer(serializers.ModelSerializer):
-    repository = serializers.PrimaryKeyRelatedField(
-        queryset=Repository.objects.all(), required=False, allow_null=True
+    repository_id = serializers.PrimaryKeyRelatedField(
+        source="repository",
+        queryset=Repository.objects.all(),
+        required=False,
+        write_only=True,
     )
-    recording_session = serializers.PrimaryKeyRelatedField(
-        queryset=RecordingSession.objects.all(), required=False, allow_null=True
+    repository = RepositorySerializer(required=False)
+    recording_session_id = serializers.PrimaryKeyRelatedField(
+        source="recording_session",
+        queryset=RecordingSession.objects.all(),
+        required=False,
+        write_only=True,
     )
+    recording_session = RecordingSessionSerializer(required=False)
+    subjects = SubjectSerializer(many=True, required=False)
 
     class Meta:
         model = File

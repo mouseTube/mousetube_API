@@ -3,7 +3,6 @@ import os
 
 import soundfile as sf
 from celery import shared_task
-from django.conf import settings
 
 from mousetube_api.models import File, RecordingSession, Repository
 from mousetube_api.utils.file_handler import link_to_local_path
@@ -129,6 +128,9 @@ def publish_session_deposition(self, recording_session_id, repository_id):
         from .models import Strain
 
         Strain.objects.filter(id__in=strain_ids).update(status="validated")
+
+    # update file is_valid_link attribut if status is "done"
+    files.filter(status="done").update(is_valid_link=True)
 
     self.update_state(state="STARTED", meta={"progress": 90})
 
