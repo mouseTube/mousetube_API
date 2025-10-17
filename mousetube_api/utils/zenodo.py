@@ -94,7 +94,11 @@ def prepare_zenodo_deposition_for_session(recording_session, new_file=None):
     else:
         # Create new zenodo repo
         r = requests.post(
-            ZENODO_API + "/deposit/depositions", params=params, json={}, headers=headers
+            ZENODO_API + "/deposit/depositions",
+            params=params,
+            json={},
+            headers=headers,
+            timeout=60,
         )
         r.raise_for_status()
         deposition_id = r.json()["id"]
@@ -121,7 +125,9 @@ def prepare_zenodo_deposition_for_session(recording_session, new_file=None):
         try:
             with open(local_path, "rb") as file_obj:
                 files_payload = {"file": (filename, file_obj)}
-                r = requests.post(upload_url, params=params, files=files_payload)
+                r = requests.post(
+                    upload_url, params=params, files=files_payload, timeout=60
+                )
                 r.raise_for_status()
         except requests.exceptions.HTTPError as e:
             print(f"❌ Failed to upload file {file_instance.id}: {e}")
@@ -177,6 +183,7 @@ def prepare_zenodo_deposition_for_session(recording_session, new_file=None):
         params=params,
         data=json.dumps(metadata_payload),
         headers=headers,
+        timeout=60,
     )
     r.raise_for_status()
 
@@ -197,6 +204,7 @@ def publish_zenodo_deposition(file_instance: File):
         r = requests.post(
             f"{ZENODO_API + '/deposit/depositions'}/{deposition_id}/actions/publish",
             params=params,
+            timeout=60,
         )
         r.raise_for_status()
     except requests.HTTPError as e:
