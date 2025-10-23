@@ -241,6 +241,7 @@ class AnimalProfile(models.Model):
         description (str, optional): A description of the animal profil.
         strain (Strain): The strain associated with the animal profil.
         sex (str, optional): The sex of the subject.
+        age (str, optional): The age of the animal.
         genotype (str, optional): The genotype of the animal.
         treatment (str, optional): The treatment applied to the animal.
         status (str): The status of the animal profil (draft, waiting validation, validated).
@@ -263,9 +264,18 @@ class AnimalProfile(models.Model):
     name = models.CharField(max_length=255, unique=True)
     description = models.TextField(blank=True, null=True)
     strain = models.ForeignKey(Strain, on_delete=models.CASCADE)
-    sex = models.CharField(max_length=6, choices=SEX_CHOICES, blank=True, null=True)
-    genotype = models.CharField(max_length=255, blank=True, null=True)
-    treatment = models.CharField(max_length=255, blank=True, null=True)
+    sex = models.CharField(max_length=6, choices=SEX_CHOICES)
+    age = models.CharField(
+        max_length=32,
+        choices=[
+            ("pup", "pup"),
+            ("juvenile", "juvenile"),
+            ("adult", "adult"),
+        ],
+        default="adult",
+    )
+    genotype = models.CharField(max_length=255)
+    treatment = models.CharField(max_length=255, null=True, blank=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="draft")
     created_at = models.DateTimeField(auto_now_add=True, null=True)
     modified_at = models.DateTimeField(auto_now=True, null=True)
@@ -368,14 +378,15 @@ class Protocol(models.Model):
             ("female(s)", "female(s)"),
             ("male(s) & female(s)", "male(s) & female(s)"),
         ],
-        blank=True,
-        null=True,
     )
     animals_age = models.CharField(
         max_length=32,
-        choices=[("pup", "pup"), ("juvenile", "juvenile"), ("adult", "adult")],
-        blank=True,
-        null=True,
+        choices=[
+            ("pup", "pup"),
+            ("juvenile", "juvenile"),
+            ("adult", "adult"),
+            ("unspecified", "unspecified"),
+        ],
     )
     animals_housing = models.CharField(
         max_length=32,
@@ -384,12 +395,10 @@ class Protocol(models.Model):
             ("isolated", "isolated"),
             ("grouped & isolated", "grouped & isolated"),
         ],
-        blank=True,
-        null=True,
     )
 
     # Context
-    context_number_of_animals = models.PositiveIntegerField(blank=True, null=True)
+    context_number_of_animals = models.PositiveIntegerField()
     context_duration = models.CharField(
         max_length=32,
         choices=[
@@ -397,8 +406,6 @@ class Protocol(models.Model):
             ("mid term (<1day)", "mid term (<1day)"),
             ("long term (>=1day)", "long term (>=1day)"),
         ],
-        blank=True,
-        null=True,
     )
     context_cage = models.CharField(
         max_length=64,
@@ -407,20 +414,14 @@ class Protocol(models.Model):
             ("familiar test cage", "familiar test cage"),
             ("home cage", "home cage"),
         ],
-        blank=True,
-        null=True,
     )
     context_bedding = models.CharField(
         max_length=16,
         choices=[("bedding", "bedding"), ("no bedding", "no bedding")],
-        blank=True,
-        null=True,
     )
     context_light_cycle = models.CharField(
         max_length=8,
         choices=[("day", "day"), ("night", "night"), ("both", "both")],
-        blank=True,
-        null=True,
     )
     status = models.CharField(max_length=20, choices=STATUS, default="draft")
     created_at = models.DateTimeField(auto_now_add=True, null=True)

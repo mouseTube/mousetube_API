@@ -22,30 +22,22 @@ def create_orcid_social_app(sender, **kwargs):
 
     if not client_id or not secret:
         print(
-            "[WARN] SocialApp ORCID non créé : client_id ou secret manquant dans settings"
+            "[WARN] SocialApp ORCID not created : client_id and secret missing in settings"
         )
         return
 
     # --- Update or create SITE ---
-    try:
-        site = Site.objects.get(pk=settings.SITE_ID)
-        updated = False
-        if site.domain != "https://mousetube.fr":
-            site.domain = "https://mousetube.fr"
-            updated = True
-        if site.name != "mousetube.fr":
-            site.name = "mousetube.fr"
-            updated = True
-        if updated:
-            site.save()
-            print(f"[INFO] Site {site.pk} mis à jour : {site.domain}")
-    except Site.DoesNotExist:
-        site, created = Site.objects.get_or_create(
-            domain="https://mousetube.fr",
-            defaults={"id": settings.SITE_ID, "name": "mousetube.fr"},
-        )
-        if created:
-            print(f"[INFO] Site créé : {site.domain}")
+    site, created = Site.objects.update_or_create(
+        id=settings.SITE_ID,
+        defaults={
+            "domain": "https://mousetube.fr",
+            "name": "mousetube.fr",
+        },
+    )
+    if created:
+        print(f"[INFO] Site created : {site.domain}")
+    else:
+        print(f"[INFO] Site updated : {site.domain}")
 
     # --- Update or create SocialApp ORCID ---
     app, created = SocialApp.objects.get_or_create(

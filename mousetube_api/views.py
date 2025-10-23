@@ -397,7 +397,7 @@ class HardwareAPIView(GenericAPIView):
     def post(self, request, *args, **kwargs):
         serializer = self.serializer_class(data=request.data)
         if serializer.is_valid():
-            hardware = serializer.save()
+            hardware = serializer.save(created_by=request.user)
             return Response(
                 self.serializer_class(hardware).data, status=status.HTTP_201_CREATED
             )
@@ -412,7 +412,7 @@ class HardwareDetailAPIView(GenericAPIView):
 
     def get_permissions(self):
         if self.request.method in ["PUT", "PATCH", "DELETE"]:
-            return [IsAuthenticated()]
+            return [IsAuthenticated(), IsCreatorOrReadOnly()]
         return [AllowAny()]
 
     def get(self, request, pk, *args, **kwargs):
@@ -613,7 +613,7 @@ class AnimalProfileFilter(django_filters.FilterSet):
 
     class Meta:
         model = AnimalProfile
-        fields = ["sex", "genotype", "status", "strain", "treatment", "species"]
+        fields = ["sex", "age", "genotype", "status", "strain", "treatment", "species"]
 
 
 class AnimalProfileViewSet(viewsets.ModelViewSet):
@@ -667,6 +667,9 @@ class StudyViewSet(viewsets.ModelViewSet):
         if self.action in ["update", "partial_update", "destroy"]:
             return [IsAuthenticated(), IsCreatorOrReadOnly()]
         return [permissions.AllowAny()]
+
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
 
 
 # ----------------------------
