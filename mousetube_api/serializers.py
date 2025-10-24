@@ -102,6 +102,12 @@ class CustomUserSerializer(serializers.ModelSerializer):
 class UserProfileSerializer(serializers.ModelSerializer):
     user = CustomUserSerializer(read_only=True)
     laboratory = LaboratorySerializer(read_only=True)
+    laboratory_id = serializers.PrimaryKeyRelatedField(
+        queryset=Laboratory.objects.all(),
+        source="laboratory",
+        write_only=True,
+        required=False,
+    )
     country = CountryField()
 
     class Meta:
