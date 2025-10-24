@@ -686,7 +686,7 @@ class RecordingSessionViewSet(viewsets.ModelViewSet):
         filters.OrderingFilter,
     ]
     search_fields = ["name", "description"]
-    filterset_fields = ["is_multiple"]
+    filterset_fields = ["is_multiple", "laboratory", "status", "protocol"]
     ordering_fields = ["name", "date", "status", "protocol__name", "laboratory__name"]
     ordering = ["name"]
 
