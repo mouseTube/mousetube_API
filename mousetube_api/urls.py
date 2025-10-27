@@ -62,6 +62,8 @@ from .views import (
     UserProfileListAPIView,
     file_task_status,
     get_task_status,
+    repository_metadata_payload,
+    repository_metadata_schema,
 )
 
 router = DefaultRouter()
@@ -94,6 +96,16 @@ urlpatterns = [
     path("admin/", admin.site.urls),
     path("api/", include(router.urls)),
     path("api/repository/", RepositoryAPIView.as_view(), name="repository"),
+    path(
+        "api/repository/<int:repo_id>/schema/",
+        repository_metadata_schema,
+        name="repository-metadata-schema",
+    ),
+    path(
+        "api/repository/<int:repository_id>/sessions/<int:recording_session_id>/payload/",
+        repository_metadata_payload,
+        name="repository-metadata-payload",
+    ),
     path("api/reference/", ReferenceAPIView.as_view(), name="reference"),
     path("api/legacy_user/", LegacyUserAPIView.as_view(), name="legacy_user"),
     path("api/user_profile/", UserProfileListAPIView.as_view(), name="user_profile"),

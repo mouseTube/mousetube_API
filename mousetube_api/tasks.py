@@ -93,7 +93,10 @@ def process_file(self, file_id, repository_id):
 
 
 @shared_task(bind=True)
-def publish_session_deposition(self, recording_session_id, repository_id):
+def publish_session_deposition(self, recording_session_id, repository_id, payload=None):
+    """
+    Publish a deposition for a recording session.
+    """
     repository = Repository.objects.get(id=repository_id)
     rs = RecordingSession.objects.get(id=recording_session_id)
     files = File.objects.filter(recording_session=rs)
@@ -104,7 +107,7 @@ def publish_session_deposition(self, recording_session_id, repository_id):
     self.update_state(state="STARTED", meta={"progress": 20})
 
     first_file = files.first()
-    doi = publish_repository_deposition(repository, first_file)
+    doi = publish_repository_deposition(repository, first_file, payload)
     self.update_state(state="STARTED", meta={"progress": 60})
 
     # Step 3 — Update status

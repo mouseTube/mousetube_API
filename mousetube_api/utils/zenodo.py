@@ -14,6 +14,94 @@ ZENODO_TOKEN = getattr(settings, "ZENODO_TOKEN", None)
 if not ZENODO_TOKEN:
     raise ValueError("Zenodo token not configured in settings.")
 
+ZENODO_METADATA_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "title": {"type": "string", "title": "Title"},
+        "description": {"type": "string", "title": "Description", "format": "textarea"},
+        "upload_type": {
+            "type": "string",
+            "title": "Upload type",
+            "enum": ["dataset"],
+            "default": "dataset",
+            "readOnly": True,
+        },
+        "creators": {
+            "type": "array",
+            "title": "Creators",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string", "title": "Full name"},
+                    "affiliation": {"type": "string", "title": "Affiliation"},
+                    "orcid": {"type": "string", "title": "ORCID"},
+                },
+                "required": ["name"],
+            },
+        },
+        "contributors": {
+            "type": "array",
+            "title": "Contributors",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string", "title": "Full name"},
+                    "type": {
+                        "type": "string",
+                        "title": "Contributor type",
+                        "enum": [
+                            "ContactPerson",
+                            "DataCollector",
+                            "DataCurator",
+                            "DataManager",
+                            "Distributor",
+                            "Editor",
+                            "HostingInstitution",
+                            "Producer",
+                            "ProjectLeader",
+                            "ProjectManager",
+                            "ProjectMember",
+                            "RegistrationAgency",
+                            "RegistrationAuthority",
+                            "RelatedPerson",
+                            "Researcher",
+                            "ResearchGroup",
+                            "RightsHolder",
+                            "Supervisor",
+                            "Sponsor",
+                            "WorkPackageLeader",
+                            "Other",
+                        ],
+                    },
+                    "affiliation": {"type": "string", "title": "Affiliation"},
+                    "orcid": {"type": "string", "title": "ORCID"},
+                    "gnd": {"type": "string", "title": "GND identifier"},
+                },
+                "required": ["name", "type"],
+            },
+        },
+        "references": {
+            "type": "array",
+            "title": "References",
+            "items": {"type": "string", "title": "Reference"},
+        },
+        "communities": {
+            "type": "array",
+            "title": "Communities",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "identifier": {"type": "string", "title": "Community ID"}
+                },
+                "required": ["identifier"],
+            },
+            "default": [{"identifier": "mousetube"}],
+            "readOnly": True,
+        },
+    },
+    "required": ["title", "description", "upload_type", "creators"],
+}
+
 
 def _build_session_description(recording_session, files):
     """
@@ -82,13 +170,11 @@ def build_zenodo_metadata_payload(recording_session, files):
         creators = [{"name": "Unknown, Unknown"}]
 
     metadata_payload = {
-        "metadata": {
-            "title": recording_session.name or "Untitled session",
-            "upload_type": "dataset",
-            "description": description,
-            "creators": creators,
-            "communities": [{"identifier": "mousetube"}],
-        }
+        "title": recording_session.name or "Untitled session",
+        "upload_type": "dataset",
+        "description": description,
+        "creators": creators,
+        "communities": [{"identifier": "mousetube"}],
     }
 
     return metadata_payload
@@ -147,7 +233,7 @@ def prepare_zenodo_deposition_for_session(recording_session, new_file=None):
     # 🔹 Upload files
     for file_instance in files:
         if file_instance.external_id == deposition_id:
-            continue  # déjà uploadé
+            continue  # already uploaded
 
         local_path = link_to_local_path(file_instance)
         if not os.path.exists(local_path) or os.path.getsize(local_path) == 0:
@@ -191,7 +277,7 @@ def prepare_zenodo_deposition_for_session(recording_session, new_file=None):
     r = requests.put(
         f"{ZENODO_API + '/deposit/depositions'}/{deposition_id}",
         params=params,
-        data=json.dumps(metadata_payload),
+        data=json.dumps({"metadata": metadata_payload}),
         headers=headers,
         timeout=60,
     )
@@ -200,7 +286,7 @@ def prepare_zenodo_deposition_for_session(recording_session, new_file=None):
     return deposition_id
 
 
-def publish_zenodo_deposition(file_instance: File):
+def publish_zenodo_deposition(file_instance: File, payload=None):
     """
     Publish an existing Zenodo deposition (make it public).
     Requires deposition_id to be stored in file_instance.
@@ -210,6 +296,16 @@ def publish_zenodo_deposition(file_instance: File):
         raise ValueError("No Zenodo deposition_id found for this file/session.")
 
     params = {"access_token": ZENODO_TOKEN}
+    if payload:
+        headers = {"Content-Type": "application/json"}
+        r = requests.put(
+            f"{ZENODO_API + '/deposit/depositions'}/{deposition_id}",
+            params=params,
+            data=json.dumps({"metadata": payload}),
+            headers=headers,
+            timeout=60,
+        )
+        r.raise_for_status()
     try:
         r = requests.post(
             f"{ZENODO_API + '/deposit/depositions'}/{deposition_id}/actions/publish",

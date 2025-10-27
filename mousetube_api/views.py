@@ -42,7 +42,7 @@ from drf_spectacular.utils import (
     extend_schema_serializer,
 )
 from rest_framework import filters, permissions, status, viewsets
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view, permission_classes
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.generics import GenericAPIView
 from rest_framework.pagination import PageNumberPagination
@@ -54,6 +54,10 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from mousetube_api.tasks import process_file, publish_session_deposition
+from mousetube_api.utils.repository import (
+    build_repository_metadata_payload,
+    get_repository_metadata_schema,
+)
 
 from .celery import app
 from .models import (
@@ -260,6 +264,61 @@ class RepositoryAPIView(APIView):
         paginated_repositories = paginator.paginate_queryset(repositories, request)
         serializer = self.serializer_class(paginated_repositories, many=True)
         return paginator.get_paginated_response(serializer.data)
+
+
+@api_view(["GET"])
+def repository_metadata_schema(request, repo_id):
+    """
+    Return the metadata schema for a given repository.
+    """
+    repository = get_object_or_404(Repository, id=repo_id)
+    try:
+        schema = get_repository_metadata_schema(repository)
+    except NotImplementedError as e:
+        return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    return Response(schema)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def repository_metadata_payload(request, repository_id: int, recording_session_id: int):
+    """
+    Return the metadata payload for a given repository and recording session.
+    """
+    try:
+        repository = Repository.objects.get(pk=repository_id)
+    except Repository.DoesNotExist:
+        return Response(
+            {"error": "Repository not found."}, status=status.HTTP_404_NOT_FOUND
+        )
+
+    try:
+        recording_session = RecordingSession.objects.get(pk=recording_session_id)
+    except RecordingSession.DoesNotExist:
+        return Response(
+            {"error": "Recording session not found."}, status=status.HTTP_404_NOT_FOUND
+        )
+
+    # Récupère tous les fichiers valides pour la session
+    files = File.objects.filter(recording_session=recording_session).exclude(
+        status__in=["pending", "processing", "error"]
+    )
+
+    if not files.exists():
+        return Response(
+            {"error": "No valid files for this session."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    try:
+        payload = build_repository_metadata_payload(
+            repository, recording_session, files
+        )
+    except NotImplementedError as e:
+        return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    return Response(payload, status=status.HTTP_200_OK)
 
 
 # ----------------------------
@@ -967,8 +1026,13 @@ class PublishSessionView(APIView):
         repository_id = request.data.get("repository_id")
         if not repository_id:
             return Response({"error": "repository_id required"}, status=400)
-        # Launch Celery task
-        task = publish_session_deposition.delay(recording_session_id, repository_id)
+
+        payload = request.data.get("payload")
+
+        task = publish_session_deposition.delay(
+            recording_session_id, repository_id, payload
+        )
+
         return Response(
             {
                 "message": "Publishing started. You’ll be notified when complete.",
