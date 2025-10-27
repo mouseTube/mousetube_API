@@ -129,6 +129,21 @@ def publish_session_deposition(self, recording_session_id, repository_id):
 
         Strain.objects.filter(id__in=strain_ids).update(status="validated")
 
+    if rs.equipment_acquisition_software.exists():
+        rs.equipment_acquisition_software.update(status="validated")
+
+    if rs.equipment_acquisition_hardware_soundcards.exists():
+        rs.equipment_acquisition_hardware_soundcards.update(status="validated")
+
+    if rs.equipment_acquisition_hardware_speakers.exists():
+        rs.equipment_acquisition_hardware_speakers.update(status="validated")
+
+    if rs.equipment_acquisition_hardware_amplifiers.exists():
+        rs.equipment_acquisition_hardware_amplifiers.update(status="validated")
+
+    if rs.equipment_acquisition_hardware_microphones.exists():
+        rs.equipment_acquisition_hardware_microphones.update(status="validated")
+
     # update file is_valid_link attribut if status is "done"
     files.filter(status="done").update(is_valid_link=True)
 
