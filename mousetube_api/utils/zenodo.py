@@ -55,6 +55,45 @@ def _build_session_description(recording_session, files):
     return "\n".join(lines)
 
 
+def build_zenodo_metadata_payload(recording_session, files):
+    """
+    Build the JSON payload for Zenodo metadata based on a recording session and its files.
+    """
+    description = _build_session_description(recording_session, files)
+    first_file = files[0]
+
+    user = getattr(first_file, "created_by", None)
+    if user:
+        profile = getattr(user, "user_profile", None)
+        family_name = getattr(user, "last_name", "Unknown") or "Unknown"
+        given_name = getattr(user, "first_name", "Unknown") or "Unknown"
+        affiliation = (
+            getattr(profile, "laboratory", None) and profile.laboratory.name or None
+        )
+        orcid = getattr(profile, "orcid", None)
+        creators = [
+            {
+                "name": f"{family_name}, {given_name}",
+                "affiliation": affiliation,
+                "orcid": orcid,
+            }
+        ]
+    else:
+        creators = [{"name": "Unknown, Unknown"}]
+
+    metadata_payload = {
+        "metadata": {
+            "title": recording_session.name or "Untitled session",
+            "upload_type": "dataset",
+            "description": description,
+            "creators": creators,
+            "communities": [{"identifier": "mousetube"}],
+        }
+    }
+
+    return metadata_payload
+
+
 def prepare_zenodo_deposition_for_session(recording_session, new_file=None):
     """
     Prepare a Zenodo deposition for all files in a recording session.
@@ -147,36 +186,7 @@ def prepare_zenodo_deposition_for_session(recording_session, new_file=None):
             os.remove(local_path)
 
     # 🔹 update zenodo metadata
-    description = _build_session_description(recording_session, files)
-    first_file = files[0]
-    user = getattr(first_file, "created_by", None)
-    if user:
-        profile = getattr(user, "user_profile", None)
-        family_name = getattr(user, "last_name", "Unknown") or "Unknown"
-        given_name = getattr(user, "first_name", "Unknown") or "Unknown"
-        affiliation = (
-            getattr(profile, "laboratory", None) and profile.laboratory.name or None
-        )
-        orcid = getattr(profile, "orcid", None)
-        creators = [
-            {
-                "name": f"{family_name}, {given_name}",
-                "affiliation": affiliation,
-                "orcid": orcid,
-            }
-        ]
-    else:
-        creators = [{"name": "Unknown, Unknown"}]
-
-    metadata_payload = {
-        "metadata": {
-            "title": recording_session.name or "Untitled session",
-            "upload_type": "dataset",
-            "description": description,
-            "creators": creators,
-            "communities": [{"identifier": "mousetube"}],
-        }
-    }
+    metadata_payload = build_zenodo_metadata_payload(recording_session, files)
 
     r = requests.put(
         f"{ZENODO_API + '/deposit/depositions'}/{deposition_id}",

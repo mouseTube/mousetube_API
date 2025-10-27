@@ -4,7 +4,7 @@ import os
 import soundfile as sf
 from celery import shared_task
 
-from mousetube_api.models import File, RecordingSession, Repository
+from mousetube_api.models import File, RecordingSession, Repository, Software
 from mousetube_api.utils.file_handler import link_to_local_path
 from mousetube_api.utils.repository import publish_repository_deposition
 
@@ -130,7 +130,9 @@ def publish_session_deposition(self, recording_session_id, repository_id):
         Strain.objects.filter(id__in=strain_ids).update(status="validated")
 
     if rs.equipment_acquisition_software.exists():
-        rs.equipment_acquisition_software.update(status="validated")
+        Software.objects.filter(
+            versions__in=rs.equipment_acquisition_software.all()
+        ).update(status="validated")
 
     if rs.equipment_acquisition_hardware_soundcards.exists():
         rs.equipment_acquisition_hardware_soundcards.update(status="validated")
