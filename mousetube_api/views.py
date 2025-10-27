@@ -18,6 +18,7 @@ from django.contrib.contenttypes.models import ContentType
 from django.core.cache import cache
 from django.core.management import call_command
 from django.db.models import (
+    BooleanField,
     Case,
     Count,
     Exists,
@@ -345,6 +346,7 @@ class UserProfileDetailAPIView(GenericAPIView):
 # ----------------------------
 class HardwareAPIView(GenericAPIView):
     serializer_class = HardwareSerializer
+    queryset = Hardware.objects.all().order_by("name")
 
     def get_permissions(self):
         if self.request.method == "POST":
@@ -360,12 +362,22 @@ class HardwareAPIView(GenericAPIView):
             OpenApiParameter(
                 name="filter", description="filter by type", required=False, type=str
             ),
+            OpenApiParameter(
+                name="status", description="filter by status", required=False, type=str
+            ),
         ],
     )
     def get(self, request, *args, **kwargs):
         search_query = request.GET.get("search", "")
         filter_query = request.GET.get("filter", "")
-        hardware = Hardware.objects.all()
+        status_query = request.GET.get("status", "")
+        hardware = Hardware.objects.all().order_by("name")
+
+        if not request.user.is_authenticated:
+            hardware = hardware.filter(status="validated")
+        else:
+            if status_query:
+                hardware = hardware.filter(status=status_query)
 
         # Search
         if search_query:
@@ -375,6 +387,7 @@ class HardwareAPIView(GenericAPIView):
                 "made_by",
                 "references__name",
                 "description",
+                "status",
             ]
             search_q = Q()
             for field in search_fields:
@@ -387,6 +400,23 @@ class HardwareAPIView(GenericAPIView):
 
         if filter_query and filter_query in ALLOWED_FILTERS:
             hardware = hardware.filter(type=filter_query)
+
+        if request.user.is_authenticated:
+            favorite_ids = Favorite.objects.filter(
+                user=request.user,
+                content_type=ContentType.objects.get_for_model(Hardware),
+            ).values_list("object_id", flat=True)
+
+            # Annoter les favoris et trier dessus
+            hardware = hardware.annotate(
+                is_favorite=Case(
+                    When(id__in=favorite_ids, then=Value(True)),
+                    default=Value(False),
+                    output_field=BooleanField(),
+                )
+            ).order_by(F("is_favorite").desc(), F("name").asc(nulls_last=True))
+        else:
+            hardware = hardware.order_by(F("name").asc(nulls_last=True))
 
         hardware = hardware.order_by(F("name").asc(nulls_last=True))
         paginator = FilePagination()
@@ -1059,6 +1089,14 @@ class SoftwareViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         qs = Software.objects.all()
+
+        if not self.request.user.is_authenticated:
+            qs = qs.filter(status="validated")
+        else:
+            status_query = self.request.GET.get("status")
+            if status_query:
+                qs = qs.filter(status=status_query)
+
         search_query = self.request.GET.get("search", "")
         if search_query:
             software_fields = [

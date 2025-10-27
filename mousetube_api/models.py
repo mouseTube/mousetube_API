@@ -497,6 +497,7 @@ class Software(models.Model):
         description (str): A description of the software, including its functionality.
         technical_requirements (str): The technical requirements for using the software.
         references (ManyToManyField): A list of references and tutorials related to the software.
+        status (str): The current status of the software (draft, waiting validation, validated).
         users (ManyToManyField): A list of users who are associated with the software.
         created_at (DateTimeField): Timestamp when the software record was created.
         modified_at (DateTimeField): Last modification timestamp.
@@ -513,6 +514,12 @@ class Software(models.Model):
         ("acquisition and analysis", "acquisition and analysis"),
     )
 
+    CHOICES_SOFTWARE_STATUS = (
+        ("draft", "draft"),
+        ("waiting validation", "waiting validation"),
+        ("validated", "validated"),
+    )
+
     name = models.CharField(max_length=255)
     type = models.CharField(
         max_length=255, null=True, default="acquisition", choices=CHOICES_SOFTWARE
@@ -521,6 +528,9 @@ class Software(models.Model):
     description = models.TextField(default="", blank=True)
     technical_requirements = models.TextField(default="", blank=True)
     references = models.ManyToManyField(Reference, related_name="software", blank=True)
+    status = models.CharField(
+        max_length=50, null=True, default="draft", choices=CHOICES_SOFTWARE_STATUS
+    )
     users = models.ManyToManyField(
         LegacyUser, related_name="software_to_user", blank=True
     )
@@ -589,10 +599,17 @@ class Hardware(models.Model):
         made_by (TextField): Manufacturer or source of the hardware.
         description (TextField): Optional details about the hardware.
         references (ManyToManyField): References or publications related to the hardware.
+        status (CharField): The current status of the hardware (draft, waiting validation, validated).
         created_at (DateTimeField): Timestamp when the hardware record was created.
         modified_at (DateTimeField): Last modification timestamp.
         created_by (ForeignKey): User who created the hardware record.
     """
+
+    CHOICES_HARDWARE_STATUS = (
+        ("draft", "draft"),
+        ("waiting validation", "waiting validation"),
+        ("validated", "validated"),
+    )
 
     CHOICES_HARDWARE = (
         ("soundcard", "soundcard"),
@@ -610,7 +627,9 @@ class Hardware(models.Model):
     references = models.ManyToManyField(
         Reference, related_name="harware_reference", blank=True
     )
-
+    status = models.CharField(
+        max_length=50, null=True, default="draft", choices=CHOICES_HARDWARE_STATUS
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     modified_at = models.DateTimeField(auto_now=True)
     created_by = models.ForeignKey(
