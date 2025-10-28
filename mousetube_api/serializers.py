@@ -88,6 +88,8 @@ class LegacyUserSerializer(serializers.ModelSerializer):
 
 
 class LaboratorySerializer(serializers.ModelSerializer):
+    country = CountryField()
+
     class Meta:
         model = Laboratory
         fields = "__all__"
