@@ -750,6 +750,10 @@ class StudyViewSet(viewsets.ModelViewSet):
     queryset = Study.objects.all().order_by("name")
     serializer_class = StudySerializer
 
+    def get_queryset(self):
+        user = self.request.user
+        return Study.objects.filter(created_by=user).order_by("name")
+
     def get_permissions(self):
         if self.action == "create":
             return [IsAuthenticated()]
