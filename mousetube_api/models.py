@@ -735,7 +735,7 @@ class RecordingSession(models.Model):
 
     STATUS = [
         ("draft", "Draft"),
-        ("published", "Published"),
+        ("shared", "Shared"),
     ]
 
     name = models.CharField(max_length=255, unique=True)

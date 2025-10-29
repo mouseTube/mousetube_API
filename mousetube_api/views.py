@@ -1007,14 +1007,30 @@ def file_task_status(request, file_id):
 # File Upload endpoint
 # ----------------------------
 class FileUploadAsyncView(APIView):
+    """
+    Handles asynchronous file uploads.
+
+    Requires authentication.
+    """
+
+    def get_permissions(self):
+        if self.request.method == "POST":
+            return [IsAuthenticated()]
+        return [AllowAny()]
+
     def post(self, request):
         uploaded_file = request.FILES.get("file")
+        if not uploaded_file:
+            return Response({"error": "No file provided"}, status=400)
+
         temp_dir = os.path.join(settings.MEDIA_ROOT, "temp")
         os.makedirs(temp_dir, exist_ok=True)
+
         temp_path = os.path.join(temp_dir, uploaded_file.name)
         with open(temp_path, "wb+") as dest:
             for chunk in uploaded_file.chunks():
                 dest.write(chunk)
+
         return Response({"temp_path": f"/media/temp/{uploaded_file.name}"})
 
 
@@ -1022,6 +1038,17 @@ class FileUploadAsyncView(APIView):
 # File Publish session endpoint
 # ----------------------------
 class PublishSessionView(APIView):
+    """
+    Triggers a background task to publish a recording session to a repository.
+
+    Requires authentication.
+    """
+
+    def get_permissions(self):
+        if self.request.method == "POST":
+            return [IsAuthenticated()]
+        return [AllowAny()]
+
     def post(self, request):
         recording_session_id = request.data.get("recording_session_id")
         if not recording_session_id:
