@@ -1053,7 +1053,7 @@ class File(models.Model):
         Returns:
             str: The URL link to the file.
         """
-        return self.link
+        return self.link or self.doi or f"File {self.id}"
 
     class Meta:
         verbose_name = "File"

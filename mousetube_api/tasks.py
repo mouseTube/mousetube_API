@@ -6,7 +6,11 @@ from celery import shared_task
 
 from mousetube_api.models import File, RecordingSession, Repository, Software
 from mousetube_api.utils.file_handler import link_to_local_path
-from mousetube_api.utils.repository import publish_repository_deposition
+from mousetube_api.utils.repository import (
+    delete_repository_file,
+    prepare_repository_deposition_for_session,
+    publish_repository_deposition,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -53,14 +57,13 @@ def process_file(self, file_id, repository_id):
     1️⃣ Extract metadata
     2️⃣ Prepare the repository deposition (Zenodo or other)
     """
-    from mousetube_api.utils.repository import prepare_repository_deposition_for_session
 
     file_instance = File.objects.get(id=file_id)
-    # ✅ Si aucun repository_id n'est fourni, fallback sur celui du fichier
+    # ✅ if no repo_id, try to get from file
     if not repository_id and file_instance.repository_id:
         repository_id = file_instance.repository_id
 
-    # ✅ Si toujours rien, utiliser repo par défaut
+    # ✅ if still no repo_id, default to 1
     if not repository_id:
         repository_id = 1
     repository = Repository.objects.get(id=repository_id)
@@ -92,6 +95,46 @@ def process_file(self, file_id, repository_id):
         raise
 
 
+@shared_task(bind=True, max_retries=1)
+def delete_file_from_repository(self, file_id, repository_id=None):
+    """
+    Delete a file from its repository and locally.
+    1️⃣ Mark file as 'deleting'
+    2️⃣ Delete from remote repository
+    3️⃣ Delete local record
+    4️⃣ Return success message
+    """
+
+    try:
+        file_instance = File.objects.get(id=file_id)
+        repository = file_instance.repository
+
+        # fallback if needed
+        if not repository and repository_id:
+            repository = Repository.objects.get(id=repository_id)
+        elif not repository:
+            raise ValueError("File has no repository assigned.")
+
+        file_instance.status = "processing"
+        file_instance.save(update_fields=["status"])
+
+        # 🔹 Remote deletion
+        delete_repository_file(repository, file_instance)
+
+        # 🔹 Local deletion
+        file_instance.delete()
+
+        return f"✅ File {file_id} deleted successfully from {repository.name}"
+
+    except File.DoesNotExist:
+        logger.warning(f"⚠️ File {file_id} not found for deletion.")
+        return f"File {file_id} not found."
+
+    except Exception as e:
+        logger.exception(f"❌ Error deleting file {file_id}: {e}")
+        raise
+
+
 @shared_task(bind=True)
 def publish_session_deposition(self, recording_session_id, repository_id, payload=None):
     """
@@ -106,11 +149,9 @@ def publish_session_deposition(self, recording_session_id, repository_id, payloa
 
     self.update_state(state="STARTED", meta={"progress": 20})
 
-    first_file = files.first()
-    doi = publish_repository_deposition(repository, first_file, payload)
+    doi = publish_repository_deposition(repository, rs, payload)
     self.update_state(state="STARTED", meta={"progress": 60})
 
-    # Step 3 — Update status
     RecordingSession.objects.filter(id=rs.id).update(status="published")
     if rs.protocol:
         rs.protocol.__class__.objects.filter(id=rs.protocol.id).update(

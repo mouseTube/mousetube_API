@@ -53,7 +53,11 @@ from rest_framework.permissions import (
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from mousetube_api.tasks import process_file, publish_session_deposition
+from mousetube_api.tasks import (
+    delete_file_from_repository,
+    process_file,
+    publish_session_deposition,
+)
 from mousetube_api.utils.repository import (
     build_repository_metadata_payload,
     get_repository_metadata_schema,
@@ -958,24 +962,43 @@ class FileAPIView(GenericAPIView):
     # -----------------------------
     def post(self, request, *args, **kwargs):
         serializer = self.serializer_class(data=request.data)
-        if serializer.is_valid():
-            file = serializer.save(created_by=request.user)
-            if not file.repository:
-                try:
-                    default_repo = Repository.objects.get(id=1)
-                    file.repository = default_repo
-                    file.save(update_fields=["repository"])
-                except Repository.DoesNotExist:
-                    return Response(
-                        {"error": "Default repository (id=1) not found."},
-                        status=500,
-                    )
-            task = process_file.delay(file.id, file.repository.id)
-            file.celery_task_id = task.id
-            file.save(update_fields=["celery_task_id"])
+        serializer.is_valid(raise_exception=True)
 
-            return Response(self.serializer_class(file).data, status=201)
-        return Response(serializer.errors, status=400)
+        file = serializer.save(created_by=request.user)
+
+        if not file.repository:
+            try:
+                default_repo = Repository.objects.get(id=1)
+                file.repository = default_repo
+                file.save(update_fields=["repository"])
+            except Repository.DoesNotExist:
+                return Response(
+                    {"error": "Default repository (id=1) not found."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        # Lancer le traitement si aucun DOI
+        if not file.doi:
+            file.status = "pending"
+            file.save(update_fields=["status"])
+            try:
+                task = process_file.delay(file.id, file.repository.id)
+                file.celery_task_id = task.id
+                file.save(update_fields=["celery_task_id"])
+            except Exception as e:
+                file.status = "error"
+                file.save(update_fields=["status"])
+                return Response(
+                    {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                )
+
+        elif file.doi and file.link:
+            file.status = "done"
+            file.save(update_fields=["status"])
+
+        return Response(
+            self.serializer_class(file).data, status=status.HTTP_201_CREATED
+        )
 
 
 # ----------------------------
@@ -1161,8 +1184,30 @@ class FileDetailAPIView(GenericAPIView):
             return Response(
                 {"detail": "File not found"}, status=status.HTTP_404_NOT_FOUND
             )
-        file.delete()
-        return Response(status=status.HTTP_204_NO_CONTENT)
+
+        # 🔹 Start async deletion
+        if not file.repository:
+            file.delete()
+            return Response(
+                {"detail": "File deleted locally (no repository linked)."},
+                status=status.HTTP_204_NO_CONTENT,
+            )
+
+        if not file.external_id:
+            file.delete()
+            return Response(
+                {"detail": "File deleted locally (no external ID)."},
+                status=status.HTTP_204_NO_CONTENT,
+            )
+
+        task = delete_file_from_repository.delay(file.id, file.repository.id)
+        file.celery_task_id = task.id
+        file.save(update_fields=["celery_task_id", "status"])
+
+        return Response(
+            {"detail": "File deletion scheduled.", "celery_task_id": task.id},
+            status=status.HTTP_202_ACCEPTED,
+        )
 
 
 # ----------------------------

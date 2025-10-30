@@ -1,6 +1,7 @@
 import json
 import os
 import re
+from urllib.parse import unquote
 
 import requests
 from django.conf import settings
@@ -14,7 +15,7 @@ ZENODO_TOKEN = getattr(settings, "ZENODO_TOKEN", None)
 if not ZENODO_TOKEN:
     raise ValueError("Zenodo token not configured in settings.")
 
-ZENODO_METADATA_SCHEMA = {
+METADATA_SCHEMA = {
     "type": "object",
     "properties": {
         "title": {"type": "string", "title": "Title"},
@@ -143,7 +144,7 @@ def _build_session_description(recording_session, files):
     return "\n".join(lines)
 
 
-def build_zenodo_metadata_payload(recording_session, files):
+def build_metadata_payload(recording_session, files):
     """
     Build the JSON payload for Zenodo metadata based on a recording session and its files.
     """
@@ -180,7 +181,7 @@ def build_zenodo_metadata_payload(recording_session, files):
     return metadata_payload
 
 
-def prepare_zenodo_deposition_for_session(recording_session, new_file=None):
+def prepare_deposition_for_session(recording_session, new_file=None):
     """
     Prepare a Zenodo deposition for all files in a recording session.
     Uploads only valid files and cleans up temp files.
@@ -194,8 +195,10 @@ def prepare_zenodo_deposition_for_session(recording_session, new_file=None):
         deposition_id: Zenodo deposition ID.
     """
     # 🔹 Get valid files
-    files = File.objects.filter(recording_session=recording_session).exclude(
-        status__in=["pending", "processing", "error"]
+    files = (
+        File.objects.filter(recording_session=recording_session)
+        .exclude(status__in=["pending", "processing", "error"])
+        .exclude(doi__isnull=False)
     )
 
     if new_file and new_file not in files:
@@ -272,7 +275,7 @@ def prepare_zenodo_deposition_for_session(recording_session, new_file=None):
             os.remove(local_path)
 
     # 🔹 update zenodo metadata
-    metadata_payload = build_zenodo_metadata_payload(recording_session, files)
+    metadata_payload = build_metadata_payload(recording_session, files)
 
     r = requests.put(
         f"{ZENODO_API + '/deposit/depositions'}/{deposition_id}",
@@ -286,29 +289,74 @@ def prepare_zenodo_deposition_for_session(recording_session, new_file=None):
     return deposition_id
 
 
-def publish_zenodo_deposition(file_instance: File, payload=None):
+def delete_file(file_instance):
     """
-    Publish an existing Zenodo deposition (make it public).
+    Delete a file from a Zenodo deposition.
     Requires deposition_id to be stored in file_instance.
     """
+    if not file_instance.external_id:
+        raise ValueError(f"File {file_instance.id} has no external_id (deposition ID).")
+
     deposition_id = file_instance.external_id
-    if not deposition_id:
-        raise ValueError("No Zenodo deposition_id found for this file/session.")
+    filename = os.path.basename(unquote(file_instance.link or file_instance.name or ""))
+    if not filename:
+        raise ValueError(f"File {file_instance.id} has no name to delete on Zenodo.")
 
     params = {"access_token": ZENODO_TOKEN}
+    headers = {"Content-Type": "application/json"}
+
+    # 🔹 List files
+    list_url = f"{ZENODO_API}/deposit/depositions/{deposition_id}/files"
+    r = requests.get(list_url, params=params, headers=headers, timeout=30)
+    r.raise_for_status()
+
+    files = r.json()
+    target = next((f for f in files if f["filename"] == filename), None)
+    if not target:
+        print(f"⚠️ File '{filename}' not found in deposition {deposition_id}")
+        return False
+
+    # 🔹 Delete file
+    delete_url = (
+        f"{ZENODO_API}/deposit/depositions/{deposition_id}/files/{target['id']}"
+    )
+    r = requests.delete(delete_url, params=params, timeout=30)
+    if r.status_code not in (200, 204):
+        raise ValueError(f"Zenodo deletion failed: {r.status_code} {r.text}")
+
+    print(f"🗑️ Deleted {filename} from Zenodo deposition {deposition_id}")
+    return True
+
+
+def publish_deposition(recording_session, payload=None):
+    """
+    Publish an existing Zenodo deposition (make it public).
+    Updates only files without a manually set DOI/link.
+    """
+    files = File.objects.filter(recording_session=recording_session)
+    first_file_with_id = files.filter(external_id__isnull=False).first()
+    if not first_file_with_id:
+        raise ValueError("No Zenodo deposition_id found for this file/session.")
+    deposition_id = first_file_with_id.external_id
+
+    params = {"access_token": ZENODO_TOKEN}
+
+    # Update metadata if provided
     if payload:
         headers = {"Content-Type": "application/json"}
         r = requests.put(
-            f"{ZENODO_API + '/deposit/depositions'}/{deposition_id}",
+            f"{ZENODO_API}/deposit/depositions/{deposition_id}",
             params=params,
             data=json.dumps({"metadata": payload}),
             headers=headers,
             timeout=60,
         )
         r.raise_for_status()
+
+    # Publish deposition
     try:
         r = requests.post(
-            f"{ZENODO_API + '/deposit/depositions'}/{deposition_id}/actions/publish",
+            f"{ZENODO_API}/deposit/depositions/{deposition_id}/actions/publish",
             params=params,
             timeout=60,
         )
@@ -317,13 +365,23 @@ def publish_zenodo_deposition(file_instance: File, payload=None):
         content = getattr(e.response, "text", str(e))
         raise ValueError(f"Zenodo publish failed: {content}")
 
-    doi = r.json().get("doi")
-    if not doi:
+    zenodo_doi = r.json().get("doi")
+    if not zenodo_doi:
         raise ValueError("Zenodo did not return a DOI after publishing.")
+
     base_url = ZENODO_API.split("/api")[0]
-    File.objects.filter(recording_session=file_instance.recording_session).update(
-        doi=doi,
-        link=f"{base_url}/records/{deposition_id}/files/{file_instance.name}?download=1",
-        external_url=f"{base_url}/records/{deposition_id}",
-    )
-    return doi
+
+    # Update files from session
+    for f in files:
+        # Update only files without DOI and matching deposition_id
+        if not f.doi and f.external_id == deposition_id:
+            f.doi = zenodo_doi
+            f.link = f"{base_url}/records/{deposition_id}/files/{f.name}?download=1"
+            f.external_url = f"{base_url}/records/{deposition_id}"
+            f.save(update_fields=["doi", "link", "external_url"])
+        elif f.doi and f.link:
+            if not f.link.startswith(base_url):
+                # Remove repository link if DOI/link point elsewhere
+                f.repository = None
+                f.save(update_fields=["repository"])
+    return zenodo_doi
