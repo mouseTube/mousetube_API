@@ -5,6 +5,7 @@ from urllib.parse import unquote
 
 import requests
 from django.conf import settings
+from django.db.models import ForeignKey
 
 from mousetube_api.models import File, Repository
 from mousetube_api.utils.file_handler import link_to_local_path
@@ -106,42 +107,128 @@ METADATA_SCHEMA = {
 
 def _build_session_description(recording_session, files):
     """
-    Build a description string for a recording session including all files.
-    Includes session metadata, protocol, animal profiles, and file metadata.
+    Build a Zenodo-compatible HTML-safe description for a recording session,
+    including metadata, protocol, animal profiles, and files.
+    Sections are separated by ASCII titles and two <br> between sections.
     """
-    lines = [
-        f"Recording session: {recording_session.name}",
-        f"Date: {recording_session.date}",
-        f"Duration: {recording_session.duration} seconds",
-    ]
-    if recording_session.description:
-        lines.append(f"Session description: {recording_session.description}")
 
-    if getattr(recording_session, "protocol", None):
-        lines.append(f"Protocol: {recording_session.protocol.name}")
-        if recording_session.protocol.description:
-            lines.append(
-                f"Protocol description: {recording_session.protocol.description}"
-            )
+    def humanize_label(label: str) -> str:
+        """Convert a model field name into a readable label."""
+        return (
+            label.replace("_", " ")
+            .capitalize()
+            .replace(" id", "")
+            .replace(" context", " Context")
+            .replace(" equipment", " Equipment")
+        )
 
-    # Animal profiles
+    def format_value(value):
+        """Format a value for display."""
+        if isinstance(value, bool):
+            return "Yes" if value else "No"
+        if value is None or value == "":
+            return None
+        return str(value)
+
+    lines = []
+
+    # === RECORDING SESSION ===
+    lines.append("================= 🎧 RECORDING SESSION =================")
+    lines.append(f"Name: {recording_session.name}")
+
+    exclude_fields = {
+        "id",
+        "is_multiple",
+        "status",
+        "created_at",
+        "modified_at",
+        "created_by",
+        "name",
+        "protocol",
+        "animal_profiles",
+    }
+
+    # Regular fields
+    for field in recording_session._meta.fields:
+        fname = field.name
+        if fname in exclude_fields:
+            continue
+        value = getattr(recording_session, fname)
+        if isinstance(field, ForeignKey) and value:
+            value = str(value)
+        value = format_value(value)
+        if value:
+            lines.append(f"{humanize_label(fname)}: {value}")
+
+    # Many-to-many fields
+    for field in recording_session._meta.many_to_many:
+        fname = field.name
+        if fname in exclude_fields:
+            continue
+        related_values = getattr(recording_session, fname).all()
+        if related_values.exists():
+            values_str = ", ".join(str(v) for v in related_values)
+            lines.append(f"{humanize_label(fname)}: {values_str}")
+
+    # <br> before Protocol
+    lines.append("<br>")
+
+    # === PROTOCOL ===
+    protocol = getattr(recording_session, "protocol", None)
+    if protocol:
+        lines.append("================= 🧪 PROTOCOL =================")
+        lines.append(f"Name: {protocol.name}")
+
+        exclude_protocol = {
+            "id",
+            "created_by",
+            "created_at",
+            "modified_at",
+            "name",
+            "status",
+        }
+
+        for field in protocol._meta.fields:
+            fname = field.name
+            if fname in exclude_protocol:
+                continue
+            value = format_value(getattr(protocol, fname))
+            if value:
+                lines.append(f"{humanize_label(fname)}: {value}")
+
+        # <br> before Animal Profiles
+        lines.append("<br>")
+
+    # === ANIMAL PROFILES ===
     animal_profiles = getattr(recording_session, "animal_profiles", None)
-    if animal_profiles:
+    if animal_profiles and animal_profiles.exists():
+        lines.append("================= 🐭 ANIMAL PROFILES =================")
         for ap in animal_profiles.all():
             lines.append(
-                f"Animal: {ap.name}, Strain: {ap.strain}, Species: {ap.strain.species}, Sex: {ap.sex}, Genotype: {ap.genotype}, Treatment: {ap.treatment} "
+                f"Animal: {ap.name} | Strain: {ap.strain} | "
+                f"Species: {ap.strain.species if ap.strain else 'N/A'} | "
+                f"Sex: {ap.sex} | Genotype: {ap.genotype} | Treatment: {ap.treatment}"
             )
 
-    # File-specific metadata
-    for f in files:
-        local_path = f.link  # link is the URLField
-        lines.append(f"\nFile: {f.name or os.path.basename(local_path)}")
-        lines.append(f"Format: {f.format}")
-        lines.append(f"Duration: {f.duration} s")
-        lines.append(f"Sampling rate: {f.sampling_rate} Hz")
-        lines.append(f"Bit depth: {f.bit_depth}")
+    # # === FILES ===
+    # if files:
+    #     lines.append("<br>")
+    #     lines.append("================= 📂 FILES =================")
+    #     for f in files:
+    #         lines.append(f"File: {f.name}")
+    #         if f.format:
+    #             lines.append(f"Format: {f.format}")
+    #         if f.duration:
+    #             lines.append(f"Duration: {f.duration} s")
+    #         if f.sampling_rate:
+    #             lines.append(f"Sampling rate: {f.sampling_rate} Hz")
+    #         if f.bit_depth:
+    #             lines.append(f"Bit depth: {f.bit_depth}")
+    #         if f.link:
+    #             lines.append(f"Link: {f.link}")
 
-    return "\n".join(lines)
+    # Join lines with <br> for Zenodo HTML
+    return "<br>".join(lines)
 
 
 def build_metadata_payload(recording_session, files):
