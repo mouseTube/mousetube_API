@@ -368,7 +368,6 @@ class Protocol(models.Model):
         ("validated", "Validated"),
     ]
     name = models.CharField(max_length=255)
-    description = models.TextField(max_length=5000, blank=True, null=True)
     user = models.ForeignKey(LegacyUser, models.SET_NULL, null=True, blank=True)
     # Animals
     animals_sex = models.CharField(
@@ -398,7 +397,18 @@ class Protocol(models.Model):
     )
 
     # Context
-    context_number_of_animals = models.PositiveIntegerField()
+    # context_number_of_animals = models.PositiveIntegerField()
+    context_number_of_animals = models.CharField(
+        max_length=5,
+        choices=[
+            ("1", "1"),
+            ("2", "2"),
+            ("3", "3"),
+            ("4", "4"),
+            (">4", ">4"),
+        ],
+    )
+
     context_duration = models.CharField(
         max_length=32,
         choices=[
@@ -456,6 +466,7 @@ class Reference(models.Model):
         description (str): A detailed description of the reference.
         url (str): The URL pointing to the reference, if available.
         doi (str): The DOI (Digital Object Identifier) of the reference, if applicable.
+        status (str): The current status of the reference (draft, waiting validation, validated).
         created_at (DateTimeField): Timestamp when the reference was created.
         modified_at (DateTimeField): Last modification timestamp.
         created_by (ForeignKey): User who created the reference entry.
@@ -469,6 +480,12 @@ class Reference(models.Model):
     description = models.TextField(blank=True, null=True)
     url = models.URLField(max_length=255, blank=True, null=True)
     doi = models.CharField(max_length=255, blank=True, null=True)
+    STATUS_CHOICES = [
+        ("draft", "Draft"),
+        ("waiting validation", "Waiting Validation"),
+        ("validated", "Validated"),
+    ]
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="draft")
     created_at = models.DateTimeField(auto_now_add=True, null=True)
     modified_at = models.DateTimeField(auto_now=True, null=True)
     created_by = models.ForeignKey(
@@ -833,6 +850,9 @@ class RecordingSession(models.Model):
         blank=True,
         null=True,
     )
+    references = models.ManyToManyField(
+        Reference, related_name="recordingsession", blank=True
+    )
     created_at = models.DateTimeField(auto_now_add=True, null=True)
     modified_at = models.DateTimeField(auto_now=True, null=True)
     created_by = models.ForeignKey(
@@ -1112,7 +1132,15 @@ class Favorite(models.Model):
         created_at (DateTimeField): Timestamp when the favorite was created.
     """
 
-    ALLOWED_MODELS = ["protocol", "hardware", "software", "animalprofile", "strain"]
+    ALLOWED_MODELS = [
+        "protocol",
+        "hardware",
+        "software",
+        "animalprofile",
+        "strain",
+        "laboratory",
+        "reference",
+    ]
 
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="favorites"
