@@ -48,6 +48,7 @@ from rest_framework.generics import GenericAPIView
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import (
     AllowAny,
+    IsAdminUser,
     IsAuthenticated,
 )
 from rest_framework.response import Response
@@ -66,6 +67,7 @@ from mousetube_api.utils.repository import (
 from .celery import app
 from .models import (
     AnimalProfile,
+    Dataset,
     Favorite,
     File,
     Hardware,
@@ -86,6 +88,7 @@ from .models import (
 )
 from .serializers import (
     AnimalProfileSerializer,
+    DatasetSerializer,
     FavoriteSerializer,
     FileSerializer,
     HardwareSerializer,
@@ -646,10 +649,8 @@ class SpeciesViewSet(viewsets.ModelViewSet):
     search_fields = ["name"]
 
     def get_permissions(self):
-        if self.action == "create":
-            return [IsAuthenticated()]
-        if self.action in ["update", "partial_update", "destroy"]:
-            return [IsAuthenticated(), IsCreatorOrReadOnly()]
+        if self.action in ["create", "update", "partial_update", "destroy"]:
+            return [IsAuthenticated(), IsAdminUser()]
         return [permissions.AllowAny()]
 
     def perform_create(self, serializer):
@@ -1550,3 +1551,20 @@ class SchemaDetailView(APIView):
             return [self.resolve_refs(item, schema_dir) for item in schema]
 
         return schema
+
+# ----------------------------
+# Dataset
+# ----------------------------
+class DatasetViewSet(viewsets.ModelViewSet):
+    queryset = Dataset.objects.all().order_by("name")
+    serializer_class = DatasetSerializer
+    filter_backends = [filters.SearchFilter]
+    search_fields = ["name"]
+
+    def get_permissions(self):
+        if self.action in ["create", "update", "partial_update", "destroy"]:
+            return [IsAuthenticated(), IsAdminUser()]
+        return [permissions.AllowAny()]
+
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)

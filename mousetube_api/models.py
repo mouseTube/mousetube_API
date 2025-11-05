@@ -963,6 +963,8 @@ class File(models.Model):
         sampling_rate (int): The sampling rate of the file.
         bit_depth (int): The bit depth of the file.
         size (int): The size of the file in bytes.
+        spectrogram (ImageField): image of the spectrogram of the file: only admin can fill this field
+        plot (ImageField): image of the plot of the file: only admin can fill this field. Useful for datasets
         created_at (DateTimeField): Timestamp when the file was created.
         modified_at (DateTimeField): Last modification timestamp.
         created_by (ForeignKey): User who created the file record.
@@ -978,6 +980,15 @@ class File(models.Model):
         ("MP4", "MP4"),
         ("MOV", "MOV"),
         ("MKV", "MKV"),
+        ("CSV", "CSV"),
+        ("TXT", "TXT"),
+        ("XLSX", "XLSX"),
+        ("XLS", "XLS"),
+        ("ZIP", "ZIP"),
+        ("JPEG", "JPEG"),
+        ("PNG", "PNG"),
+        ("PDF", "PDF"),
+        ("JSON", "JSON"),
     ]
     STATUS_CHOICES = [
         ("pending", "Pending"),
@@ -1013,6 +1024,8 @@ class File(models.Model):
     size = models.PositiveBigIntegerField(
         help_text="File size in bytes", blank=True, null=True
     )
+    spectrogram = models.ImageField(blank=True, null=True)
+    plot = models.ImageField(blank=True, null=True)
     doi = models.CharField(max_length=255, blank=True, null=True)
     number = models.IntegerField(blank=True, null=True)
     is_valid_link = models.BooleanField(default=False)
@@ -1066,24 +1079,21 @@ class Dataset(models.Model):
 
     Fields:
         name (CharField): Name of the dataset.
-        list_files (ManyToManyField): Files included in the dataset.
+        recording_session_list (ManyToManyField): List of recording sessions.
+        description (TextField): Description of the dataset.
         link (CharField): External link or identifier for the dataset.
         doi (CharField): DOI of the dataset, if applicable.
-        metadata_json (JSONField): Free-form metadata in JSON format.
-        metadata (ManyToManyField): Structured metadata linked to the dataset.
         created_at (DateTimeField): Timestamp when the dataset was created.
         modified_at (DateTimeField): Last modification timestamp.
         created_by (ForeignKey): User who created the dataset.
     """
 
     name = models.CharField(max_length=255)
-    list_files = models.ManyToManyField(
-        File, related_name="file_in_dataset", blank=True
-    )
+    recording_session_list = models.ManyToManyField(RecordingSession, related_name="dataset_recording_sessions",
+                                                    blank=True)
+    description = models.TextField(blank=True, null=True)
     link = models.CharField(max_length=255)
     doi = models.CharField(max_length=255, null=True, blank=True)
-    metadata_json = models.JSONField(blank=True, null=True)
-    # metadata = GenericRelation(Metadata)
     created_at = models.DateTimeField(auto_now_add=True)
     modified_at = models.DateTimeField(auto_now=True)
     created_by = models.ForeignKey(
