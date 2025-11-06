@@ -349,7 +349,6 @@ def repository_metadata_payload(request, repository_id: int, recording_session_i
             {"error": "Recording session not found."}, status=status.HTTP_404_NOT_FOUND
         )
 
-    # Récupère tous les fichiers valides pour la session
     files = File.objects.filter(recording_session=recording_session).exclude(
         status__in=["pending", "processing", "error"]
     )
