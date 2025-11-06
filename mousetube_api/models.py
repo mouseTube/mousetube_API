@@ -25,7 +25,6 @@ class Laboratory(models.Model):
         unit (CharField): Organizational unit or department (optional).
         address (CharField): Physical address of the laboratory.
         country (CountryField): Country where the laboratory is located.
-        contact (CharField): Contact person or email (optional).
         created_at (DateTimeField): Timestamp when the laboratory was created.
         modified_at (DateTimeField): Last modification timestamp.
         created_by (ForeignKey): User who created the laboratory record.
@@ -41,7 +40,6 @@ class Laboratory(models.Model):
     unit = models.CharField(max_length=255, blank=True, null=True)
     address = models.CharField(max_length=255, blank=True, null=True)
     country = CountryField(blank=True, null=True)
-    contact = models.CharField(max_length=255, blank=True, null=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="draft")
     created_at = models.DateTimeField(auto_now_add=True, null=True)
     modified_at = models.DateTimeField(auto_now=True, null=True)

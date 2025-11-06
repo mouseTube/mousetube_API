@@ -109,9 +109,9 @@ urlpatterns = [
     ),
     path("api/reference/", ReferenceAPIView.as_view(), name="reference"),
     path(
-        "api/reference/<int:pk>",
+        "api/reference/<int:pk>/",
         ReferenceDetailAPIView.as_view(),
-        name="reference",
+        name="reference-detail",
     ),
     path("api/legacy_user/", LegacyUserAPIView.as_view(), name="legacy_user"),
     path("api/user_profile/", UserProfileListAPIView.as_view(), name="user_profile"),

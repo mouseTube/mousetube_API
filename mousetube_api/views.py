@@ -9,6 +9,7 @@ Code under GPL v3.0 licence
 
 import json
 import os
+from weakref import ref
 
 import django_filters
 from celery.result import AsyncResult
@@ -386,40 +387,32 @@ class ReferenceAPIView(GenericAPIView):
             return [permissions.IsAuthenticated(), IsCreatorOrReadOnly()]
         return [permissions.AllowAny()]
 
-    def get(self, request, *args, **kwargs):
-        search_query = request.GET.get("search", "")
-        status_query = request.GET.get("status", "")
+    def get_queryset(self):
+        search_query = self.request.GET.get("search", "")
+        status_query = self.request.GET.get("status", "")
 
         queryset = Reference.objects.all().order_by("name")
 
-        if not request.user.is_authenticated:
+        if not self.request.user.is_authenticated:
             queryset = queryset.filter(status="validated")
         else:
             if status_query:
                 queryset = queryset.filter(status=status_query)
             else:
-                # drafts + validated
                 queryset = queryset.filter(
-                    Q(created_by=request.user) | Q(status="validated")
+                    Q(created_by=self.request.user) | Q(status="validated")
                 )
 
-        # 🔹 Search
         if search_query:
-            search_fields = [
-                "name",
-                "description",
-                "doi",
-                "status",
-            ]
+            search_fields = ["name", "description", "doi", "status"]
             search_q = Q()
             for field in search_fields:
                 search_q |= Q(**{f"{field}__icontains": search_query})
             queryset = queryset.filter(search_q)
 
-        # 🔹 Handle favorite
-        if request.user.is_authenticated:
+        if self.request.user.is_authenticated:
             favorite_ids = Favorite.objects.filter(
-                user=request.user,
+                user=self.request.user,
                 content_type=ContentType.objects.get_for_model(Reference),
             ).values_list("object_id", flat=True)
 
@@ -437,8 +430,11 @@ class ReferenceAPIView(GenericAPIView):
         else:
             queryset = queryset.order_by("name")
 
-        # 🔹 Pagination
+        return queryset
+
+    def get(self, request, *args, **kwargs):
         paginator = FilePagination()
+        queryset = self.get_queryset()
         paginated_queryset = paginator.paginate_queryset(queryset, request)
         serializer = self.serializer_class(paginated_queryset, many=True)
         return paginator.get_paginated_response(serializer.data)
@@ -463,7 +459,11 @@ class ReferenceDetailAPIView(GenericAPIView):
     permission_classes = [permissions.IsAuthenticatedOrReadOnly, IsCreatorOrReadOnly]
 
     def get_object(self, pk):
-        return get_object_or_404(Reference, pk=pk)
+        reference = get_object_or_404(Reference, pk=pk)
+        if reference.status == "draft" and reference.created_by != self.request.user:
+            raise Http404("Reference not found")
+
+        return reference
 
     def get(self, request, pk, *args, **kwargs):
         instance = self.get_object(pk)
