@@ -1,83 +1,57 @@
+# ======================================
+# 🧭 Nginx configuration for mouseTube
+# Running behind HAProxy (SSL handled upstream)
+# ======================================
+
 server {
+    # Listen only on HTTP (HAProxy terminates HTTPS)
     listen 80;
     server_name ${DOMAIN};
 
-    location /.well-known/acme-challenge/ {
-        root /var/www/certbot;
-    }
+    proxy_buffer_size       128k;
+    proxy_buffers           4 256k;
+    proxy_busy_buffers_size 256k;
 
-    location / {
-        return 301 https://$host$request_uri;
-    }
-}
+    # ======================================
+    # 🎯 ROUTING RULES
+    # ======================================
 
-server {
-    listen 443 ssl;
-    server_name ${DOMAIN};
-
-    root /var/www/html;
-
-    # 🔐 SSL Configuration
-    ssl_certificate /etc/letsencrypt/live/${DOMAIN}/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/${DOMAIN}/privkey.pem;
-
-    ssl_protocols TLSv1.2 TLSv1.3;
-    ssl_ciphers HIGH:!aNULL:!MD5;
-    ssl_prefer_server_ciphers on;
-    ssl_session_cache shared:SSL:10m;
-    ssl_session_timeout 1d;
-    ssl_session_tickets off;
-
-    add_header Strict-Transport-Security "max-age=63072000; includeSubDomains; preload" always;
-
-    # 📦 Compression
-    gzip on;
-    gzip_types text/plain application/json text/css application/javascript application/x-javascript text/xml application/xml application/xml+rss text/javascript;
-    gzip_min_length 256;
-
-    # 📓 Logs
-    access_log /var/log/nginx/access.log;
-    error_log /var/log/nginx/error.log warn;
-
-    # 🎯 Frontend (Nuxt)
+    # Nuxt.js frontend
     location / {
         proxy_pass http://frontend:3000;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     }
 
-    # 🔌 API Django
+    # Django REST API
     location /api/ {
         proxy_pass http://web:8000;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_redirect off;
     }
 
-    # 🔑 Django admin
+    # Django Admin interface
     location /admin/ {
         proxy_pass http://web:8000;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_redirect off;
     }
 
-    # 🎨 Static files
+    # Django static files (CSS, JS, etc.)
     location /static/ {
         alias /app/staticfiles/;
         expires 30d;
-        add_header Cache-Control public;
+        add_header Cache-Control "public";
     }
 
-    # 🖼️ Media files
+    # Django media files (user uploads)
     location /media/ {
         alias /app/media/;
         access_log off;
         expires 30d;
-        add_header Cache-Control public;
+        add_header Cache-Control "public";
     }
 }
