@@ -47,6 +47,7 @@ services:
   celery:
     build:
       context: .
+    entrypoint: [""]
     command: celery -A mousetube_api worker -l info
     volumes:
       - .:/app

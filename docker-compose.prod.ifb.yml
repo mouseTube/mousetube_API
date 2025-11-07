@@ -32,16 +32,16 @@ services:
     user: "${UID:-1000}:${GID:-1000}"
 
   frontend:
-    build: ../mousetube_frontendv0-5
+    build: ../mousetube_frontend
     command: /entrypoint.sh
     volumes:
-      - ../mousetube_frontendv0-5:/app
+      - ../mousetube_frontend:/app
     expose:
       - "3000"
     depends_on:
       - web
     env_file:
-      - ../mousetube_frontendv0-5/.env
+      - ../mousetube_frontend/.env
     environment:
     - NPM_CONFIG_CACHE=/app/.npm
     user: "${UID:-1000}:${GID:-1000}"
@@ -49,6 +49,7 @@ services:
   celery:
     build:
       context: .
+    entrypoint: [""]
     command: celery -A mousetube_api worker -l info
     volumes:
       - .:/app

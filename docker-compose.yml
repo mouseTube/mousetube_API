@@ -1,3 +1,5 @@
+version: "3.9"
+
 services:
   db:
     image: mariadb:latest
@@ -8,7 +10,7 @@ services:
       MARIADB_USER: ${DB_USER}
       MARIADB_PASSWORD: ${DB_PASSWORD}
     ports:
-      - "${DB_PORT}:3306"
+      - "3307:3306"
     volumes:
       - mariadb_data:/var/lib/mysql
 
@@ -18,6 +20,8 @@ services:
     command: /entrypoint.sh
     volumes:
       - .:/app
+      - ./staticfiles:/app/staticfiles
+      - ./media:/app/media
     ports:
       - "8000:8000"
     depends_on:
@@ -27,8 +31,7 @@ services:
     environment:
       DB_HOST: db
       FIXTURE_FILE: /app/exported_data.json
-      DJANGO_RUNNING_IN_DOCKER: "true"
-    user: "${UID:-1000}:${GID:-1000}"
+      DEBUG: "true"
 
   frontend:
     build: ../mousetube_frontend
@@ -41,7 +44,50 @@ services:
       - web
     env_file:
       - ../mousetube_frontend/.env
-    user: "${UID:-1000}:${GID:-1000}"
+    environment:
+      - NPM_CONFIG_CACHE=/app/.npm
+
+  celery:
+    build:
+      context: .
+    entrypoint: [""]
+    command: celery -A mousetube_api worker -l info
+    volumes:
+      - .:/app
+    depends_on:
+      - db
+      - web
+      - redis
+    env_file:
+      - .env
+    environment:
+      DB_HOST: db
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: django-db
+    restart: always
+
+  redis:
+    image: redis:7
+    restart: always
+    ports:
+      - "6380:6379"
+
+  nginx:
+    build:
+      context: ./nginx
+    volumes:
+      - ./staticfiles:/app/staticfiles
+      - ./media:/app/media
+      - ./logs/nginx:/var/log/nginx
+    ports:
+      - "8080:80"   # HTTP local
+      - "8443:443"  # HTTPS local si nécessaire
+    depends_on:
+      - frontend
+      - web
+    environment:
+      DOMAIN: localhost
+    restart: always
 
 volumes:
   mariadb_data:
