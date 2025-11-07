@@ -9,7 +9,6 @@ Code under GPL v3.0 licence
 
 import json
 import os
-from weakref import ref
 
 import django_filters
 from celery.result import AsyncResult
@@ -40,7 +39,6 @@ from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.utils import (
     OpenApiParameter,
     extend_schema,
-    extend_schema_serializer,
 )
 from rest_framework import filters, permissions, status, viewsets
 from rest_framework.decorators import api_view, permission_classes
