@@ -66,6 +66,7 @@ from mousetube_api.utils.repository import (
 from .celery import app
 from .models import (
     AnimalProfile,
+    Contact,
     Dataset,
     Favorite,
     File,
@@ -87,6 +88,7 @@ from .models import (
 )
 from .serializers import (
     AnimalProfileSerializer,
+    ContactSerializer,
     DatasetSerializer,
     FavoriteSerializer,
     FileSerializer,
@@ -1399,6 +1401,24 @@ class FileDetailAPIView(GenericAPIView):
 
 
 # ----------------------------
+# Contact
+# ----------------------------
+class ContactViewSet(viewsets.ModelViewSet):
+    queryset = Contact.objects.all().order_by("last_name")
+    serializer_class = ContactSerializer
+
+    def get_permissions(self):
+        if self.action == "create":
+            return [IsAuthenticated()]
+        if self.action in ["update", "partial_update", "destroy"]:
+            return [IsAuthenticated(), IsCreatorOrReadOnly()]
+        return [permissions.AllowAny()]
+
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user, status="waiting validation")
+
+
+# ----------------------------
 # Software
 # ----------------------------
 @extend_schema(
@@ -1444,6 +1464,11 @@ class SoftwareViewSet(viewsets.ModelViewSet):
                 "address_user",
                 "country_user",
             ]
+            contact_fields = [
+                "last_name",
+                "email",
+                "institution",
+            ]
 
             q = Q()
             for f in software_fields:
@@ -1452,6 +1477,8 @@ class SoftwareViewSet(viewsets.ModelViewSet):
                 q |= Q(**{f"references__{f}__icontains": search_query})
             for f in user_fields:
                 q |= Q(**{f"users__{f}__icontains": search_query})
+            for f in contact_fields:
+                q |= Q(**{f"contacts__{f}__icontains": search_query})
 
             qs = qs.filter(q).distinct()
 

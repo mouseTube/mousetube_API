@@ -22,6 +22,7 @@ from mousetube_api.utils.validators import (
 
 from .models import (
     AnimalProfile,
+    Contact,
     Dataset,
     Favorite,
     File,
@@ -129,6 +130,12 @@ class UserProfileSerializer(serializers.ModelSerializer):
         fields = "__all__"
 
 
+class ContactSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Contact
+        fields = "__all__"
+
+
 class HardwareSerializer(serializers.ModelSerializer):
     references = ReferenceSerializer(many=True, read_only=True)
     users = LegacyUserSerializer(many=True, required=False)
@@ -183,10 +190,18 @@ class HardwareSerializer(serializers.ModelSerializer):
 class SoftwareSerializer(serializers.ModelSerializer):
     references = ReferenceSerializer(many=True, read_only=True)
     users = LegacyUserSerializer(many=True, required=False)
+    contacts = ContactSerializer(many=True, read_only=True)
 
     references_ids = serializers.PrimaryKeyRelatedField(
         queryset=Reference.objects.all(),
         source="references",
+        many=True,
+        write_only=True,
+        required=False,
+    )
+    contacts_ids = serializers.PrimaryKeyRelatedField(
+        queryset=Contact.objects.all(),
+        source="contacts",
         many=True,
         write_only=True,
         required=False,
