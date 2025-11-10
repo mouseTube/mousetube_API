@@ -1143,8 +1143,9 @@ class Dataset(models.Model):
     """
 
     name = models.CharField(max_length=255)
-    recording_session_list = models.ManyToManyField(RecordingSession, related_name="dataset_recording_sessions",
-                                                    blank=True)
+    recording_session_list = models.ManyToManyField(
+        RecordingSession, related_name="dataset_recording_sessions", blank=True
+    )
     description = models.TextField(blank=True, null=True)
     link = models.CharField(max_length=255)
     doi = models.CharField(max_length=255, null=True, blank=True)

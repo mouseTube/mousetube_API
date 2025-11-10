@@ -1737,6 +1737,7 @@ class SchemaDetailView(APIView):
 
         return schema
 
+
 # ----------------------------
 # Dataset
 # ----------------------------

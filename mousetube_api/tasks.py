@@ -4,6 +4,7 @@ import os
 import soundfile as sf
 from celery import shared_task
 from django.core.exceptions import ValidationError
+
 from mousetube_api.models import File, RecordingSession, Reference, Repository, Software
 from mousetube_api.utils.file_handler import link_to_local_path
 from mousetube_api.utils.repository import (
@@ -15,7 +16,15 @@ from mousetube_api.utils.repository import (
 logger = logging.getLogger(__name__)
 
 
-AUDIO_EXTENSIONS = {".wav", ".flac", ".aiff", ".aif", ".ogg", ".mp3"}  # extensions supportées par soundfile
+AUDIO_EXTENSIONS = {
+    ".wav",
+    ".flac",
+    ".aiff",
+    ".aif",
+    ".ogg",
+    ".mp3",
+}
+
 
 def extract_metadata(file_instance, local_path):
     """Extract duration, sample rate, bit depth, format from the audio file.
