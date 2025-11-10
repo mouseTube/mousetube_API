@@ -3,6 +3,7 @@ import os
 
 import soundfile as sf
 from celery import shared_task
+from django.core.exceptions import ValidationError
 
 from mousetube_api.models import File, RecordingSession, Reference, Repository, Software
 from mousetube_api.utils.file_handler import link_to_local_path
@@ -15,31 +16,49 @@ from mousetube_api.utils.repository import (
 logger = logging.getLogger(__name__)
 
 
+AUDIO_EXTENSIONS = {
+    ".wav",
+    ".flac",
+    ".aiff",
+    ".aif",
+    ".ogg",
+    ".mp3",
+}
+
+
 def extract_metadata(file_instance, local_path):
     """Extract duration, sample rate, bit depth, format from the audio file.
     Only fills empty attributes on the File instance.
+    Raises ValidationError if file is not a supported audio.
     """
+    _, ext = os.path.splitext(local_path)
+    if ext.lower() not in AUDIO_EXTENSIONS:
+        raise ValidationError(f"Unsupported audio format: {ext}")
+
     updated_fields = []
 
-    with sf.SoundFile(local_path) as f:
-        if not file_instance.sampling_rate:
-            file_instance.sampling_rate = f.samplerate
-            updated_fields.append("sampling_rate")
+    try:
+        with sf.SoundFile(local_path) as f:
+            if not file_instance.sampling_rate:
+                file_instance.sampling_rate = f.samplerate
+                updated_fields.append("sampling_rate")
 
-        if not file_instance.duration:
-            file_instance.duration = int(len(f) / f.samplerate)
-            updated_fields.append("duration")
+            if not file_instance.duration:
+                file_instance.duration = int(len(f) / f.samplerate)
+                updated_fields.append("duration")
 
-        if not file_instance.bit_depth:
-            bit_depth_map = {
-                "PCM_16": 16,
-                "PCM_24": 24,
-                "PCM_32": 32,
-                "FLOAT": 32,
-                "DOUBLE": 64,
-            }
-            file_instance.bit_depth = bit_depth_map.get(f.subtype)
-            updated_fields.append("bit_depth")
+            if not file_instance.bit_depth:
+                bit_depth_map = {
+                    "PCM_16": 16,
+                    "PCM_24": 24,
+                    "PCM_32": 32,
+                    "FLOAT": 32,
+                    "DOUBLE": 64,
+                }
+                file_instance.bit_depth = bit_depth_map.get(f.subtype)
+                updated_fields.append("bit_depth")
+    except RuntimeError as e:
+        raise ValidationError(f"Cannot read audio file: {e}")
 
     if not file_instance.format:
         _, ext = os.path.splitext(local_path)

@@ -36,6 +36,7 @@ from rest_framework.routers import DefaultRouter
 from .views import (
     AnimalProfileViewSet,
     CountryAPIView,
+    DatasetViewSet,
     FavoriteViewSet,
     FileAPIView,
     FileDetailAPIView,
@@ -83,6 +84,7 @@ router.register(
 router.register(r"study", StudyViewSet, basename="study")
 router.register(r"software", SoftwareViewSet, basename="software")
 router.register(r"favorite", FavoriteViewSet, basename="favorite")
+router.register(r"dataset", DatasetViewSet, basename="dataset")
 
 urlpatterns = [
     path(
