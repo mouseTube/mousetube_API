@@ -318,8 +318,8 @@ SIMPLE_JWT = {
 EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 DEFAULT_FROM_EMAIL = "no-reply@mousetube.com"
 
-broker_url = "redis://127.0.0.1:6379/0"
-CELERY_BROKER_URL = broker_url
+# use broker_url "redis://127.0.0.1:6379/0" on local dev
+CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL", "redis://redis:6379/0")
 CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"

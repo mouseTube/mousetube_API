@@ -12,7 +12,10 @@ RUN apk update && apk add --no-cache \
     build-base \
     pkgconfig \
     bash \
-    ca-certificates
+    ca-certificates \
+    libsndfile \
+    libsndfile-dev \
+    dos2unix
 
 WORKDIR /app
 

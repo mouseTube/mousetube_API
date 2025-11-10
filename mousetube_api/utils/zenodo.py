@@ -100,6 +100,20 @@ METADATA_SCHEMA = {
             "default": [{"identifier": "mousetube"}],
             "readOnly": True,
         },
+        "license": {
+            "type": "string",
+            "title": "License",
+            "enum": [
+                "CC0-1.0",  # Creative Commons Zero v1.0 Universal
+                "CC-BY-4.0",  # Attribution 4.0 International
+                "CC-BY-SA-4.0",  # Attribution-ShareAlike 4.0 International
+                "CC-BY-NC-4.0",  # Attribution-NonCommercial 4.0 International
+                "CC-BY-ND-4.0",  # Attribution-NoDerivatives 4.0 International
+                "CC-BY-NC-SA-4.0",  # Attribution-NonCommercial-ShareAlike 4.0 International
+                "CC-BY-NC-ND-4.0",  # Attribution-NonCommercial-NoDerivatives 4.0 International
+            ],
+            "default": "CC-BY-4.0",
+        },
     },
     "required": ["title", "description", "upload_type", "creators"],
 }
@@ -263,6 +277,7 @@ def build_metadata_payload(recording_session, files):
         "description": description,
         "creators": creators,
         "communities": [{"identifier": "mousetube"}],
+        "license": "CC-BY-NC-4.0",
     }
 
     return metadata_payload

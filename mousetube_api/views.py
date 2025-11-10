@@ -39,7 +39,6 @@ from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.utils import (
     OpenApiParameter,
     extend_schema,
-    extend_schema_serializer,
 )
 from rest_framework import filters, permissions, status, viewsets
 from rest_framework.decorators import api_view, permission_classes
@@ -221,11 +220,55 @@ class CountryAPIView(APIView):
 # Laboratory
 # ----------------------------
 class LaboratoryAPIView(viewsets.ModelViewSet):
-    queryset = Laboratory.objects.all().order_by("name")
     serializer_class = LaboratorySerializer
 
+    def get_queryset(self):
+        request = self.request
+        user = request.user
+        search_query = request.GET.get("search", "")
+        status_query = request.GET.get("status", "")
+
+        queryset = Laboratory.objects.all().order_by("name")
+
+        if not user.is_authenticated:
+            queryset = queryset.filter(status="validated")
+        else:
+            if status_query:
+                queryset = queryset.filter(status=status_query)
+            else:
+                queryset = queryset.filter(Q(created_by=user) | Q(status="validated"))
+
+        if search_query:
+            search_fields = ["name", "location", "institution", "description", "status"]
+            search_q = Q()
+            for field in search_fields:
+                search_q |= Q(**{f"{field}__icontains": search_query})
+            queryset = queryset.filter(search_q)
+
+        if user.is_authenticated:
+            favorite_ids = Favorite.objects.filter(
+                user=user,
+                content_type=ContentType.objects.get_for_model(Laboratory),
+            ).values_list("object_id", flat=True)
+
+            queryset = queryset.annotate(
+                is_favorite=Case(
+                    When(id__in=favorite_ids, then=Value(True)),
+                    default=Value(False),
+                    output_field=BooleanField(),
+                )
+            ).order_by(
+                F("is_favorite").desc(),
+                F("status").desc(),
+                F("name").asc(nulls_last=True),
+            )
+        else:
+            queryset = queryset.order_by("name")
+
+        return queryset
+
     def get_permissions(self):
-        if self.action in ["create"]:
+        if self.action == "create":
             return [permissions.IsAuthenticated()]
         if self.action in ["update", "partial_update", "destroy"]:
             return [permissions.IsAuthenticated(), IsCreatorOrReadOnly()]
@@ -307,7 +350,6 @@ def repository_metadata_payload(request, repository_id: int, recording_session_i
             {"error": "Recording session not found."}, status=status.HTTP_404_NOT_FOUND
         )
 
-    # Récupère tous les fichiers valides pour la session
     files = File.objects.filter(recording_session=recording_session).exclude(
         status__in=["pending", "processing", "error"]
     )
@@ -331,22 +373,123 @@ def repository_metadata_payload(request, repository_id: int, recording_session_i
 # ----------------------------
 # Reference
 # ----------------------------
-@extend_schema_serializer(component_name="ReferenceNested")
-class ReferenceSerializerNested(ReferenceSerializer):
-    pass
-
-
 @extend_schema(
-    request=None,
-    responses={200: ReferenceSerializerNested(many=True)},
+    request=ReferenceSerializer,
+    responses={200: ReferenceSerializer(many=True), 201: ReferenceSerializer},
 )
 class ReferenceAPIView(GenericAPIView):
-    serializer_class = ReferenceSerializerNested
+    serializer_class = ReferenceSerializer
+
+    def get_permissions(self):
+        if self.request.method == "POST":
+            return [permissions.IsAuthenticated()]
+        elif self.request.method in ["PUT", "PATCH", "DELETE"]:
+            return [permissions.IsAuthenticated(), IsCreatorOrReadOnly()]
+        return [permissions.AllowAny()]
+
+    def get_queryset(self):
+        search_query = self.request.GET.get("search", "")
+        status_query = self.request.GET.get("status", "")
+
+        queryset = Reference.objects.all().order_by("name")
+
+        if not self.request.user.is_authenticated:
+            queryset = queryset.filter(status="validated")
+        else:
+            if status_query:
+                queryset = queryset.filter(status=status_query)
+            else:
+                queryset = queryset.filter(
+                    Q(created_by=self.request.user) | Q(status="validated")
+                )
+
+        if search_query:
+            search_fields = ["name", "description", "doi", "status"]
+            search_q = Q()
+            for field in search_fields:
+                search_q |= Q(**{f"{field}__icontains": search_query})
+            queryset = queryset.filter(search_q)
+
+        if self.request.user.is_authenticated:
+            favorite_ids = Favorite.objects.filter(
+                user=self.request.user,
+                content_type=ContentType.objects.get_for_model(Reference),
+            ).values_list("object_id", flat=True)
+
+            queryset = queryset.annotate(
+                is_favorite=Case(
+                    When(id__in=favorite_ids, then=Value(True)),
+                    default=Value(False),
+                    output_field=BooleanField(),
+                )
+            ).order_by(
+                F("is_favorite").desc(),
+                F("status").desc(),
+                F("name").asc(nulls_last=True),
+            )
+        else:
+            queryset = queryset.order_by("name")
+
+        return queryset
 
     def get(self, request, *args, **kwargs):
-        queryset = Reference.objects.all()
-        serializer = self.serializer_class(queryset, many=True)
+        paginator = FilePagination()
+        queryset = self.get_queryset()
+        paginated_queryset = paginator.paginate_queryset(queryset, request)
+        serializer = self.serializer_class(paginated_queryset, many=True)
+        return paginator.get_paginated_response(serializer.data)
+
+    def post(self, request, *args, **kwargs):
+        serializer = self.serializer_class(data=request.data)
+        if serializer.is_valid():
+            serializer.save(created_by=request.user)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+# ----------------------------
+# Reference (detail : get / put / delete)
+# ----------------------------
+@extend_schema(
+    request=ReferenceSerializer,
+    responses={200: ReferenceSerializer, 204: None},
+)
+class ReferenceDetailAPIView(GenericAPIView):
+    serializer_class = ReferenceSerializer
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly, IsCreatorOrReadOnly]
+
+    def get_object(self, pk):
+        reference = get_object_or_404(Reference, pk=pk)
+        if reference.status == "draft" and reference.created_by != self.request.user:
+            raise Http404("Reference not found")
+
+        return reference
+
+    def get(self, request, pk, *args, **kwargs):
+        instance = self.get_object(pk)
+        serializer = self.serializer_class(instance)
         return Response(serializer.data)
+
+    def put(self, request, pk, *args, **kwargs):
+        instance = self.get_object(pk)
+        serializer = self.serializer_class(instance, data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    def patch(self, request, pk, *args, **kwargs):
+        instance = self.get_object(pk)
+        serializer = self.serializer_class(instance, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    def delete(self, request, pk, *args, **kwargs):
+        instance = self.get_object(pk)
+        instance.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 # ----------------------------
@@ -579,6 +722,7 @@ class ProtocolViewSet(viewsets.ModelViewSet):
         "animals_sex",
         "animals_age",
         "animals_housing",
+        "context_number_of_animals",
         "context_duration",
         "context_cage",
         "context_bedding",

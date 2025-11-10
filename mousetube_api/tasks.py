@@ -4,7 +4,7 @@ import os
 import soundfile as sf
 from celery import shared_task
 from django.core.exceptions import ValidationError
-from mousetube_api.models import File, RecordingSession, Repository, Software
+from mousetube_api.models import File, RecordingSession, Reference, Repository, Software
 from mousetube_api.utils.file_handler import link_to_local_path
 from mousetube_api.utils.repository import (
     delete_repository_file,
@@ -52,6 +52,7 @@ def extract_metadata(file_instance, local_path):
         raise ValidationError(f"Cannot read audio file: {e}")
 
     if not file_instance.format:
+        _, ext = os.path.splitext(local_path)
         file_instance.format = ext.lower().lstrip(".").upper()
         updated_fields.append("format")
 
@@ -198,6 +199,26 @@ def publish_session_deposition(self, recording_session_id, repository_id, payloa
 
     if rs.equipment_acquisition_hardware_microphones.exists():
         rs.equipment_acquisition_hardware_microphones.update(status="validated")
+
+    # --- ✅ References linked to the recording session (ManyToMany) ---
+    Reference.objects.filter(recording_sessions=rs).update(status="validated")
+
+    # --- ✅ References linked to acquisition software ---
+    if rs.equipment_acquisition_software.exists():
+        Reference.objects.filter(
+            software__in=rs.equipment_acquisition_software.all()
+        ).update(status="validated")
+
+    # --- ✅ References linked to acquisition hardware ---
+    hardware_relations = [
+        rs.equipment_acquisition_hardware_soundcards,
+        rs.equipment_acquisition_hardware_speakers,
+        rs.equipment_acquisition_hardware_amplifiers,
+        rs.equipment_acquisition_hardware_microphones,
+    ]
+    for hw in hardware_relations:
+        if hw.exists():
+            Reference.objects.filter(hardware__in=hw.all()).update(status="validated")
 
     # update file is_valid_link attribut if status is "done"
     files.filter(status="done").update(is_valid_link=True)

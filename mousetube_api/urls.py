@@ -50,6 +50,7 @@ from .views import (
     PublishSessionView,
     RecordingSessionViewSet,
     ReferenceAPIView,
+    ReferenceDetailAPIView,
     RepositoryAPIView,
     SchemaDetailView,
     SoftwareVersionViewSet,
@@ -109,6 +110,11 @@ urlpatterns = [
         name="repository-metadata-payload",
     ),
     path("api/reference/", ReferenceAPIView.as_view(), name="reference"),
+    path(
+        "api/reference/<int:pk>/",
+        ReferenceDetailAPIView.as_view(),
+        name="reference-detail",
+    ),
     path("api/legacy_user/", LegacyUserAPIView.as_view(), name="legacy_user"),
     path("api/user_profile/", UserProfileListAPIView.as_view(), name="user_profile"),
     path(
