@@ -739,8 +739,9 @@ class ProtocolViewSet(viewsets.ModelViewSet):
         user = self.request.user
         ordering = self.request.query_params.get("ordering")
 
+        qs = Protocol.objects.all()
+
         if user.is_authenticated:
-            qs = Protocol.objects.filter(Q(created_by=user) | Q(status="validated"))
             favorite_subquery = Favorite.objects.filter(
                 user=user, content_type=get_protocol_ct(), object_id=OuterRef("pk")
             )
@@ -760,7 +761,6 @@ class ProtocolViewSet(viewsets.ModelViewSet):
             else:
                 qs = qs.order_by("-is_favorite_int", "name")
         else:
-            qs = Protocol.objects.filter(status="validated")
             if ordering:
                 ordering_fields = []
                 for field in ordering.split(","):
@@ -777,7 +777,48 @@ class ProtocolViewSet(viewsets.ModelViewSet):
         return qs
 
     def perform_create(self, serializer):
-        serializer.save(created_by=self.request.user)
+        SEX_MAP = {"male(s)": "M", "female(s)": "F", "male(s) & female(s)": "M+F"}
+        AGE_MAP = {"pup": "P", "juvenile": "J", "adult": "A", "unspecified": "U"}
+        HOUSING_MAP = {"grouped": "G", "isolated": "I", "grouped & isolated": "G+I"}
+        DURATION_MAP = {
+            "short term (<1h)": "S",
+            "mid term (<1day)": "M",
+            "long term (>=1day)": "L",
+        }
+        CAGE_MAP = {
+            "unfamiliar test cage": "UC",
+            "familiar test cage": "FC",
+            "home cage": "HC",
+        }
+        BEDDING_MAP = {
+            "bedding": "B",
+            "no bedding": "NB",
+        }
+        LIGHT_MAP = {
+            "day": "D",
+            "night": "N",
+            "both": "B",
+        }
+        validated_data = serializer.validated_data
+        name = (
+            f"{validated_data['context_number_of_animals']}{SEX_MAP[validated_data['animals_sex']]}"
+            f"{AGE_MAP[validated_data['animals_age']]}{HOUSING_MAP[validated_data['animals_housing']]}_"
+            f"{DURATION_MAP[validated_data['context_duration']]}_"
+            f"{CAGE_MAP[validated_data['context_cage']]}{BEDDING_MAP[validated_data['context_bedding']]}{LIGHT_MAP[validated_data['context_light_cycle']]}"
+        )
+
+        # Check if a protocol with the same name already exists
+        protocol, created = Protocol.objects.get_or_create(
+            name=name,
+            defaults={
+                **validated_data,
+                "status": "validated",
+                "created_by": self.request.user,
+            },
+        )
+
+        # If the protocol already existed, do not create but return the existing object
+        serializer.instance = protocol
 
 
 # ----------------------------

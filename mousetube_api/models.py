@@ -365,7 +365,7 @@ class Protocol(models.Model):
         ("waiting validation", "Waiting validation"),
         ("validated", "Validated"),
     ]
-    name = models.CharField(max_length=255)
+    name = models.CharField(max_length=255, editable=False, unique=True)
     user = models.ForeignKey(LegacyUser, models.SET_NULL, null=True, blank=True)
     # Animals
     animals_sex = models.CharField(
@@ -440,6 +440,37 @@ class Protocol(models.Model):
         related_name="protocol_created_by",
         on_delete=models.SET_NULL,
     )
+
+    def save(self, *args, **kwargs):
+        SEX_MAP = {"male(s)": "M", "female(s)": "F", "male(s) & female(s)": "M+F"}
+        AGE_MAP = {"pup": "P", "juvenile": "J", "adult": "A", "unspecified": "U"}
+        HOUSING_MAP = {"grouped": "G", "isolated": "I", "grouped & isolated": "G+I"}
+        DURATION_MAP = {
+            "short term (<1h)": "S",
+            "mid term (<1day)": "M",
+            "long term (>=1day)": "L",
+        }
+        CAGE_MAP = {
+            "unfamiliar test cage": "UC",
+            "familiar test cage": "FC",
+            "home cage": "HC",
+        }
+        BEDDING_MAP = {
+            "bedding": "B",
+            "no bedding": "NB",
+        }
+        LIGHT_MAP = {
+            "day": "D",
+            "night": "N",
+            "both": "B",
+        }
+        self.name = (
+            f"{self.context_number_of_animals}{SEX_MAP[self.animals_sex]}{AGE_MAP[self.animals_age]}{HOUSING_MAP[self.animals_housing]}_"
+            f"{DURATION_MAP[self.context_duration]}_"
+            f"{CAGE_MAP[self.context_cage]}{BEDDING_MAP[self.context_bedding]}{LIGHT_MAP[self.context_light_cycle]}"
+        )
+        self.status = "validated"
+        super().save(*args, **kwargs)
 
     def __str__(self):
         """
