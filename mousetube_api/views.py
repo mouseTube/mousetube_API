@@ -636,7 +636,9 @@ class HardwareAPIView(GenericAPIView):
     def post(self, request, *args, **kwargs):
         serializer = self.serializer_class(data=request.data)
         if serializer.is_valid():
-            hardware = serializer.save(created_by=request.user)
+            hardware = serializer.save(
+                created_by=request.user, status="waiting validation"
+            )
             return Response(
                 self.serializer_class(hardware).data, status=status.HTTP_201_CREATED
             )
@@ -1509,7 +1511,7 @@ class SoftwareViewSet(viewsets.ModelViewSet):
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        software = serializer.save(created_by=request.user)
+        software = serializer.save(created_by=request.user, status="waiting validation")
         return Response(
             self.get_serializer(software).data, status=status.HTTP_201_CREATED
         )
