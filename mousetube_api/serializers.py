@@ -679,7 +679,9 @@ class RecordingSessionSerializer(serializers.ModelSerializer):
     # ---- Validation ----
     def validate(self, data):
         errors = {}
+        user = self.context["request"].user
 
+        # 1️⃣ validation on date if is_multiple is False
         is_multiple = data.get(
             "is_multiple", getattr(self.instance, "is_multiple", False)
         )
@@ -691,12 +693,23 @@ class RecordingSessionSerializer(serializers.ModelSerializer):
         ):
             errors["date"] = "A date is required for single recording sessions."
 
+        # 2️⃣ Validation of non-None fields
         for field in ["name", "date"]:
             if field in data and data[field] is None:
                 if field == "date" and is_multiple:
                     continue
                 errors[field] = f"{field} cannot be None."
 
+        # 3️⃣ Validation of uniqueness per user
+        name = data.get("name", getattr(self.instance, "name", None))
+        if name:
+            qs = RecordingSession.objects.filter(name=name, created_by=user)
+            if self.instance:
+                qs = qs.exclude(pk=self.instance.pk)
+            if qs.exists():
+                errors["name"] = "You already have a recording session with this name."
+
+        # 4️⃣ Raise ValidationError if necessary
         if errors:
             raise serializers.ValidationError(errors)
 

@@ -753,7 +753,7 @@ class RecordingSession(models.Model):
         ("shared", "Shared"),
     ]
 
-    name = models.CharField(max_length=255, unique=True)
+    name = models.CharField(max_length=255)
     is_multiple = models.BooleanField(
         default=False,
         help_text=(
@@ -922,6 +922,11 @@ class RecordingSession(models.Model):
     class Meta:
         verbose_name = "Recording Session"
         verbose_name_plural = "Recording Sessions"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["name", "created_by"], name="unique_session_per_user"
+            )
+        ]
 
 
 class Repository(models.Model):
