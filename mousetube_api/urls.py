@@ -39,14 +39,17 @@ from .views import (
     FavoriteViewSet,
     FileAPIView,
     FileDetailAPIView,
+    FileUploadAsyncView,
     HardwareAPIView,
     HardwareDetailAPIView,
     LaboratoryAPIView,
     LegacyUserAPIView,
     LinkOrcidView,
     ProtocolViewSet,
+    PublishSessionView,
     RecordingSessionViewSet,
     ReferenceAPIView,
+    ReferenceDetailAPIView,
     RepositoryAPIView,
     SchemaDetailView,
     SoftwareVersionViewSet,
@@ -58,6 +61,10 @@ from .views import (
     TrackPageView,
     UserProfileDetailAPIView,
     UserProfileListAPIView,
+    file_task_status,
+    get_task_status,
+    repository_metadata_payload,
+    repository_metadata_schema,
 )
 
 router = DefaultRouter()
@@ -90,7 +97,22 @@ urlpatterns = [
     path("admin/", admin.site.urls),
     path("api/", include(router.urls)),
     path("api/repository/", RepositoryAPIView.as_view(), name="repository"),
+    path(
+        "api/repository/<int:repo_id>/schema/",
+        repository_metadata_schema,
+        name="repository-metadata-schema",
+    ),
+    path(
+        "api/repository/<int:repository_id>/sessions/<int:recording_session_id>/payload/",
+        repository_metadata_payload,
+        name="repository-metadata-payload",
+    ),
     path("api/reference/", ReferenceAPIView.as_view(), name="reference"),
+    path(
+        "api/reference/<int:pk>/",
+        ReferenceDetailAPIView.as_view(),
+        name="reference-detail",
+    ),
     path("api/legacy_user/", LegacyUserAPIView.as_view(), name="legacy_user"),
     path("api/user_profile/", UserProfileListAPIView.as_view(), name="user_profile"),
     path(
@@ -99,6 +121,14 @@ urlpatterns = [
         name="user_profile-detail",
     ),
     path("api/file/", FileAPIView.as_view(), name="file"),
+    path("api/file/<int:file_id>/status/", file_task_status, name="file-status"),
+    path("api/file/upload_async/", FileUploadAsyncView.as_view(), name="file-upload"),
+    path(
+        "api/file/publish_session/",
+        PublishSessionView.as_view(),
+        name="publish-session",
+    ),
+    path("api/recording-session/get_task_status", get_task_status, name="file-status"),
     path("api/hardware/", HardwareAPIView.as_view(), name="hardware"),
     path(
         "api/hardware/<int:pk>/",

@@ -25,18 +25,22 @@ class Laboratory(models.Model):
         unit (CharField): Organizational unit or department (optional).
         address (CharField): Physical address of the laboratory.
         country (CountryField): Country where the laboratory is located.
-        contact (CharField): Contact person or email (optional).
         created_at (DateTimeField): Timestamp when the laboratory was created.
         modified_at (DateTimeField): Last modification timestamp.
         created_by (ForeignKey): User who created the laboratory record.
     """
 
+    STATUS_CHOICES = [
+        ("draft", "Draft"),
+        ("waiting validation", "Waiting validation"),
+        ("validated", "Validated"),
+    ]
     name = models.CharField(max_length=255)
     institution = models.CharField(max_length=255, blank=True, null=True)
     unit = models.CharField(max_length=255, blank=True, null=True)
     address = models.CharField(max_length=255, blank=True, null=True)
     country = CountryField(blank=True, null=True)
-    contact = models.CharField(max_length=255, blank=True, null=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="draft")
     created_at = models.DateTimeField(auto_now_add=True, null=True)
     modified_at = models.DateTimeField(auto_now=True, null=True)
     created_by = models.ForeignKey(
@@ -235,6 +239,7 @@ class AnimalProfile(models.Model):
         description (str, optional): A description of the animal profil.
         strain (Strain): The strain associated with the animal profil.
         sex (str, optional): The sex of the subject.
+        age (str, optional): The age of the animal.
         genotype (str, optional): The genotype of the animal.
         treatment (str, optional): The treatment applied to the animal.
         status (str): The status of the animal profil (draft, waiting validation, validated).
@@ -257,9 +262,18 @@ class AnimalProfile(models.Model):
     name = models.CharField(max_length=255, unique=True)
     description = models.TextField(blank=True, null=True)
     strain = models.ForeignKey(Strain, on_delete=models.CASCADE)
-    sex = models.CharField(max_length=6, choices=SEX_CHOICES, blank=True, null=True)
-    genotype = models.CharField(max_length=255, blank=True, null=True)
-    treatment = models.CharField(max_length=255, blank=True, null=True)
+    sex = models.CharField(max_length=6, choices=SEX_CHOICES)
+    age = models.CharField(
+        max_length=32,
+        choices=[
+            ("pup", "pup"),
+            ("juvenile", "juvenile"),
+            ("adult", "adult"),
+        ],
+        default="adult",
+    )
+    genotype = models.CharField(max_length=255)
+    treatment = models.CharField(max_length=255, null=True, blank=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="draft")
     created_at = models.DateTimeField(auto_now_add=True, null=True)
     modified_at = models.DateTimeField(auto_now=True, null=True)
@@ -351,8 +365,7 @@ class Protocol(models.Model):
         ("waiting validation", "Waiting validation"),
         ("validated", "Validated"),
     ]
-    name = models.CharField(max_length=255)
-    description = models.TextField(max_length=5000, blank=True, null=True)
+    name = models.CharField(max_length=255, editable=False, unique=True)
     user = models.ForeignKey(LegacyUser, models.SET_NULL, null=True, blank=True)
     # Animals
     animals_sex = models.CharField(
@@ -362,14 +375,15 @@ class Protocol(models.Model):
             ("female(s)", "female(s)"),
             ("male(s) & female(s)", "male(s) & female(s)"),
         ],
-        blank=True,
-        null=True,
     )
     animals_age = models.CharField(
         max_length=32,
-        choices=[("pup", "pup"), ("juvenile", "juvenile"), ("adult", "adult")],
-        blank=True,
-        null=True,
+        choices=[
+            ("pup", "pup"),
+            ("juvenile", "juvenile"),
+            ("adult", "adult"),
+            ("unspecified", "unspecified"),
+        ],
     )
     animals_housing = models.CharField(
         max_length=32,
@@ -378,12 +392,21 @@ class Protocol(models.Model):
             ("isolated", "isolated"),
             ("grouped & isolated", "grouped & isolated"),
         ],
-        blank=True,
-        null=True,
     )
 
     # Context
-    context_number_of_animals = models.PositiveIntegerField(blank=True, null=True)
+    # context_number_of_animals = models.PositiveIntegerField()
+    context_number_of_animals = models.CharField(
+        max_length=5,
+        choices=[
+            ("1", "1"),
+            ("2", "2"),
+            ("3", "3"),
+            ("4", "4"),
+            (">4", ">4"),
+        ],
+    )
+
     context_duration = models.CharField(
         max_length=32,
         choices=[
@@ -391,8 +414,6 @@ class Protocol(models.Model):
             ("mid term (<1day)", "mid term (<1day)"),
             ("long term (>=1day)", "long term (>=1day)"),
         ],
-        blank=True,
-        null=True,
     )
     context_cage = models.CharField(
         max_length=64,
@@ -401,20 +422,14 @@ class Protocol(models.Model):
             ("familiar test cage", "familiar test cage"),
             ("home cage", "home cage"),
         ],
-        blank=True,
-        null=True,
     )
     context_bedding = models.CharField(
         max_length=16,
         choices=[("bedding", "bedding"), ("no bedding", "no bedding")],
-        blank=True,
-        null=True,
     )
     context_light_cycle = models.CharField(
         max_length=8,
         choices=[("day", "day"), ("night", "night"), ("both", "both")],
-        blank=True,
-        null=True,
     )
     status = models.CharField(max_length=20, choices=STATUS, default="draft")
     created_at = models.DateTimeField(auto_now_add=True, null=True)
@@ -425,6 +440,37 @@ class Protocol(models.Model):
         related_name="protocol_created_by",
         on_delete=models.SET_NULL,
     )
+
+    def save(self, *args, **kwargs):
+        SEX_MAP = {"male(s)": "M", "female(s)": "F", "male(s) & female(s)": "M+F"}
+        AGE_MAP = {"pup": "P", "juvenile": "J", "adult": "A", "unspecified": "U"}
+        HOUSING_MAP = {"grouped": "G", "isolated": "I", "grouped & isolated": "G+I"}
+        DURATION_MAP = {
+            "short term (<1h)": "S",
+            "mid term (<1day)": "M",
+            "long term (>=1day)": "L",
+        }
+        CAGE_MAP = {
+            "unfamiliar test cage": "UC",
+            "familiar test cage": "FC",
+            "home cage": "HC",
+        }
+        BEDDING_MAP = {
+            "bedding": "B",
+            "no bedding": "NB",
+        }
+        LIGHT_MAP = {
+            "day": "D",
+            "night": "N",
+            "both": "B",
+        }
+        self.name = (
+            f"{self.context_number_of_animals}{SEX_MAP[self.animals_sex]}{AGE_MAP[self.animals_age]}{HOUSING_MAP[self.animals_housing]}_"
+            f"{DURATION_MAP[self.context_duration]}_"
+            f"{CAGE_MAP[self.context_cage]}{BEDDING_MAP[self.context_bedding]}{LIGHT_MAP[self.context_light_cycle]}"
+        )
+        self.status = "validated"
+        super().save(*args, **kwargs)
 
     def __str__(self):
         """
@@ -449,6 +495,7 @@ class Reference(models.Model):
         description (str): A detailed description of the reference.
         url (str): The URL pointing to the reference, if available.
         doi (str): The DOI (Digital Object Identifier) of the reference, if applicable.
+        status (str): The current status of the reference (draft, waiting validation, validated).
         created_at (DateTimeField): Timestamp when the reference was created.
         modified_at (DateTimeField): Last modification timestamp.
         created_by (ForeignKey): User who created the reference entry.
@@ -462,6 +509,12 @@ class Reference(models.Model):
     description = models.TextField(blank=True, null=True)
     url = models.URLField(max_length=255, blank=True, null=True)
     doi = models.CharField(max_length=255, blank=True, null=True)
+    STATUS_CHOICES = [
+        ("draft", "Draft"),
+        ("waiting validation", "Waiting Validation"),
+        ("validated", "Validated"),
+    ]
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="draft")
     created_at = models.DateTimeField(auto_now_add=True, null=True)
     modified_at = models.DateTimeField(auto_now=True, null=True)
     created_by = models.ForeignKey(
@@ -490,6 +543,7 @@ class Software(models.Model):
         description (str): A description of the software, including its functionality.
         technical_requirements (str): The technical requirements for using the software.
         references (ManyToManyField): A list of references and tutorials related to the software.
+        status (str): The current status of the software (draft, waiting validation, validated).
         users (ManyToManyField): A list of users who are associated with the software.
         created_at (DateTimeField): Timestamp when the software record was created.
         modified_at (DateTimeField): Last modification timestamp.
@@ -506,6 +560,12 @@ class Software(models.Model):
         ("acquisition and analysis", "acquisition and analysis"),
     )
 
+    CHOICES_SOFTWARE_STATUS = (
+        ("draft", "draft"),
+        ("waiting validation", "waiting validation"),
+        ("validated", "validated"),
+    )
+
     name = models.CharField(max_length=255)
     type = models.CharField(
         max_length=255, null=True, default="acquisition", choices=CHOICES_SOFTWARE
@@ -514,6 +574,9 @@ class Software(models.Model):
     description = models.TextField(default="", blank=True)
     technical_requirements = models.TextField(default="", blank=True)
     references = models.ManyToManyField(Reference, related_name="software", blank=True)
+    status = models.CharField(
+        max_length=50, null=True, default="draft", choices=CHOICES_SOFTWARE_STATUS
+    )
     users = models.ManyToManyField(
         LegacyUser, related_name="software_to_user", blank=True
     )
@@ -582,10 +645,17 @@ class Hardware(models.Model):
         made_by (TextField): Manufacturer or source of the hardware.
         description (TextField): Optional details about the hardware.
         references (ManyToManyField): References or publications related to the hardware.
+        status (CharField): The current status of the hardware (draft, waiting validation, validated).
         created_at (DateTimeField): Timestamp when the hardware record was created.
         modified_at (DateTimeField): Last modification timestamp.
         created_by (ForeignKey): User who created the hardware record.
     """
+
+    CHOICES_HARDWARE_STATUS = (
+        ("draft", "draft"),
+        ("waiting validation", "waiting validation"),
+        ("validated", "validated"),
+    )
 
     CHOICES_HARDWARE = (
         ("soundcard", "soundcard"),
@@ -603,7 +673,9 @@ class Hardware(models.Model):
     references = models.ManyToManyField(
         Reference, related_name="harware_reference", blank=True
     )
-
+    status = models.CharField(
+        max_length=50, null=True, default="draft", choices=CHOICES_HARDWARE_STATUS
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     modified_at = models.DateTimeField(auto_now=True)
     created_by = models.ForeignKey(
@@ -634,10 +706,17 @@ class Study(models.Model):
         created_by (ForeignKey): User who created the experiment record.
     """
 
+    STATUS_CHOICES = [
+        ("draft", "Draft"),
+        ("waiting validation", "Waiting validation"),
+        ("validated", "Validated"),
+    ]
+
     name = models.CharField(max_length=255)
     description = models.TextField(blank=True, null=True)
     start_date = models.DateField(blank=True, null=True)
     end_date = models.DateField(blank=True, null=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="draft")
     created_at = models.DateTimeField(auto_now_add=True, null=True)
     modified_at = models.DateTimeField(auto_now=True, null=True)
     created_by = models.ForeignKey(
@@ -702,10 +781,10 @@ class RecordingSession(models.Model):
 
     STATUS = [
         ("draft", "Draft"),
-        ("published", "Published"),
+        ("shared", "Shared"),
     ]
 
-    name = models.CharField(max_length=255, unique=True)
+    name = models.CharField(max_length=255)
     is_multiple = models.BooleanField(
         default=False,
         help_text=(
@@ -800,6 +879,9 @@ class RecordingSession(models.Model):
         blank=True,
         null=True,
     )
+    references = models.ManyToManyField(
+        Reference, related_name="recordingsession", blank=True
+    )
     created_at = models.DateTimeField(auto_now_add=True, null=True)
     modified_at = models.DateTimeField(auto_now=True, null=True)
     created_by = models.ForeignKey(
@@ -871,6 +953,11 @@ class RecordingSession(models.Model):
     class Meta:
         verbose_name = "Recording Session"
         verbose_name_plural = "Recording Sessions"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["name", "created_by"], name="unique_session_per_user"
+            )
+        ]
 
 
 class Repository(models.Model):
@@ -946,6 +1033,12 @@ class File(models.Model):
         ("MOV", "MOV"),
         ("MKV", "MKV"),
     ]
+    STATUS_CHOICES = [
+        ("pending", "Pending"),
+        ("processing", "Processing"),
+        ("done", "Done"),
+        ("error", "Error"),
+    ]
     name = models.CharField(max_length=255, blank=True, null=True)
     link = models.URLField(blank=True, null=True)
     recording_session = models.ForeignKey(
@@ -981,6 +1074,23 @@ class File(models.Model):
     repository = models.ForeignKey(
         Repository, on_delete=models.SET_NULL, null=True, blank=True
     )
+    external_id = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+        help_text="external ID of the repository (Zenodo, Figshare...)",
+    )
+    external_url = models.URLField(
+        blank=True,
+        null=True,
+        help_text="Public URL of the file on the external repository (e.g., Zenodo record link).",
+    )
+    status = models.CharField(
+        max_length=10,
+        choices=STATUS_CHOICES,
+        default="pending",
+    )
+    celery_task_id = models.CharField(max_length=255, blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True, null=True)
     modified_at = models.DateTimeField(auto_now=True, null=True)
     created_by = models.ForeignKey(
@@ -997,7 +1107,7 @@ class File(models.Model):
         Returns:
             str: The URL link to the file.
         """
-        return self.link
+        return self.link or self.doi or f"File {self.id}"
 
     class Meta:
         verbose_name = "File"
@@ -1056,7 +1166,15 @@ class Favorite(models.Model):
         created_at (DateTimeField): Timestamp when the favorite was created.
     """
 
-    ALLOWED_MODELS = ["protocol", "hardware", "software", "animalprofile", "strain"]
+    ALLOWED_MODELS = [
+        "protocol",
+        "hardware",
+        "software",
+        "animalprofile",
+        "strain",
+        "laboratory",
+        "reference",
+    ]
 
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="favorites"

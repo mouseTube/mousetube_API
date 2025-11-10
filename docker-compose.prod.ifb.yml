@@ -42,6 +42,8 @@ services:
       - web
     env_file:
       - ../mousetube_frontend/.env
+    environment:
+    - NPM_CONFIG_CACHE=/app/.npm
     user: "${UID:-1000}:${GID:-1000}"
 
   celery:
@@ -69,12 +71,9 @@ services:
       - "6379"
 
   nginx:
-    image: nginx:latest
     build:
       context: ./nginx
     volumes:
-      - nginx_certs:/etc/letsencrypt
-      - ./nginx/certbot:/var/www/certbot
       # - ./nginx/ssl/nginx.crt:/etc/letsencrypt/live/${DOMAIN}/fullchain.pem
       # - ./nginx/ssl/nginx.key:/etc/letsencrypt/live/${DOMAIN}/privkey.pem
       - ./staticfiles:/app/staticfiles
@@ -88,20 +87,7 @@ services:
       - web
     environment:
       DOMAIN: ${DOMAIN}
-    restart:
-      always
-
-  certbot:
-    image: certbot/certbot
-    volumes:
-      - nginx_certs:/etc/letsencrypt
-      - ./nginx/certbot:/var/www/certbot
-      - ./nginx/conf.d:/etc/nginx/conf.d
-    entrypoint: >
-      sh -c "certbot certonly --webroot -w /var/www/certbot
-      --email admin@${DOMAIN} --agree-tos --no-eff-email
-      -d ${DOMAIN}"
+    restart: always
 
 volumes:
   mariadb_data:
-  nginx_certs:

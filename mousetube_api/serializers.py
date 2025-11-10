@@ -14,6 +14,12 @@ from django_countries.serializer_fields import CountryField
 from djoser.serializers import UserCreateSerializer as BaseUserCreateSerializer
 from rest_framework import serializers
 
+from mousetube_api.utils.validators import (
+    validate_doi,
+    validate_doi_link_consistency,
+    validate_url,
+)
+
 from .models import (
     AnimalProfile,
     Dataset,
@@ -68,6 +74,8 @@ class CustomUserCreateSerializer(BaseUserCreateSerializer):
 
 
 class RepositorySerializer(serializers.ModelSerializer):
+    area = serializers.CharField(source="area.name")
+
     class Meta:
         model = Repository
         fields = "__all__"
@@ -78,6 +86,12 @@ class ReferenceSerializer(serializers.ModelSerializer):
         model = Reference
         fields = "__all__"
 
+        def validate_doi(self, value):
+            return validate_doi(value)
+
+        def validate_url(self, value):
+            return validate_url(value)
+
 
 class LegacyUserSerializer(serializers.ModelSerializer):
     class Meta:
@@ -86,6 +100,8 @@ class LegacyUserSerializer(serializers.ModelSerializer):
 
 
 class LaboratorySerializer(serializers.ModelSerializer):
+    country = CountryField()
+
     class Meta:
         model = Laboratory
         fields = "__all__"
@@ -100,6 +116,12 @@ class CustomUserSerializer(serializers.ModelSerializer):
 class UserProfileSerializer(serializers.ModelSerializer):
     user = CustomUserSerializer(read_only=True)
     laboratory = LaboratorySerializer(read_only=True)
+    laboratory_id = serializers.PrimaryKeyRelatedField(
+        queryset=Laboratory.objects.all(),
+        source="laboratory",
+        write_only=True,
+        required=False,
+    )
     country = CountryField()
 
     class Meta:
@@ -108,8 +130,16 @@ class UserProfileSerializer(serializers.ModelSerializer):
 
 
 class HardwareSerializer(serializers.ModelSerializer):
-    references = ReferenceSerializer(many=True, required=False)
+    references = ReferenceSerializer(many=True, read_only=True)
     users = LegacyUserSerializer(many=True, required=False)
+
+    references_ids = serializers.PrimaryKeyRelatedField(
+        queryset=Reference.objects.all(),
+        source="references",
+        many=True,
+        write_only=True,
+        required=False,
+    )
 
     class Meta:
         model = Hardware
@@ -120,11 +150,13 @@ class HardwareSerializer(serializers.ModelSerializer):
         users_data = validated_data.pop("users", [])
         hardware = Hardware.objects.create(**validated_data)
 
-        for ref_data in references_data:
-            Reference.objects.create(hardware=hardware, **ref_data)
+        # assign references
+        if references_data:
+            hardware.references.set(references_data)
 
-        user_ids = [user["id"] for user in users_data if "id" in user]
-        if user_ids:
+        # assign users
+        if users_data:
+            user_ids = [user["id"] for user in users_data if "id" in user]
             hardware.users.set(user_ids)
 
         return hardware
@@ -138,9 +170,7 @@ class HardwareSerializer(serializers.ModelSerializer):
         instance.save()
 
         if references_data is not None:
-            instance.references.all().delete()
-            for ref_data in references_data:
-                Reference.objects.create(hardware=instance, **ref_data)
+            instance.references.set(references_data)
 
         if users_data is not None:
             user_ids = [user["id"] for user in users_data if "id" in user]
@@ -151,8 +181,16 @@ class HardwareSerializer(serializers.ModelSerializer):
 
 
 class SoftwareSerializer(serializers.ModelSerializer):
-    references = ReferenceSerializer(many=True, required=False)
+    references = ReferenceSerializer(many=True, read_only=True)
     users = LegacyUserSerializer(many=True, required=False)
+
+    references_ids = serializers.PrimaryKeyRelatedField(
+        queryset=Reference.objects.all(),
+        source="references",
+        many=True,
+        write_only=True,
+        required=False,
+    )
 
     linked_sessions_count = serializers.IntegerField(read_only=True)
     linked_sessions_from_other_users = serializers.IntegerField(read_only=True)
@@ -194,11 +232,13 @@ class SoftwareSerializer(serializers.ModelSerializer):
 
         software = Software.objects.create(**validated_data)
 
-        for ref_data in references_data:
-            Reference.objects.create(software=software, **ref_data)
+        # ✅ assign existing references
+        if references_data:
+            software.references.set(references_data)
 
-        user_ids = [user_data["id"] for user_data in users_data if "id" in user_data]
-        if user_ids:
+        # ✅ assign existing users
+        if users_data:
+            user_ids = [user["id"] for user in users_data if "id" in user]
             software.users.set(user_ids)
 
         return software
@@ -211,17 +251,14 @@ class SoftwareSerializer(serializers.ModelSerializer):
             setattr(instance, attr, value)
         instance.save()
 
+        # ✅ update references if provided
         if references_data is not None:
-            instance.references.all().delete()
-            for ref_data in references_data:
-                Reference.objects.create(software=instance, **ref_data)
+            instance.references.set(references_data)
 
+        # ✅ update users if provided
         if users_data is not None:
-            user_ids = [
-                user_data["id"] for user_data in users_data if "id" in user_data
-            ]
-            if user_ids:
-                instance.users.set(user_ids)
+            user_ids = [user["id"] for user in users_data if "id" in user]
+            instance.users.set(user_ids)
 
         return instance
 
@@ -544,6 +581,7 @@ class RecordingSessionSerializer(serializers.ModelSerializer):
     equipment_acquisition_hardware_microphones = HardwareSerializer(
         many=True, read_only=True
     )
+    references = ReferenceSerializer(many=True, read_only=True)
 
     # ---- Write fields POST/PUT/PATCH ----
     protocol_id = serializers.PrimaryKeyRelatedField(
@@ -609,6 +647,13 @@ class RecordingSessionSerializer(serializers.ModelSerializer):
         write_only=True,
         required=False,
     )
+    references_ids = serializers.PrimaryKeyRelatedField(
+        queryset=Reference.objects.all(),
+        source="references",
+        many=True,
+        write_only=True,
+        required=False,
+    )
 
     equipment_channels = serializers.CharField(
         required=False, allow_null=True, allow_blank=True
@@ -634,7 +679,9 @@ class RecordingSessionSerializer(serializers.ModelSerializer):
     # ---- Validation ----
     def validate(self, data):
         errors = {}
+        user = self.context["request"].user
 
+        # 1️⃣ validation on date if is_multiple is False
         is_multiple = data.get(
             "is_multiple", getattr(self.instance, "is_multiple", False)
         )
@@ -646,12 +693,23 @@ class RecordingSessionSerializer(serializers.ModelSerializer):
         ):
             errors["date"] = "A date is required for single recording sessions."
 
+        # 2️⃣ Validation of non-None fields
         for field in ["name", "date"]:
             if field in data and data[field] is None:
                 if field == "date" and is_multiple:
                     continue
                 errors[field] = f"{field} cannot be None."
 
+        # 3️⃣ Validation of uniqueness per user
+        name = data.get("name", getattr(self.instance, "name", None))
+        if name:
+            qs = RecordingSession.objects.filter(name=name, created_by=user)
+            if self.instance:
+                qs = qs.exclude(pk=self.instance.pk)
+            if qs.exists():
+                errors["name"] = "You already have a recording session with this name."
+
+        # 4️⃣ Raise ValidationError if necessary
         if errors:
             raise serializers.ValidationError(errors)
 
@@ -677,6 +735,7 @@ class RecordingSessionSerializer(serializers.ModelSerializer):
             "equipment_acquisition_hardware_amplifiers": validated_data.pop(
                 "equipment_acquisition_hardware_amplifiers", None
             ),
+            "references": validated_data.pop("references", None),
         }
 
     def _assign_m2m(self, instance, m2m_fields):
@@ -741,54 +800,37 @@ class StudySerializer(serializers.ModelSerializer):
 
 
 class FileSerializer(serializers.ModelSerializer):
+    repository_id = serializers.PrimaryKeyRelatedField(
+        source="repository",
+        queryset=Repository.objects.all(),
+        required=False,
+        write_only=True,
+    )
     repository = RepositorySerializer(required=False)
-    recording_session = RecordingSessionSerializer()
+    recording_session_id = serializers.PrimaryKeyRelatedField(
+        source="recording_session",
+        queryset=RecordingSession.objects.all(),
+        required=False,
+        write_only=True,
+    )
+    recording_session = RecordingSessionSerializer(required=False)
     subjects = SubjectSerializer(many=True, required=False)
 
     class Meta:
         model = File
         fields = "__all__"
 
-    def create(self, validated_data):
-        subjects_data = validated_data.pop("subjects", [])
-        file = File.objects.create(**validated_data)
+    def validate(self, attrs):
+        # Validate DOI format
+        if "doi" in attrs:
+            attrs["doi"] = validate_doi(attrs["doi"])
 
-        for subject_data in subjects_data:
-            subject_id = subject_data.get("id")
-            if subject_id:
-                subject_obj = Subject.objects.get(id=subject_id)
-                for attr, value in subject_data.items():
-                    if attr != "id":
-                        setattr(subject_obj, attr, value)
-                subject_obj.save()
-            else:
-                subject_obj = Subject.objects.create(**subject_data)
-            file.subjects.add(subject_obj)
-        return file
+        # Valider URL format
+        if "link" in attrs:
+            attrs["link"] = validate_url(attrs["link"])
 
-    def update(self, instance, validated_data):
-        subjects_data = validated_data.pop("subjects", None)
-
-        for attr, value in validated_data.items():
-            setattr(instance, attr, value)
-        instance.save()
-
-        if subjects_data is not None:
-            subject_objs = []
-            for subject_data in subjects_data:
-                subject_id = subject_data.get("id")
-                if subject_id:
-                    subject_obj = Subject.objects.get(id=subject_id)
-                    for attr, value in subject_data.items():
-                        if attr != "id":
-                            setattr(subject_obj, attr, value)
-                    subject_obj.save()
-                else:
-                    subject_obj = Subject.objects.create(**subject_data)
-                subject_objs.append(subject_obj)
-            instance.subjects.set(subject_objs)
-
-        return instance
+        # Validate consistency between DOI and link
+        return validate_doi_link_consistency(attrs)
 
 
 class DatasetSerializer(serializers.ModelSerializer):
@@ -806,6 +848,7 @@ MODEL_MAP = {
     "animalprofile": AnimalProfile,
     "strain": Strain,
     "species": Species,
+    "reference": Reference,
 }
 
 

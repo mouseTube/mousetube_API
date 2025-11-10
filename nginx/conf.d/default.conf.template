@@ -1,0 +1,57 @@
+# ======================================
+# 🧭 Nginx configuration for mouseTube
+# Running behind HAProxy (SSL handled upstream)
+# ======================================
+
+server {
+    # Listen only on HTTP (HAProxy terminates HTTPS)
+    listen 80;
+    server_name ${DOMAIN};
+
+    proxy_buffer_size       128k;
+    proxy_buffers           4 256k;
+    proxy_busy_buffers_size 256k;
+
+    # ======================================
+    # 🎯 ROUTING RULES
+    # ======================================
+
+    # Nuxt.js frontend
+    location / {
+        proxy_pass http://frontend:3000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+
+    # Django REST API
+    location /api/ {
+        proxy_pass http://web:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+
+    # Django Admin interface
+    location /admin/ {
+        proxy_pass http://web:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+
+    # Django static files (CSS, JS, etc.)
+    location /static/ {
+        alias /app/staticfiles/;
+        expires 30d;
+        add_header Cache-Control "public";
+    }
+
+    # Django media files (user uploads)
+    location /media/ {
+        alias /app/media/;
+        access_log off;
+        expires 30d;
+        add_header Cache-Control "public";
+    }
+}

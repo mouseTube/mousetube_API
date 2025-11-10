@@ -11,12 +11,14 @@ import json
 import os
 
 import django_filters
+from celery.result import AsyncResult
 from django.apps import apps
 from django.conf import settings
 from django.contrib.contenttypes.models import ContentType
 from django.core.cache import cache
 from django.core.management import call_command
 from django.db.models import (
+    BooleanField,
     Case,
     Count,
     Exists,
@@ -37,9 +39,9 @@ from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.utils import (
     OpenApiParameter,
     extend_schema,
-    extend_schema_serializer,
 )
 from rest_framework import filters, permissions, status, viewsets
+from rest_framework.decorators import api_view, permission_classes
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.generics import GenericAPIView
 from rest_framework.pagination import PageNumberPagination
@@ -50,6 +52,17 @@ from rest_framework.permissions import (
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from mousetube_api.tasks import (
+    delete_file_from_repository,
+    process_file,
+    publish_session_deposition,
+)
+from mousetube_api.utils.repository import (
+    build_repository_metadata_payload,
+    get_repository_metadata_schema,
+)
+
+from .celery import app
 from .models import (
     AnimalProfile,
     Favorite,
@@ -204,11 +217,55 @@ class CountryAPIView(APIView):
 # Laboratory
 # ----------------------------
 class LaboratoryAPIView(viewsets.ModelViewSet):
-    queryset = Laboratory.objects.all().order_by("name")
     serializer_class = LaboratorySerializer
 
+    def get_queryset(self):
+        request = self.request
+        user = request.user
+        search_query = request.GET.get("search", "")
+        status_query = request.GET.get("status", "")
+
+        queryset = Laboratory.objects.all().order_by("name")
+
+        if not user.is_authenticated:
+            queryset = queryset.filter(status="validated")
+        else:
+            if status_query:
+                queryset = queryset.filter(status=status_query)
+            else:
+                queryset = queryset.filter(Q(created_by=user) | Q(status="validated"))
+
+        if search_query:
+            search_fields = ["name", "location", "institution", "description", "status"]
+            search_q = Q()
+            for field in search_fields:
+                search_q |= Q(**{f"{field}__icontains": search_query})
+            queryset = queryset.filter(search_q)
+
+        if user.is_authenticated:
+            favorite_ids = Favorite.objects.filter(
+                user=user,
+                content_type=ContentType.objects.get_for_model(Laboratory),
+            ).values_list("object_id", flat=True)
+
+            queryset = queryset.annotate(
+                is_favorite=Case(
+                    When(id__in=favorite_ids, then=Value(True)),
+                    default=Value(False),
+                    output_field=BooleanField(),
+                )
+            ).order_by(
+                F("is_favorite").desc(),
+                F("status").desc(),
+                F("name").asc(nulls_last=True),
+            )
+        else:
+            queryset = queryset.order_by("name")
+
+        return queryset
+
     def get_permissions(self):
-        if self.action in ["create"]:
+        if self.action == "create":
             return [permissions.IsAuthenticated()]
         if self.action in ["update", "partial_update", "destroy"]:
             return [permissions.IsAuthenticated(), IsCreatorOrReadOnly()]
@@ -256,25 +313,180 @@ class RepositoryAPIView(APIView):
         return paginator.get_paginated_response(serializer.data)
 
 
+@api_view(["GET"])
+def repository_metadata_schema(request, repo_id):
+    """
+    Return the metadata schema for a given repository.
+    """
+    repository = get_object_or_404(Repository, id=repo_id)
+    try:
+        schema = get_repository_metadata_schema(repository)
+    except NotImplementedError as e:
+        return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    return Response(schema)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def repository_metadata_payload(request, repository_id: int, recording_session_id: int):
+    """
+    Return the metadata payload for a given repository and recording session.
+    """
+    try:
+        repository = Repository.objects.get(pk=repository_id)
+    except Repository.DoesNotExist:
+        return Response(
+            {"error": "Repository not found."}, status=status.HTTP_404_NOT_FOUND
+        )
+
+    try:
+        recording_session = RecordingSession.objects.get(pk=recording_session_id)
+    except RecordingSession.DoesNotExist:
+        return Response(
+            {"error": "Recording session not found."}, status=status.HTTP_404_NOT_FOUND
+        )
+
+    files = File.objects.filter(recording_session=recording_session).exclude(
+        status__in=["pending", "processing", "error"]
+    )
+
+    if not files.exists():
+        return Response(
+            {"error": "No valid files for this session."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    try:
+        payload = build_repository_metadata_payload(
+            repository, recording_session, files
+        )
+    except NotImplementedError as e:
+        return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    return Response(payload, status=status.HTTP_200_OK)
+
+
 # ----------------------------
 # Reference
 # ----------------------------
-@extend_schema_serializer(component_name="ReferenceNested")
-class ReferenceSerializerNested(ReferenceSerializer):
-    pass
-
-
 @extend_schema(
-    request=None,
-    responses={200: ReferenceSerializerNested(many=True)},
+    request=ReferenceSerializer,
+    responses={200: ReferenceSerializer(many=True), 201: ReferenceSerializer},
 )
 class ReferenceAPIView(GenericAPIView):
-    serializer_class = ReferenceSerializerNested
+    serializer_class = ReferenceSerializer
+
+    def get_permissions(self):
+        if self.request.method == "POST":
+            return [permissions.IsAuthenticated()]
+        elif self.request.method in ["PUT", "PATCH", "DELETE"]:
+            return [permissions.IsAuthenticated(), IsCreatorOrReadOnly()]
+        return [permissions.AllowAny()]
+
+    def get_queryset(self):
+        search_query = self.request.GET.get("search", "")
+        status_query = self.request.GET.get("status", "")
+
+        queryset = Reference.objects.all().order_by("name")
+
+        if not self.request.user.is_authenticated:
+            queryset = queryset.filter(status="validated")
+        else:
+            if status_query:
+                queryset = queryset.filter(status=status_query)
+            else:
+                queryset = queryset.filter(
+                    Q(created_by=self.request.user) | Q(status="validated")
+                )
+
+        if search_query:
+            search_fields = ["name", "description", "doi", "status"]
+            search_q = Q()
+            for field in search_fields:
+                search_q |= Q(**{f"{field}__icontains": search_query})
+            queryset = queryset.filter(search_q)
+
+        if self.request.user.is_authenticated:
+            favorite_ids = Favorite.objects.filter(
+                user=self.request.user,
+                content_type=ContentType.objects.get_for_model(Reference),
+            ).values_list("object_id", flat=True)
+
+            queryset = queryset.annotate(
+                is_favorite=Case(
+                    When(id__in=favorite_ids, then=Value(True)),
+                    default=Value(False),
+                    output_field=BooleanField(),
+                )
+            ).order_by(
+                F("is_favorite").desc(),
+                F("status").desc(),
+                F("name").asc(nulls_last=True),
+            )
+        else:
+            queryset = queryset.order_by("name")
+
+        return queryset
 
     def get(self, request, *args, **kwargs):
-        queryset = Reference.objects.all()
-        serializer = self.serializer_class(queryset, many=True)
+        paginator = FilePagination()
+        queryset = self.get_queryset()
+        paginated_queryset = paginator.paginate_queryset(queryset, request)
+        serializer = self.serializer_class(paginated_queryset, many=True)
+        return paginator.get_paginated_response(serializer.data)
+
+    def post(self, request, *args, **kwargs):
+        serializer = self.serializer_class(data=request.data)
+        if serializer.is_valid():
+            serializer.save(created_by=request.user)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+# ----------------------------
+# Reference (detail : get / put / delete)
+# ----------------------------
+@extend_schema(
+    request=ReferenceSerializer,
+    responses={200: ReferenceSerializer, 204: None},
+)
+class ReferenceDetailAPIView(GenericAPIView):
+    serializer_class = ReferenceSerializer
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly, IsCreatorOrReadOnly]
+
+    def get_object(self, pk):
+        reference = get_object_or_404(Reference, pk=pk)
+        if reference.status == "draft" and reference.created_by != self.request.user:
+            raise Http404("Reference not found")
+
+        return reference
+
+    def get(self, request, pk, *args, **kwargs):
+        instance = self.get_object(pk)
+        serializer = self.serializer_class(instance)
         return Response(serializer.data)
+
+    def put(self, request, pk, *args, **kwargs):
+        instance = self.get_object(pk)
+        serializer = self.serializer_class(instance, data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    def patch(self, request, pk, *args, **kwargs):
+        instance = self.get_object(pk)
+        serializer = self.serializer_class(instance, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    def delete(self, request, pk, *args, **kwargs):
+        instance = self.get_object(pk)
+        instance.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 # ----------------------------
@@ -340,6 +552,7 @@ class UserProfileDetailAPIView(GenericAPIView):
 # ----------------------------
 class HardwareAPIView(GenericAPIView):
     serializer_class = HardwareSerializer
+    queryset = Hardware.objects.all().order_by("name")
 
     def get_permissions(self):
         if self.request.method == "POST":
@@ -355,12 +568,22 @@ class HardwareAPIView(GenericAPIView):
             OpenApiParameter(
                 name="filter", description="filter by type", required=False, type=str
             ),
+            OpenApiParameter(
+                name="status", description="filter by status", required=False, type=str
+            ),
         ],
     )
     def get(self, request, *args, **kwargs):
         search_query = request.GET.get("search", "")
         filter_query = request.GET.get("filter", "")
-        hardware = Hardware.objects.all()
+        status_query = request.GET.get("status", "")
+        hardware = Hardware.objects.all().order_by("name")
+
+        if not request.user.is_authenticated:
+            hardware = hardware.filter(status="validated")
+        else:
+            if status_query:
+                hardware = hardware.filter(status=status_query)
 
         # Search
         if search_query:
@@ -370,6 +593,7 @@ class HardwareAPIView(GenericAPIView):
                 "made_by",
                 "references__name",
                 "description",
+                "status",
             ]
             search_q = Q()
             for field in search_fields:
@@ -383,6 +607,23 @@ class HardwareAPIView(GenericAPIView):
         if filter_query and filter_query in ALLOWED_FILTERS:
             hardware = hardware.filter(type=filter_query)
 
+        if request.user.is_authenticated:
+            favorite_ids = Favorite.objects.filter(
+                user=request.user,
+                content_type=ContentType.objects.get_for_model(Hardware),
+            ).values_list("object_id", flat=True)
+
+            # Annoter les favoris et trier dessus
+            hardware = hardware.annotate(
+                is_favorite=Case(
+                    When(id__in=favorite_ids, then=Value(True)),
+                    default=Value(False),
+                    output_field=BooleanField(),
+                )
+            ).order_by(F("is_favorite").desc(), F("name").asc(nulls_last=True))
+        else:
+            hardware = hardware.order_by(F("name").asc(nulls_last=True))
+
         hardware = hardware.order_by(F("name").asc(nulls_last=True))
         paginator = FilePagination()
         paginated_hardware = paginator.paginate_queryset(hardware, request)
@@ -392,7 +633,7 @@ class HardwareAPIView(GenericAPIView):
     def post(self, request, *args, **kwargs):
         serializer = self.serializer_class(data=request.data)
         if serializer.is_valid():
-            hardware = serializer.save()
+            hardware = serializer.save(created_by=request.user)
             return Response(
                 self.serializer_class(hardware).data, status=status.HTTP_201_CREATED
             )
@@ -407,7 +648,7 @@ class HardwareDetailAPIView(GenericAPIView):
 
     def get_permissions(self):
         if self.request.method in ["PUT", "PATCH", "DELETE"]:
-            return [IsAuthenticated()]
+            return [IsAuthenticated(), IsCreatorOrReadOnly()]
         return [AllowAny()]
 
     def get(self, request, pk, *args, **kwargs):
@@ -478,6 +719,7 @@ class ProtocolViewSet(viewsets.ModelViewSet):
         "animals_sex",
         "animals_age",
         "animals_housing",
+        "context_number_of_animals",
         "context_duration",
         "context_cage",
         "context_bedding",
@@ -497,8 +739,9 @@ class ProtocolViewSet(viewsets.ModelViewSet):
         user = self.request.user
         ordering = self.request.query_params.get("ordering")
 
+        qs = Protocol.objects.all()
+
         if user.is_authenticated:
-            qs = Protocol.objects.filter(Q(created_by=user) | Q(status="validated"))
             favorite_subquery = Favorite.objects.filter(
                 user=user, content_type=get_protocol_ct(), object_id=OuterRef("pk")
             )
@@ -518,7 +761,6 @@ class ProtocolViewSet(viewsets.ModelViewSet):
             else:
                 qs = qs.order_by("-is_favorite_int", "name")
         else:
-            qs = Protocol.objects.filter(status="validated")
             if ordering:
                 ordering_fields = []
                 for field in ordering.split(","):
@@ -535,7 +777,48 @@ class ProtocolViewSet(viewsets.ModelViewSet):
         return qs
 
     def perform_create(self, serializer):
-        serializer.save(created_by=self.request.user)
+        SEX_MAP = {"male(s)": "M", "female(s)": "F", "male(s) & female(s)": "M+F"}
+        AGE_MAP = {"pup": "P", "juvenile": "J", "adult": "A", "unspecified": "U"}
+        HOUSING_MAP = {"grouped": "G", "isolated": "I", "grouped & isolated": "G+I"}
+        DURATION_MAP = {
+            "short term (<1h)": "S",
+            "mid term (<1day)": "M",
+            "long term (>=1day)": "L",
+        }
+        CAGE_MAP = {
+            "unfamiliar test cage": "UC",
+            "familiar test cage": "FC",
+            "home cage": "HC",
+        }
+        BEDDING_MAP = {
+            "bedding": "B",
+            "no bedding": "NB",
+        }
+        LIGHT_MAP = {
+            "day": "D",
+            "night": "N",
+            "both": "B",
+        }
+        validated_data = serializer.validated_data
+        name = (
+            f"{validated_data['context_number_of_animals']}{SEX_MAP[validated_data['animals_sex']]}"
+            f"{AGE_MAP[validated_data['animals_age']]}{HOUSING_MAP[validated_data['animals_housing']]}_"
+            f"{DURATION_MAP[validated_data['context_duration']]}_"
+            f"{CAGE_MAP[validated_data['context_cage']]}{BEDDING_MAP[validated_data['context_bedding']]}{LIGHT_MAP[validated_data['context_light_cycle']]}"
+        )
+
+        # Check if a protocol with the same name already exists
+        protocol, created = Protocol.objects.get_or_create(
+            name=name,
+            defaults={
+                **validated_data,
+                "status": "validated",
+                "created_by": self.request.user,
+            },
+        )
+
+        # If the protocol already existed, do not create but return the existing object
+        serializer.instance = protocol
 
 
 # ----------------------------
@@ -608,7 +891,7 @@ class AnimalProfileFilter(django_filters.FilterSet):
 
     class Meta:
         model = AnimalProfile
-        fields = ["sex", "genotype", "status", "strain", "treatment", "species"]
+        fields = ["sex", "age", "genotype", "status", "strain", "treatment", "species"]
 
 
 class AnimalProfileViewSet(viewsets.ModelViewSet):
@@ -656,12 +939,19 @@ class StudyViewSet(viewsets.ModelViewSet):
     queryset = Study.objects.all().order_by("name")
     serializer_class = StudySerializer
 
+    def get_queryset(self):
+        user = self.request.user
+        return Study.objects.filter(created_by=user).order_by("name")
+
     def get_permissions(self):
         if self.action == "create":
             return [IsAuthenticated()]
         if self.action in ["update", "partial_update", "destroy"]:
             return [IsAuthenticated(), IsCreatorOrReadOnly()]
         return [permissions.AllowAny()]
+
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
 
 
 # ----------------------------
@@ -678,7 +968,7 @@ class RecordingSessionViewSet(viewsets.ModelViewSet):
         filters.OrderingFilter,
     ]
     search_fields = ["name", "description"]
-    filterset_fields = ["is_multiple"]
+    filterset_fields = ["is_multiple", "laboratory", "status", "protocol"]
     ordering_fields = ["name", "date", "status", "protocol__name", "laboratory__name"]
     ordering = ["name"]
 
@@ -695,38 +985,35 @@ class RecordingSessionViewSet(viewsets.ModelViewSet):
 class FileAPIView(GenericAPIView):
     serializer_class = FileSerializer
 
+    # -----------------------------
+    # Permissions
+    # -----------------------------
     def get_permissions(self):
         if self.request.method == "POST":
             return [IsAuthenticated()]
         return [AllowAny()]
 
-    @extend_schema(
-        operation_id="api_file_list",
-        parameters=[
-            OpenApiParameter(
-                name="search", description="text search", required=False, type=str
-            ),
-            OpenApiParameter(
-                name="filter", description="filter", required=False, type=str
-            ),
-        ],
-    )
-    def get(self, request, *args, **kwargs):
-        search_query = request.GET.get("search", "")
-        filter_query = request.GET.get("filter", "")
-        recording_session_id = request.GET.get("recording_session")
+    # -----------------------------
+    # Queryset dynamique
+    # -----------------------------
+    def get_queryset(self):
         files = File.objects.all()
+        request = self.request
+
+        # --- Filtrage par RecordingSession ---
+        recording_session_id = request.GET.get("recording_session")
         if recording_session_id:
             try:
                 recording_session_id_int = int(recording_session_id)
-                files = files.filter(recording_session__id=recording_session_id_int)
+                files = files.filter(recording_session_id=recording_session_id_int)
             except ValueError:
                 pass
 
+        # --- Recherche textuelle globale ---
+        search_query = request.GET.get("search", "").strip()
         if search_query:
             file_fields = ["number", "link", "notes", "doi"]
 
-            # Fields for RecordingSession model
             recording_session_fields = [
                 "name",
                 "equipment_acquisition_software__software__name",
@@ -739,15 +1026,8 @@ class FileAPIView(GenericAPIView):
                 "duration",
             ]
 
-            # Fields for Subject model
-            subject_fields = [
-                "name",
-                "identifier",
-                "origin",
-                "cohort",
-            ]
+            subject_fields = ["name", "identifier", "origin", "cohort"]
 
-            # Fields for User model (related to Subject)
             user_fields = [
                 "name_user",
                 "first_name_user",
@@ -758,7 +1038,6 @@ class FileAPIView(GenericAPIView):
                 "country_user",
             ]
 
-            # Fields for Strain model (related to Subject)
             strain_fields = [
                 "animal_profile__strain__name",
                 "animal_profile__strain__background",
@@ -766,7 +1045,6 @@ class FileAPIView(GenericAPIView):
                 "animal_profile__strain__species__name",
             ]
 
-            # Fields for Protocol model (related to RecordingSession)
             protocol_fields = [
                 "name",
                 "description",
@@ -774,15 +1052,10 @@ class FileAPIView(GenericAPIView):
                 "animals_sex",
                 "animals_age",
                 "animals_housing",
-                "animals_species",
-                "context_number_of_animals",
-                "context_duration",
                 "context_cage",
-                "context_bedding",
+                "context_duration",
                 "context_light_cycle",
-                "context_temperature_value",
-                "context_temperature_unit",
-                "context_brightness",
+                "status",
             ]
 
             animal_profile_fields = [
@@ -804,99 +1077,230 @@ class FileAPIView(GenericAPIView):
 
             study_fields = ["name", "description"]
 
-            # Build dynamic Q objects for File fields
-            file_query = Q()
-            for field in file_fields:
-                lookup = f"{field}__icontains"
-                file_query |= Q(**{lookup: search_query})
+            def build_query(prefix, fields):
+                q = Q()
+                for f in fields:
+                    lookup = f"{prefix}{f}__icontains" if prefix else f"{f}__icontains"
+                    q |= Q(**{lookup: search_query})
+                return q
 
-            # Build dynamic Q objects for RecordingSession fields
-            recording_session_query = Q()
-            for field in recording_session_fields:
-                lookup = f"recording_session__{field}__icontains"
-                recording_session_query |= Q(**{lookup: search_query})
-
-            # Build dynamic Q objects for Subject fields
-            subject_query = Q()
-            for field in subject_fields:
-                lookup = f"subjects__{field}__icontains"
-                subject_query |= Q(**{lookup: search_query})
-
-            # Build dynamic Q objects for User fields (via Subject)
-            user_query = Q()
-            for field in user_fields:
-                lookup = f"subjects__user__{field}__icontains"
-                user_query |= Q(**{lookup: search_query})
-
-            # Build dynamic Q objects for Strain fields (via Subject)
-            strain_query = Q()
-            for field in strain_fields:
-                lookup = f"subjects__{field}__icontains"
-                strain_query |= Q(**{lookup: search_query})
-
-            # Build dynamic Q objects for Protocol fields (via RecordingSession)
-            protocol_query = Q()
-            for field in protocol_fields:
-                lookup = f"recording_session__protocol__{field}__icontains"
-                protocol_query |= Q(**{lookup: search_query})
-
-            # Build dynamic Q objects for AnimalProfile fields (via Subject)
-            animal_profile_query = Q()
-            for field in animal_profile_fields:
-                lookup = f"subjects__animal_profile__{field}__icontains"
-                animal_profile_query |= Q(**{lookup: search_query})
-
-            # Build dynamic Q objects for Laboratory fields (via RecordingSession)
-            laboratory_query = Q()
-            for field in laboratory_fields:
-                lookup = f"recording_session__laboratory__{field}__icontains"
-                laboratory_query |= Q(**{lookup: search_query})
-
-            # Build dynamic Q objects for Study fields (via RecordingSession)
-            study_query = Q()
-            for field in study_fields:
-                lookup = f"recording_session__studies__{field}__icontains"
-                study_query |= Q(**{lookup: search_query})
-
-            # Combine all queries
-            files = files.filter(
-                file_query
-                | recording_session_query
-                | subject_query
-                | user_query
-                | strain_query
-                | protocol_query
-                | animal_profile_query
-                | laboratory_query
-                | study_query
+            combined_query = (
+                build_query("", file_fields)
+                | build_query("recording_session__", recording_session_fields)
+                | build_query("subjects__", subject_fields)
+                | build_query("subjects__user__", user_fields)
+                | build_query("subjects__", strain_fields)
+                | build_query("recording_session__protocol__", protocol_fields)
+                | build_query("subjects__animal_profile__", animal_profile_fields)
+                | build_query("recording_session__laboratory__", laboratory_fields)
+                | build_query("recording_session__studies__", study_fields)
             )
 
-        ALLOWED_FILTERS = ["is_valid_link"]
+            files = files.filter(combined_query).distinct()
 
-        # Apply filters
+        # --- Filtres ---
+        ALLOWED_FILTERS = ["is_valid_link"]
+        filter_query = request.GET.get("filter", "")
         if filter_query:
             for filter_name in filter_query.split(","):
-                if filter_name not in ALLOWED_FILTERS:
-                    continue  # Ignore invalid filters
-
-                if filter_name == "is_valid_link":
+                if filter_name in ALLOWED_FILTERS and filter_name == "is_valid_link":
                     files = files.filter(is_valid_link=True)
 
-        # Add explicit ordering to avoid UnorderedObjectListWarning
         files = files.order_by(F("name").asc(nulls_last=True))
+        return files
+
+    # -----------------------------
+    # GET with pagination
+    # -----------------------------
+    @extend_schema(
+        operation_id="api_file_list",
+        parameters=[
+            OpenApiParameter(
+                name="search",
+                description="Recherche textuelle globale",
+                required=False,
+                type=str,
+            ),
+            OpenApiParameter(
+                name="filter",
+                description="Filtre (ex: is_valid_link)",
+                required=False,
+                type=str,
+            ),
+            OpenApiParameter(
+                name="recording_session",
+                description="Filtrer par ID de session d’enregistrement",
+                required=False,
+                type=int,
+            ),
+        ],
+    )
+    def get(self, request, *args, **kwargs):
+        queryset = self.get_queryset()
         paginator = FilePagination()
-        paginated_files = paginator.paginate_queryset(files, request)
+        paginated_files = paginator.paginate_queryset(queryset, request)
         serializer = self.serializer_class(paginated_files, many=True)
         return paginator.get_paginated_response(serializer.data)
 
+    # -----------------------------
+    # POST Celery
+    # -----------------------------
     def post(self, request, *args, **kwargs):
         serializer = self.serializer_class(data=request.data)
-        if serializer.is_valid():
-            file = serializer.save()
-            return Response(
-                self.serializer_class(file).data, status=status.HTTP_201_CREATED
-            )
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        serializer.is_valid(raise_exception=True)
+
+        file = serializer.save(created_by=request.user)
+
+        if not file.repository:
+            try:
+                default_repo = Repository.objects.get(id=1)
+                file.repository = default_repo
+                file.save(update_fields=["repository"])
+            except Repository.DoesNotExist:
+                return Response(
+                    {"error": "Default repository (id=1) not found."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        # Lancer le traitement si aucun DOI
+        if not file.doi:
+            file.status = "pending"
+            file.save(update_fields=["status"])
+            try:
+                task = process_file.delay(file.id, file.repository.id)
+                file.celery_task_id = task.id
+                file.save(update_fields=["celery_task_id"])
+            except Exception as e:
+                file.status = "error"
+                file.save(update_fields=["status"])
+                return Response(
+                    {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                )
+
+        elif file.doi and file.link:
+            file.status = "done"
+            file.save(update_fields=["status"])
+
+        return Response(
+            self.serializer_class(file).data, status=status.HTTP_201_CREATED
+        )
+
+
+# ----------------------------
+# File status endpoint
+# ----------------------------
+@api_view(["GET"])
+def file_task_status(request, file_id):
+    file = get_object_or_404(File, id=file_id)
+
+    if not file.celery_task_id:
+        return Response({"error": "No task associated"}, status=404)
+
+    result = AsyncResult(file.celery_task_id, app=app)
+
+    response = {
+        "id": file.id,
+        "task_state": result.state,  # PENDING, STARTED, SUCCESS, FAILURE
+        "status": file.status,
+    }
+
+    if result.failed():
+        response["task_error"] = str(result.result)
+        response["task_traceback"] = result.traceback
+
+    return Response(response)
+
+
+# ----------------------------
+# File Upload endpoint
+# ----------------------------
+class FileUploadAsyncView(APIView):
+    """
+    Handles asynchronous file uploads.
+
+    Requires authentication.
+    """
+
+    def get_permissions(self):
+        if self.request.method == "POST":
+            return [IsAuthenticated()]
+        return [AllowAny()]
+
+    def post(self, request):
+        uploaded_file = request.FILES.get("file")
+        if not uploaded_file:
+            return Response({"error": "No file provided"}, status=400)
+
+        temp_dir = os.path.join(settings.MEDIA_ROOT, "temp")
+        os.makedirs(temp_dir, exist_ok=True)
+
+        temp_path = os.path.join(temp_dir, uploaded_file.name)
+        with open(temp_path, "wb+") as dest:
+            for chunk in uploaded_file.chunks():
+                dest.write(chunk)
+
+        return Response({"temp_path": f"/media/temp/{uploaded_file.name}"})
+
+
+# ----------------------------
+# File Publish session endpoint
+# ----------------------------
+class PublishSessionView(APIView):
+    """
+    Triggers a background task to publish a recording session to a repository.
+
+    Requires authentication.
+    """
+
+    def get_permissions(self):
+        if self.request.method == "POST":
+            return [IsAuthenticated()]
+        return [AllowAny()]
+
+    def post(self, request):
+        recording_session_id = request.data.get("recording_session_id")
+        if not recording_session_id:
+            return Response({"error": "recording_session_id required"}, status=400)
+
+        repository_id = request.data.get("repository_id")
+        if not repository_id:
+            return Response({"error": "repository_id required"}, status=400)
+
+        payload = request.data.get("payload")
+
+        task = publish_session_deposition.delay(
+            recording_session_id, repository_id, payload
+        )
+
+        return Response(
+            {
+                "message": "Publishing started. You’ll be notified when complete.",
+                "task_id": task.id,
+            },
+            status=202,
+        )
+
+
+@api_view(["GET"])
+def get_task_status(request):
+    task_id = request.query_params.get("task_id")
+    if not task_id:
+        return Response({"error": "Missing task_id"}, status=400)
+
+    result = AsyncResult(task_id)
+
+    response_data = {
+        "task_id": task_id,
+        "state": result.state,  # PENDING, STARTED, SUCCESS, FAILURE
+        "success": result.successful(),
+        "error": str(result.result) if result.failed() else None,
+        "progress": 0,
+    }
+
+    if result.info and isinstance(result.info, dict):
+        response_data["progress"] = result.info.get("progress", 0)
+
+    return Response(response_data)
 
 
 class FileDetailAPIView(GenericAPIView):
@@ -965,8 +1369,30 @@ class FileDetailAPIView(GenericAPIView):
             return Response(
                 {"detail": "File not found"}, status=status.HTTP_404_NOT_FOUND
             )
-        file.delete()
-        return Response(status=status.HTTP_204_NO_CONTENT)
+
+        # 🔹 Start async deletion
+        if not file.repository:
+            file.delete()
+            return Response(
+                {"detail": "File deleted locally (no repository linked)."},
+                status=status.HTTP_204_NO_CONTENT,
+            )
+
+        if not file.external_id:
+            file.delete()
+            return Response(
+                {"detail": "File deleted locally (no external ID)."},
+                status=status.HTTP_204_NO_CONTENT,
+            )
+
+        task = delete_file_from_repository.delay(file.id, file.repository.id)
+        file.celery_task_id = task.id
+        file.save(update_fields=["celery_task_id", "status"])
+
+        return Response(
+            {"detail": "File deletion scheduled.", "celery_task_id": task.id},
+            status=status.HTTP_202_ACCEPTED,
+        )
 
 
 # ----------------------------
@@ -988,6 +1414,14 @@ class SoftwareViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         qs = Software.objects.all()
+
+        if not self.request.user.is_authenticated:
+            qs = qs.filter(status="validated")
+        else:
+            status_query = self.request.GET.get("status")
+            if status_query:
+                qs = qs.filter(status=status_query)
+
         search_query = self.request.GET.get("search", "")
         if search_query:
             software_fields = [
