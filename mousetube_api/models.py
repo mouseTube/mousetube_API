@@ -196,7 +196,7 @@ class Contact(models.Model):
     )
 
     def __str__(self):
-        return self.name
+        return self.last_name
 
 
 class Species(models.Model):
