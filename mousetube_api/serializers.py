@@ -22,6 +22,7 @@ from mousetube_api.utils.validators import (
 
 from .models import (
     AnimalProfile,
+    Contact,
     Dataset,
     Favorite,
     File,
@@ -129,6 +130,12 @@ class UserProfileSerializer(serializers.ModelSerializer):
         fields = "__all__"
 
 
+class ContactSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Contact
+        fields = "__all__"
+
+
 class HardwareSerializer(serializers.ModelSerializer):
     references = ReferenceSerializer(many=True, read_only=True)
     users = LegacyUserSerializer(many=True, required=False)
@@ -183,10 +190,18 @@ class HardwareSerializer(serializers.ModelSerializer):
 class SoftwareSerializer(serializers.ModelSerializer):
     references = ReferenceSerializer(many=True, read_only=True)
     users = LegacyUserSerializer(many=True, required=False)
+    contacts = ContactSerializer(many=True, read_only=True)
 
     references_ids = serializers.PrimaryKeyRelatedField(
         queryset=Reference.objects.all(),
         source="references",
+        many=True,
+        write_only=True,
+        required=False,
+    )
+    contacts_ids = serializers.PrimaryKeyRelatedField(
+        queryset=Contact.objects.all(),
+        source="contacts",
         many=True,
         write_only=True,
         required=False,
@@ -228,6 +243,7 @@ class SoftwareSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         references_data = validated_data.pop("references", [])
+        contacts_data = validated_data.pop("contacts", [])
         users_data = validated_data.pop("users", [])
 
         software = Software.objects.create(**validated_data)
@@ -235,6 +251,10 @@ class SoftwareSerializer(serializers.ModelSerializer):
         # ✅ assign existing references
         if references_data:
             software.references.set(references_data)
+
+        # ✅ assign existing contacts
+        if contacts_data:
+            software.contacts.set(contacts_data)
 
         # ✅ assign existing users
         if users_data:
@@ -245,6 +265,7 @@ class SoftwareSerializer(serializers.ModelSerializer):
 
     def update(self, instance, validated_data):
         references_data = validated_data.pop("references", None)
+        contacts_data = validated_data.pop("contacts", None)
         users_data = validated_data.pop("users", None)
 
         for attr, value in validated_data.items():
@@ -255,11 +276,16 @@ class SoftwareSerializer(serializers.ModelSerializer):
         if references_data is not None:
             instance.references.set(references_data)
 
+        # ✅ update contacts if provided
+        if contacts_data is not None:
+            instance.contacts.set(contacts_data)
+
         # ✅ update users if provided
         if users_data is not None:
             user_ids = [user["id"] for user in users_data if "id" in user]
             instance.users.set(user_ids)
 
+        instance.save()
         return instance
 
 
@@ -849,6 +875,7 @@ MODEL_MAP = {
     "strain": Strain,
     "species": Species,
     "reference": Reference,
+    "contact": Contact,
 }
 
 

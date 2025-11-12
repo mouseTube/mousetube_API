@@ -66,6 +66,7 @@ from mousetube_api.utils.repository import (
 from .celery import app
 from .models import (
     AnimalProfile,
+    Contact,
     Dataset,
     Favorite,
     File,
@@ -87,6 +88,7 @@ from .models import (
 )
 from .serializers import (
     AnimalProfileSerializer,
+    ContactSerializer,
     DatasetSerializer,
     FavoriteSerializer,
     FileSerializer,
@@ -636,7 +638,9 @@ class HardwareAPIView(GenericAPIView):
     def post(self, request, *args, **kwargs):
         serializer = self.serializer_class(data=request.data)
         if serializer.is_valid():
-            hardware = serializer.save(created_by=request.user)
+            hardware = serializer.save(
+                created_by=request.user, status="waiting validation"
+            )
             return Response(
                 self.serializer_class(hardware).data, status=status.HTTP_201_CREATED
             )
@@ -1397,6 +1401,90 @@ class FileDetailAPIView(GenericAPIView):
 
 
 # ----------------------------
+# Contact
+# ----------------------------
+class ContactViewSet(viewsets.ModelViewSet):
+    queryset = Contact.objects.all().order_by("last_name")
+    serializer_class = ContactSerializer
+
+    def get_permissions(self):
+        if self.action == "create":
+            return [IsAuthenticated()]
+        if self.action in ["update", "partial_update", "destroy"]:
+            return [IsAuthenticated(), IsCreatorOrReadOnly()]
+        return [permissions.AllowAny()]
+
+    def get_queryset(self):
+        user = self.request.user
+        search_query = self.request.GET.get("search", "").strip()
+        status_query = self.request.GET.get("status", "")
+
+        qs = Contact.objects.all().order_by("last_name")
+
+        if not user.is_authenticated:
+            qs = qs.filter(status="validated")
+        else:
+            if status_query:
+                qs = qs.filter(status=status_query)
+            else:
+                qs = qs.filter(Q(created_by=user) | Q(status="validated"))
+
+        if search_query:
+            search_fields = [
+                "last_name",
+                "first_name",
+                "email",
+                "institution",
+                "status",
+            ]
+            q = Q()
+            for f in search_fields:
+                q |= Q(**{f"{f}__icontains": search_query})
+            qs = qs.filter(q).distinct()
+
+        if user.is_authenticated:
+            favorite_ids = Favorite.objects.filter(
+                user=user,
+                content_type=ContentType.objects.get_for_model(Contact),
+            ).values_list("object_id", flat=True)
+
+            qs = qs.annotate(
+                is_favorite=Case(
+                    When(id__in=favorite_ids, then=Value(True)),
+                    default=Value(False),
+                    output_field=BooleanField(),
+                )
+            ).order_by(
+                F("is_favorite").desc(),
+                F("status").desc(),
+                F("last_name").asc(nulls_last=True),
+            )
+        else:
+            qs = qs.order_by(F("last_name").asc(nulls_last=True))
+
+        return qs
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.get_queryset()
+        paginator = FilePagination()
+        paginated = paginator.paginate_queryset(queryset, request)
+        serializer = self.get_serializer(paginated, many=True)
+        return paginator.get_paginated_response(serializer.data)
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        contact = serializer.save(created_by=request.user, status="waiting_validation")
+        return Response(
+            self.get_serializer(contact).data, status=status.HTTP_201_CREATED
+        )
+
+    def perform_create(self, serializer):
+        # kept for compatibility if other code calls perform_create
+        serializer.save(created_by=self.request.user, status="waiting_validation")
+
+
+# ----------------------------
 # Software
 # ----------------------------
 @extend_schema(
@@ -1442,6 +1530,11 @@ class SoftwareViewSet(viewsets.ModelViewSet):
                 "address_user",
                 "country_user",
             ]
+            contact_fields = [
+                "last_name",
+                "email",
+                "institution",
+            ]
 
             q = Q()
             for f in software_fields:
@@ -1450,6 +1543,8 @@ class SoftwareViewSet(viewsets.ModelViewSet):
                 q |= Q(**{f"references__{f}__icontains": search_query})
             for f in user_fields:
                 q |= Q(**{f"users__{f}__icontains": search_query})
+            for f in contact_fields:
+                q |= Q(**{f"contacts__{f}__icontains": search_query})
 
             qs = qs.filter(q).distinct()
 
@@ -1509,7 +1604,7 @@ class SoftwareViewSet(viewsets.ModelViewSet):
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        software = serializer.save(created_by=request.user)
+        software = serializer.save(created_by=request.user, status="waiting validation")
         return Response(
             self.get_serializer(software).data, status=status.HTTP_201_CREATED
         )

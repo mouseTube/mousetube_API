@@ -11,6 +11,7 @@ from django.contrib import admin
 
 from .models import (
     AnimalProfile,
+    Contact,
     Dataset,
     File,
     Hardware,
@@ -41,6 +42,19 @@ class LegacyUserAdmin(admin.ModelAdmin):
     )
     search_fields = ("first_name_user", "name_user", "email_user")
     list_filter = ("country_user",)
+
+
+class ContactAdmin(admin.ModelAdmin):
+    list_display = (
+        "first_name",
+        "last_name",
+        "email",
+        "institution",
+        "country",
+        "status",
+    )
+    search_fields = ("first_name", "last_name", "email", "institution")
+    list_filter = ("country", "status")
 
 
 class StrainAdmin(admin.ModelAdmin):
@@ -182,6 +196,7 @@ admin.site.register(AnimalProfile)
 admin.site.register(SoftwareVersion)
 admin.site.register(Laboratory)
 admin.site.register(Study)
+admin.site.register(Contact, ContactAdmin)
 admin.site.site_header = "Mousetube Admin"
 admin.site.site_title = "Mousetube Admin"
 admin.site.index_title = "Mousetube Database"

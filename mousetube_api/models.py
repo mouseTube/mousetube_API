@@ -152,6 +152,57 @@ class LegacyUser(models.Model):
         verbose_name_plural = "LegacyUsers"
 
 
+class Contact(models.Model):
+    """
+    Represents a contact person or entity.
+
+    Attributes:
+        last_name (str): The last name of the contact.
+        first_name (str): The first name of the contact.
+        email (str): The email address of the contact.
+        unit (str, optional): The unit the contact belongs to.
+        institution (str, optional): The institution the contact belongs to.
+        address (str, optional): The physical address of the contact.
+        country (str, optional): The country of the contact.
+        status (str): The status of the contact (draft, waiting validation, validated).
+        created_at (DateTimeField): Timestamp when the contact entry was created.
+        modified_at (DateTimeField): Last modification timestamp.
+        created_by (ForeignKey): User who created the contact entry.
+    """
+
+    last_name = models.CharField(max_length=255)
+    first_name = models.CharField(max_length=255)
+    email = models.EmailField()
+    unit = models.CharField(max_length=255, blank=True, null=True)
+    institution = models.CharField(max_length=255, blank=True, null=True)
+    address = models.CharField(max_length=255, blank=True, null=True)
+    country = CountryField(blank=True, null=True)
+    status = models.CharField(
+        max_length=20,
+        choices=[
+            ("draft", "Draft"),
+            ("waiting_validation", "Waiting Validation"),
+            ("validated", "Validated"),
+        ],
+        default="draft",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    modified_at = models.DateTimeField(auto_now=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        related_name="contact_created_by",
+        on_delete=models.SET_NULL,
+    )
+
+    def __str__(self):
+        return self.last_name
+
+    class Meta:
+        verbose_name = "Contact"
+        verbose_name_plural = "Contacts"
+
+
 class Species(models.Model):
     """
     Represents a biological species relevant to the data.
@@ -344,7 +395,6 @@ class Protocol(models.Model):
 
     Attributes:
         name (str): The name of the protocol.
-        description (str): A description of the protocol.
         user (LegacyUser): The user associated with the protocol.
         animals_sex (str, optional): The sex of the animals used in the protocol.
         animals_age (str, optional): The age of the animals used in the protocol.
@@ -580,6 +630,7 @@ class Software(models.Model):
     users = models.ManyToManyField(
         LegacyUser, related_name="software_to_user", blank=True
     )
+    contacts = models.ManyToManyField(Contact, related_name="software", blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     modified_at = models.DateTimeField(auto_now=True)
     created_by = models.ForeignKey(
@@ -1185,6 +1236,7 @@ class Favorite(models.Model):
         "strain",
         "laboratory",
         "reference",
+        "contact",
     ]
 
     user = models.ForeignKey(
