@@ -76,6 +76,7 @@ services:
     volumes:
       # - ./nginx/ssl/nginx.crt:/etc/letsencrypt/live/${DOMAIN}/fullchain.pem
       # - ./nginx/ssl/nginx.key:/etc/letsencrypt/live/${DOMAIN}/privkey.pem
+      - ./nginx/.htpasswd:/etc/nginx/.htpasswd:ro
       - ./staticfiles:/app/staticfiles
       - ./media:/app/media
       - ./logs/nginx:/var/log/nginx
