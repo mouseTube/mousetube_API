@@ -243,6 +243,7 @@ class SoftwareSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         references_data = validated_data.pop("references", [])
+        contacts_data = validated_data.pop("contacts", [])
         users_data = validated_data.pop("users", [])
 
         software = Software.objects.create(**validated_data)
@@ -250,6 +251,10 @@ class SoftwareSerializer(serializers.ModelSerializer):
         # ✅ assign existing references
         if references_data:
             software.references.set(references_data)
+
+        # ✅ assign existing contacts
+        if contacts_data:
+            software.contacts.set(contacts_data)
 
         # ✅ assign existing users
         if users_data:
@@ -260,6 +265,7 @@ class SoftwareSerializer(serializers.ModelSerializer):
 
     def update(self, instance, validated_data):
         references_data = validated_data.pop("references", None)
+        contacts_data = validated_data.pop("contacts", None)
         users_data = validated_data.pop("users", None)
 
         for attr, value in validated_data.items():
@@ -270,11 +276,16 @@ class SoftwareSerializer(serializers.ModelSerializer):
         if references_data is not None:
             instance.references.set(references_data)
 
+        # ✅ update contacts if provided
+        if contacts_data is not None:
+            instance.contacts.set(contacts_data)
+
         # ✅ update users if provided
         if users_data is not None:
             user_ids = [user["id"] for user in users_data if "id" in user]
             instance.users.set(user_ids)
 
+        instance.save()
         return instance
 
 
@@ -864,6 +875,7 @@ MODEL_MAP = {
     "strain": Strain,
     "species": Species,
     "reference": Reference,
+    "contact": Contact,
 }
 
 

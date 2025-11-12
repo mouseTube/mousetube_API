@@ -176,7 +176,7 @@ class Contact(models.Model):
     unit = models.CharField(max_length=255, blank=True, null=True)
     institution = models.CharField(max_length=255, blank=True, null=True)
     address = models.CharField(max_length=255, blank=True, null=True)
-    country = models.CharField(max_length=255, blank=True, null=True)
+    country = CountryField(blank=True, null=True)
     status = models.CharField(
         max_length=20,
         choices=[
@@ -1233,6 +1233,7 @@ class Favorite(models.Model):
         "strain",
         "laboratory",
         "reference",
+        "contact",
     ]
 
     user = models.ForeignKey(
