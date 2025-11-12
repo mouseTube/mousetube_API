@@ -198,6 +198,10 @@ class Contact(models.Model):
     def __str__(self):
         return self.last_name
 
+    class Meta:
+        verbose_name = "Contact"
+        verbose_name_plural = "Contacts"
+
 
 class Species(models.Model):
     """
