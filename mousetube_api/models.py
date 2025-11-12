@@ -395,7 +395,6 @@ class Protocol(models.Model):
 
     Attributes:
         name (str): The name of the protocol.
-        description (str): A description of the protocol.
         user (LegacyUser): The user associated with the protocol.
         animals_sex (str, optional): The sex of the animals used in the protocol.
         animals_age (str, optional): The age of the animals used in the protocol.
