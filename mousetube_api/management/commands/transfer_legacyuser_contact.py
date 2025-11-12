@@ -1,5 +1,6 @@
 from django.core.management.base import BaseCommand
 from django.db import transaction
+from django_countries.data import COUNTRIES
 
 from mousetube_api.models import Contact, LegacyUser, Software
 
@@ -25,7 +26,9 @@ class Command(BaseCommand):
                     "unit": legacy_user.unit_user or "",
                     "institution": legacy_user.institution_user or "",
                     "address": legacy_user.address_user or "",
-                    "country": legacy_user.country_user or "",
+                    "country": (legacy_user.country_user or "").upper()
+                    if (legacy_user.country_user or "").upper() in COUNTRIES
+                    else None,
                     "status": "validated",
                 },
             )
