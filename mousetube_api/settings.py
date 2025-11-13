@@ -288,7 +288,7 @@ CSRF_COOKIE_SAMESITE = "None"
 
 # Djoser settings
 DJOSER = {
-    "SEND_ACTIVATION_EMAIL": True,
+    "SEND_ACTIVATION_EMAIL": env.bool("DJOSER_SEND_ACTIVATION_EMAIL", default=False),
     "ACTIVATION_URL": "activate/{uid}/{token}",
     "SERIALIZERS": {
         "user_create": "mousetube_api.serializers.CustomUserCreateSerializer",
@@ -315,8 +315,19 @@ SIMPLE_JWT = {
     "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
 }
 
+# --------------------------------
+# Emails
+# --------------------------------
+# EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+# EMAIL_HOST = env("EMAIL_HOST")
+# EMAIL_PORT = env.int("EMAIL_PORT")
+# EMAIL_USE_TLS = env.bool("EMAIL_USE_TLS", default=True)
+# EMAIL_HOST_USER = env("EMAIL_USER")
+# EMAIL_HOST_PASSWORD = env("EMAIL_PASSWORD")
+
 EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
-DEFAULT_FROM_EMAIL = "no-reply@mousetube.com"
+DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="no-reply@mousetube.com")
+DEFAULT_ADMIN_EMAIL = env("DEFAULT_ADMIN_EMAIL", default="mousetube@igbmc.fr")
 
 # use broker_url "redis://127.0.0.1:6379/0" on local dev
 CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL", "redis://redis:6379/0")

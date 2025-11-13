@@ -587,6 +587,10 @@ class HardwareAPIView(GenericAPIView):
         if not request.user.is_authenticated:
             hardware = hardware.filter(status="validated")
         else:
+            hardware = hardware.filter(
+                Q(status="validated") | Q(created_by=request.user)
+            )
+
             if status_query:
                 hardware = hardware.filter(status=status_query)
 
@@ -1507,6 +1511,8 @@ class SoftwareViewSet(viewsets.ModelViewSet):
         if not self.request.user.is_authenticated:
             qs = qs.filter(status="validated")
         else:
+            qs = qs.filter(Q(status="validated") | Q(created_by=self.request.user))
+
             status_query = self.request.GET.get("status")
             if status_query:
                 qs = qs.filter(status=status_query)
@@ -1654,6 +1660,14 @@ class SoftwareVersionViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         queryset = SoftwareVersion.objects.all().order_by("software__name", "version")
+
+        if not self.request.user.is_authenticated:
+            queryset = queryset.filter(software__status="validated")
+        else:
+            queryset = queryset.filter(
+                Q(software__status="validated")
+                | Q(software__created_by=self.request.user)
+            )
 
         search_query = self.request.query_params.get("search")
         if search_query:

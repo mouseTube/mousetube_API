@@ -7,8 +7,10 @@ PHENOMIN, CNRS UMR7104, INSERM U964, Université de Strasbourg
 Code under GPL v3.0 licence
 """
 
+from django.conf import settings
 from django.contrib.auth.models import User
 from django.contrib.contenttypes.models import ContentType
+from django.core.mail import send_mail
 from django.db.models import Count, Q
 from django_countries.serializer_fields import CountryField
 from djoser.serializers import UserCreateSerializer as BaseUserCreateSerializer
@@ -66,11 +68,38 @@ class CustomUserCreateSerializer(BaseUserCreateSerializer):
 
     def create(self, validated_data):
         user = super().create(validated_data)
+
+        # -----------------------------
+        # ⚡ Deactivate user accounts
+        # -----------------------------
+        user.is_active = False
+        user.save()
+
         orcid = getattr(self, "_orcid", None)
         if orcid:
             profile, _ = UserProfile.objects.get_or_create(user=user)
             profile.orcid = orcid
             profile.save()
+
+        # -----------------------------
+        # ⚡ Send email to admin
+        # -----------------------------
+        admin_email = getattr(settings, "DEFAULT_ADMIN_EMAIL", None)
+        if admin_email:
+            subject = f"New user to validate: {user.username}"
+            message = (
+                f"A new user has registered on the preprod:\n\n"
+                f"Username: {user.username}\n"
+                f"Email: {user.email}\n\n"
+                f"Please connect to the admin to activate this account."
+            )
+            send_mail(
+                subject,
+                message,
+                settings.DEFAULT_FROM_EMAIL,
+                [admin_email],
+                fail_silently=False,
+            )
         return user
 
 

@@ -69,7 +69,6 @@ services:
       - "6379"
 
   nginx:
-    image: nginx:latest
     build:
       context: ./nginx
     volumes:
