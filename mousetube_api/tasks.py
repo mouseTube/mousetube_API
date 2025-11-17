@@ -209,8 +209,8 @@ def publish_session_deposition(self, recording_session_id, repository_id, payloa
     if rs.equipment_acquisition_hardware_microphones.exists():
         rs.equipment_acquisition_hardware_microphones.update(status="validated")
 
-    # --- ✅ References linked to the recording session (ManyToMany) ---
-    Reference.objects.filter(recording_sessions=rs).update(status="validated")
+    # --- ✅ References linked via recording session references field ---
+    rs.references.all().update(status="validated")
 
     # --- ✅ References linked to acquisition software ---
     if rs.equipment_acquisition_software.exists():
