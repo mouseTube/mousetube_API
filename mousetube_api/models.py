@@ -170,8 +170,8 @@ class Contact(models.Model):
         created_by (ForeignKey): User who created the contact entry.
     """
 
-    last_name = models.CharField(max_length=255)
-    first_name = models.CharField(max_length=255)
+    last_name = models.CharField(max_length=255, blank=True, null=True)
+    first_name = models.CharField(max_length=255, blank=True, null=True)
     email = models.EmailField()
     unit = models.CharField(max_length=255, blank=True, null=True)
     institution = models.CharField(max_length=255, blank=True, null=True)

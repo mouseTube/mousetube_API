@@ -166,7 +166,7 @@ fi
 if [ "$DEPLOY" == "true" ]; then
     if [ "$DEBUG" == "false" ]; then
         echo "🚀 Starting Gunicorn server..."
-        exec gunicorn madbot_api.asgi:application --bind 0.0.0.0:8000 --timeout 420 -k uvicorn.workers.UvicornWorker
+        exec gunicorn mousetube_api.asgi:application --bind 0.0.0.0:8000 --timeout 420 -k uvicorn.workers.UvicornWorker
     else
         echo "⚙️ Starting development server..."
         exec python3 manage.py runserver 0.0.0.0:8000
