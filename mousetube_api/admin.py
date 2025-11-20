@@ -16,7 +16,6 @@ from .models import (
     File,
     Hardware,
     Laboratory,
-    LegacyUser,
     Protocol,
     RecordingSession,
     Reference,
@@ -29,19 +28,6 @@ from .models import (
     Subject,
     UserProfile,
 )
-
-
-class LegacyUserAdmin(admin.ModelAdmin):
-    list_display = (
-        "first_name_user",
-        "name_user",
-        "email_user",
-        "unit_user",
-        "institution_user",
-        "country_user",
-    )
-    search_fields = ("first_name_user", "name_user", "email_user")
-    list_filter = ("country_user",)
 
 
 class ContactAdmin(admin.ModelAdmin):
@@ -66,21 +52,17 @@ class StrainAdmin(admin.ModelAdmin):
 class SubjectAdmin(admin.ModelAdmin):
     list_display = (
         "name",
-        "user",
         "animal_profile",
     )
     search_fields = (
         "name",
-        "user__first_name_user",
         "animal_profile__name",
     )
-    list_filter = ("user",)
 
 
 class ProtocolAdmin(admin.ModelAdmin):
-    list_display = ("name", "user")
-    search_fields = ("name", "user__first_name_user")
-    list_filter = ("user",)
+    list_display = ("name",)
+    search_fields = ("name",)
 
 
 class RecordingSessionAdmin(admin.ModelAdmin):
@@ -145,7 +127,7 @@ class SoftwareAdmin(admin.ModelAdmin):
         "description",
         "technical_requirements",
     )
-    filter_horizontal = ("references", "users")
+    filter_horizontal = ("references", "contacts")
 
 
 class ReferenceAdmin(admin.ModelAdmin):
@@ -180,7 +162,6 @@ class HardwareAdmin(admin.ModelAdmin):
 
 
 admin.site.register(UserProfile)
-admin.site.register(LegacyUser, LegacyUserAdmin)
 admin.site.register(Repository)
 admin.site.register(Reference, ReferenceAdmin)
 admin.site.register(Species)
