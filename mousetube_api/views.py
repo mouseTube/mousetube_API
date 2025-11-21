@@ -72,7 +72,6 @@ from .models import (
     File,
     Hardware,
     Laboratory,
-    LegacyUser,
     PageView,
     Protocol,
     RecordingSession,
@@ -94,7 +93,6 @@ from .serializers import (
     FileSerializer,
     HardwareSerializer,
     LaboratorySerializer,
-    LegacyUserSerializer,
     PageViewSerializer,
     ProtocolSerializer,
     RecordingSessionSerializer,
@@ -492,18 +490,6 @@ class ReferenceDetailAPIView(GenericAPIView):
         instance = self.get_object(pk)
         instance.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
-
-
-# ----------------------------
-# LegacyUser
-# ----------------------------
-class LegacyUserAPIView(GenericAPIView):
-    serializer_class = LegacyUserSerializer
-
-    def get(self, request, *args, **kwargs):
-        queryset = LegacyUser.objects.all()
-        serializer = self.serializer_class(queryset, many=True)
-        return Response(serializer.data)
 
 
 # ----------------------------

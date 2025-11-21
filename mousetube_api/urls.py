@@ -45,7 +45,6 @@ from .views import (
     HardwareAPIView,
     HardwareDetailAPIView,
     LaboratoryAPIView,
-    LegacyUserAPIView,
     LinkOrcidView,
     ProtocolViewSet,
     PublishSessionView,
@@ -117,7 +116,6 @@ urlpatterns = [
         ReferenceDetailAPIView.as_view(),
         name="reference-detail",
     ),
-    path("api/legacy_user/", LegacyUserAPIView.as_view(), name="legacy_user"),
     path("api/user_profile/", UserProfileListAPIView.as_view(), name="user_profile"),
     path(
         "api/user_profile/<int:pk>/",

@@ -30,7 +30,6 @@ from .models import (
     File,
     Hardware,
     Laboratory,
-    LegacyUser,
     PageView,
     Protocol,
     RecordingSession,
@@ -123,12 +122,6 @@ class ReferenceSerializer(serializers.ModelSerializer):
             return validate_url(value)
 
 
-class LegacyUserSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = LegacyUser
-        fields = "__all__"
-
-
 class LaboratorySerializer(serializers.ModelSerializer):
     country = CountryField()
 
@@ -160,6 +153,8 @@ class UserProfileSerializer(serializers.ModelSerializer):
 
 
 class ContactSerializer(serializers.ModelSerializer):
+    country = CountryField()
+
     class Meta:
         model = Contact
         fields = "__all__"
@@ -167,7 +162,6 @@ class ContactSerializer(serializers.ModelSerializer):
 
 class HardwareSerializer(serializers.ModelSerializer):
     references = ReferenceSerializer(many=True, read_only=True)
-    users = LegacyUserSerializer(many=True, required=False)
 
     references_ids = serializers.PrimaryKeyRelatedField(
         queryset=Reference.objects.all(),
@@ -218,7 +212,6 @@ class HardwareSerializer(serializers.ModelSerializer):
 
 class SoftwareSerializer(serializers.ModelSerializer):
     references = ReferenceSerializer(many=True, read_only=True)
-    users = LegacyUserSerializer(many=True, required=False)
     contacts = ContactSerializer(many=True, read_only=True)
 
     references_ids = serializers.PrimaryKeyRelatedField(
@@ -325,8 +318,6 @@ class SpeciesSerializer(serializers.ModelSerializer):
 
 
 class ProtocolSerializer(serializers.ModelSerializer):
-    user = LegacyUserSerializer(read_only=True)
-
     class Meta:
         model = Protocol
         fields = "__all__"
@@ -564,7 +555,6 @@ class AnimalProfileSerializer(serializers.ModelSerializer):
 # Subject Serializer
 # ------------------------
 class SubjectSerializer(serializers.ModelSerializer):
-    user = LegacyUserSerializer(read_only=True)
     animal_profile = AnimalProfileSerializer()
 
     class Meta:
@@ -637,6 +627,7 @@ class RecordingSessionSerializer(serializers.ModelSerializer):
         many=True, read_only=True
     )
     references = ReferenceSerializer(many=True, read_only=True)
+    created_by = CustomUserSerializer(read_only=True)
 
     # ---- Write fields POST/PUT/PATCH ----
     protocol_id = serializers.PrimaryKeyRelatedField(
@@ -870,6 +861,7 @@ class FileSerializer(serializers.ModelSerializer):
     )
     recording_session = RecordingSessionSerializer(required=False)
     subjects = SubjectSerializer(many=True, required=False)
+    created_by = CustomUserSerializer(read_only=True)
 
     class Meta:
         model = File

@@ -116,42 +116,6 @@ class UserProfile(models.Model):
         verbose_name_plural = "UserProfiles"
 
 
-class LegacyUser(models.Model):
-    """
-    Represents a user of the last system.
-
-    Attributes:
-        name_user (str): The last name of the user.
-        first_name_user (str): The first name of the user.
-        email_user (str): The email address of the user.
-        unit_user (str, optional): The unit the user belongs to.
-        institution_user (str, optional): The institution the user belongs to.
-        address_user (str, optional): The address of the user.
-        country_user (str, optional): The country of the user.
-    """
-
-    name_user = models.CharField(max_length=255, null=True)
-    first_name_user = models.CharField(max_length=255, null=True)
-    email_user = models.CharField(max_length=255)
-    unit_user = models.CharField(max_length=255, blank=True, null=True)
-    institution_user = models.CharField(max_length=255, blank=True, null=True)
-    address_user = models.CharField(max_length=255, blank=True, null=True)
-    country_user = models.CharField(max_length=255, blank=True, null=True)
-
-    def __str__(self):
-        """
-        Returns the full name of the user.
-
-        Returns:
-            str: The full name of the user.
-        """
-        return f"{self.first_name_user} {self.name_user}"
-
-    class Meta:
-        verbose_name = "LegacyUser"
-        verbose_name_plural = "LegacyUsers"
-
-
 class Contact(models.Model):
     """
     Represents a contact person or entity.
@@ -352,7 +316,6 @@ class Subject(models.Model):
         origin (str, optional): The origin of the subject.
         cohort (str, optional): The group the subject belongs to.
         animal_profile (AnimalProfile, optional): The profil of the animals used.
-        user (LegacyUser): The user associated with the subject.
         created_at (DateTimeField): Timestamp when the animal profil was created.
         modified_at (DateTimeField): Last modification timestamp.
         created_by (ForeignKey): User who created the animal profil entry.
@@ -365,7 +328,6 @@ class Subject(models.Model):
     animal_profile = models.ForeignKey(
         AnimalProfile, on_delete=models.CASCADE, null=True, blank=True
     )
-    user = models.ForeignKey(LegacyUser, on_delete=models.CASCADE)
     created_at = models.DateTimeField(auto_now_add=True, null=True)
     modified_at = models.DateTimeField(auto_now=True, null=True)
     created_by = models.ForeignKey(
@@ -395,7 +357,6 @@ class Protocol(models.Model):
 
     Attributes:
         name (str): The name of the protocol.
-        user (LegacyUser): The user associated with the protocol.
         animals_sex (str, optional): The sex of the animals used in the protocol.
         animals_age (str, optional): The age of the animals used in the protocol.
         animals_housing (str, optional): The housing conditions of the animals.
@@ -416,7 +377,6 @@ class Protocol(models.Model):
         ("validated", "Validated"),
     ]
     name = models.CharField(max_length=255, editable=False, unique=True)
-    user = models.ForeignKey(LegacyUser, models.SET_NULL, null=True, blank=True)
     # Animals
     animals_sex = models.CharField(
         max_length=32,
@@ -424,6 +384,7 @@ class Protocol(models.Model):
             ("male(s)", "male(s)"),
             ("female(s)", "female(s)"),
             ("male(s) & female(s)", "male(s) & female(s)"),
+            ("unspecified", "unspecified"),
         ],
     )
     animals_age = models.CharField(
@@ -441,19 +402,21 @@ class Protocol(models.Model):
             ("grouped", "grouped"),
             ("isolated", "isolated"),
             ("grouped & isolated", "grouped & isolated"),
+            ("unspecified", "unspecified"),
         ],
     )
 
     # Context
     # context_number_of_animals = models.PositiveIntegerField()
     context_number_of_animals = models.CharField(
-        max_length=5,
+        max_length=15,
         choices=[
             ("1", "1"),
             ("2", "2"),
             ("3", "3"),
             ("4", "4"),
             (">4", ">4"),
+            ("unspecified", "unspecified"),
         ],
     )
 
@@ -463,6 +426,7 @@ class Protocol(models.Model):
             ("short term (<1h)", "short term (<1h)"),
             ("mid term (<1day)", "mid term (<1day)"),
             ("long term (>=1day)", "long term (>=1day)"),
+            ("unspecified", "unspecified"),
         ],
     )
     context_cage = models.CharField(
@@ -471,15 +435,25 @@ class Protocol(models.Model):
             ("unfamiliar test cage", "unfamiliar test cage"),
             ("familiar test cage", "familiar test cage"),
             ("home cage", "home cage"),
+            ("unspecified", "unspecified"),
         ],
     )
     context_bedding = models.CharField(
         max_length=16,
-        choices=[("bedding", "bedding"), ("no bedding", "no bedding")],
+        choices=[
+            ("bedding", "bedding"),
+            ("no bedding", "no bedding"),
+            ("unspecified", "unspecified"),
+        ],
     )
     context_light_cycle = models.CharField(
-        max_length=8,
-        choices=[("day", "day"), ("night", "night"), ("both", "both")],
+        max_length=15,
+        choices=[
+            ("day", "day"),
+            ("night", "night"),
+            ("both", "both"),
+            ("unspecified", "unspecified"),
+        ],
     )
     status = models.CharField(max_length=20, choices=STATUS, default="draft")
     created_at = models.DateTimeField(auto_now_add=True, null=True)
@@ -594,7 +568,6 @@ class Software(models.Model):
         technical_requirements (str): The technical requirements for using the software.
         references (ManyToManyField): A list of references and tutorials related to the software.
         status (str): The current status of the software (draft, waiting validation, validated).
-        users (ManyToManyField): A list of users who are associated with the software.
         created_at (DateTimeField): Timestamp when the software record was created.
         modified_at (DateTimeField): Last modification timestamp.
         created_by (ForeignKey): User who created the software record.
@@ -626,9 +599,6 @@ class Software(models.Model):
     references = models.ManyToManyField(Reference, related_name="software", blank=True)
     status = models.CharField(
         max_length=50, null=True, default="draft", choices=CHOICES_SOFTWARE_STATUS
-    )
-    users = models.ManyToManyField(
-        LegacyUser, related_name="software_to_user", blank=True
     )
     contacts = models.ManyToManyField(Contact, related_name="software", blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
