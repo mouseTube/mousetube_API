@@ -627,6 +627,7 @@ class RecordingSessionSerializer(serializers.ModelSerializer):
         many=True, read_only=True
     )
     references = ReferenceSerializer(many=True, read_only=True)
+    created_by = CustomUserSerializer(read_only=True)
 
     # ---- Write fields POST/PUT/PATCH ----
     protocol_id = serializers.PrimaryKeyRelatedField(
