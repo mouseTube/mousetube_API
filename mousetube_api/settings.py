@@ -23,6 +23,7 @@ COUNTRIES_OVERRIDE = {
     "EU": {"names": ["European Union"], "alpha3": "EUN", "numeric": 998},
     "GO": {"names": ["Global"], "alpha3": "GLO", "numeric": 999},
 }
+
 LazyChoicesMixin.get_choices = lambda self: self._choices
 LazyChoicesMixin.choices = property(LazyChoicesMixin.get_choices, LazyChoicesMixin.set_choices)
 
