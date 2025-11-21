@@ -16,14 +16,13 @@ from pathlib import Path
 
 import environ
 from django.core.management.utils import get_random_secret_key
+from django_countries.widgets import LazyChoicesMixin
 
 # Add two custom countries to django_countries
 COUNTRIES_OVERRIDE = {
     "EU": {"names": ["European Union"], "alpha3": "EUN", "numeric": 998},
     "GO": {"names": ["Global"], "alpha3": "GLO", "numeric": 999},
 }
-
-from django_countries.widgets import LazyChoicesMixin
 
 LazyChoicesMixin.get_choices = lambda self: self._choices
 LazyChoicesMixin.choices = property(LazyChoicesMixin.get_choices, LazyChoicesMixin.set_choices)
