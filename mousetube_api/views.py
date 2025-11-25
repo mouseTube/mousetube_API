@@ -989,13 +989,13 @@ class FileAPIView(GenericAPIView):
         return [AllowAny()]
 
     # -----------------------------
-    # Queryset dynamique
+    # Dynamic queryset
     # -----------------------------
     def get_queryset(self):
         files = File.objects.all()
         request = self.request
 
-        # --- Filtrage par RecordingSession ---
+        # --- Filter by RecordingSession ---
         recording_session_id = request.GET.get("recording_session")
         if recording_session_id:
             try:
@@ -1004,7 +1004,7 @@ class FileAPIView(GenericAPIView):
             except ValueError:
                 pass
 
-        # --- Recherche textuelle globale ---
+        # --- Global text search ---
         search_query = request.GET.get("search", "").strip()
         if search_query:
             file_fields = ["number", "link", "notes", "doi"]
@@ -1141,7 +1141,15 @@ class FileAPIView(GenericAPIView):
     # POST Celery
     # -----------------------------
     def post(self, request, *args, **kwargs):
-        serializer = self.serializer_class(data=request.data)
+        if not request.user.is_staff:
+            if "plot" in request.data or "spectrogram" in request.data:
+                return Response(
+                    {"detail": "Only administrators can set plot or spectrogram."},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+        serializer = self.serializer_class(
+            data=request.data, context={"request": request}
+        )
         serializer.is_valid(raise_exception=True)
 
         file = serializer.save(created_by=request.user)
@@ -1157,7 +1165,7 @@ class FileAPIView(GenericAPIView):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
-        # Lancer le traitement si aucun DOI
+        # Start background task to process the file if no DOI
         if not file.doi:
             file.status = "pending"
             file.save(update_fields=["status"])
@@ -1327,6 +1335,12 @@ class FileDetailAPIView(GenericAPIView):
             return Response(
                 {"detail": "File not found"}, status=status.HTTP_404_NOT_FOUND
             )
+        if not request.user.is_staff:
+            if "plot" in request.data or "spectrogram" in request.data:
+                return Response(
+                    {"detail": "Only administrators can set plot or spectrogram."},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
         serializer = self.serializer_class(file, data=request.data)
         if serializer.is_valid():
             file = serializer.save()
