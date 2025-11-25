@@ -160,7 +160,7 @@ class Contact(models.Model):
     )
 
     def __str__(self):
-        return self.last_name
+        return self.last_name or f"Contact #{self.id}"
 
     class Meta:
         verbose_name = "Contact"

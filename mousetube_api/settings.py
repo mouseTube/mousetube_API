@@ -16,18 +16,12 @@ from pathlib import Path
 
 import environ
 from django.core.management.utils import get_random_secret_key
-from django_countries.widgets import LazyChoicesMixin
 
 # Add two custom countries to django_countries
 COUNTRIES_OVERRIDE = {
     "EU": {"names": ["European Union"], "alpha3": "EUN", "numeric": 998},
     "GO": {"names": ["Global"], "alpha3": "GLO", "numeric": 999},
 }
-
-LazyChoicesMixin.get_choices = lambda self: self._choices
-LazyChoicesMixin.choices = property(
-    LazyChoicesMixin.get_choices, LazyChoicesMixin.set_choices
-)
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -297,6 +291,8 @@ DJOSER = {
     "SEND_ACTIVATION_EMAIL": env.bool("DJOSER_SEND_ACTIVATION_EMAIL", default=False),
     "ACTIVATION_URL": "activate/{uid}/{token}",
     "SERIALIZERS": {
+        "user": "mousetube_api.serializers.CustomUserSerializer",
+        "current_user": "mousetube_api.serializers.CustomUserSerializer",
         "user_create": "mousetube_api.serializers.CustomUserCreateSerializer",
     },
     "USER_CREATE_FIELDS": [
