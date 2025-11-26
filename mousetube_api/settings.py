@@ -342,6 +342,7 @@ CELERY_IMPORTS = ["mousetube_api.tasks"]
 CELERY_RESULT_BACKEND = "django-db"
 CACHE_BACKEND = "memcached://127.0.0.1:11211/"
 
+ZENODO_API = env("ZENODO_API", default="https://sandbox.zenodo.org/api/")
 ZENODO_TOKEN = env("ZENODO_TOKEN", default="")
 
 LOGS_DIR = Path(BASE_DIR) / "logs"
