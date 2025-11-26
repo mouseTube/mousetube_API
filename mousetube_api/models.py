@@ -1168,7 +1168,7 @@ class Dataset(models.Model):
         RecordingSession, related_name="dataset_recording_sessions", blank=True
     )
     description = models.TextField(blank=True, null=True)
-    link = models.CharField(max_length=255)
+    link = models.CharField(max_length=255, null=True, blank=True)
     doi = models.CharField(max_length=255, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     modified_at = models.DateTimeField(auto_now=True)

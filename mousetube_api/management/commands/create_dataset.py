@@ -13,6 +13,14 @@ class Command(BaseCommand):
         )
 
         parser.add_argument(
+            "--description", type=str, help="Description of the dataset to create."
+        )
+
+        parser.add_argument("--doi", type=str, help="DOI of the dataset to create.")
+
+        parser.add_argument("--link", type=str, help="Link of the dataset to create.")
+
+        parser.add_argument(
             "--sessions", nargs="*", type=int, help="List of RecordingSession IDs."
         )
 
@@ -43,6 +51,9 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         name = options["name"]
+        description = options.get("description")
+        doi = options.get("doi")
+        link = options.get("link")
         session_ids = options.get("sessions") or []
         session_names = options.get("session_names") or []
         file_path = options.get("file")
@@ -100,13 +111,41 @@ class Command(BaseCommand):
                 )
             recording_sessions.append(qs.first())
 
-        # Create dataset
-        dataset = Dataset.objects.create(name=name, created_by=created_by)
+        # Create or update dataset
+        dataset = Dataset.objects.filter(name=name).first()
+        # If it exists, update it
+        if dataset:
+            if description is not None:
+                dataset.description = description
+
+            if doi is not None:
+                dataset.doi = doi
+
+            if link is not None:
+                dataset.link = link
+
+            if created_by is not None:
+                dataset.created_by = created_by
+
+            dataset.save()
+            created = False
+        else:
+            # Otherwise, create it
+            dataset = Dataset.objects.create(
+                name=name,
+                description=description,
+                doi=doi,
+                link=link,
+                created_by=created_by,
+            )
+            created = True
 
         dataset.recording_session_list.set(recording_sessions)
 
+        action = "created" if created else "updated"
+
         self.stdout.write(
             self.style.SUCCESS(
-                f"Dataset '{dataset.name}' created with {len(recording_sessions)} recording sessions."
+                f"Dataset '{dataset.name}' {action} with {len(recording_sessions)} recording sessions."
             )
         )

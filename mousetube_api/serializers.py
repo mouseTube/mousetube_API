@@ -880,12 +880,59 @@ class FileSerializer(serializers.ModelSerializer):
         return validate_doi_link_consistency(attrs)
 
 
+class FileNestedSerializer(serializers.ModelSerializer):
+    plot_url = serializers.SerializerMethodField()
+    spectrogram_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = File
+        fields = [
+            "id",
+            "name",
+            "link",
+            "doi",
+            "plot_url",
+            "spectrogram_url",
+            "status",
+        ]
+
+    def get_plot_url(self, obj):
+        if obj.plot and hasattr(obj.plot, "url"):
+            request = self.context.get("request")
+            return request.build_absolute_uri(obj.plot.url) if request else obj.plot.url
+        return None
+
+    def get_spectrogram_url(self, obj):
+        if obj.spectrogram and hasattr(obj.spectrogram, "url"):
+            request = self.context.get("request")
+            return (
+                request.build_absolute_uri(obj.spectrogram.url)
+                if request
+                else obj.spectrogram.url
+            )
+        return None
+
+
 class DatasetSerializer(serializers.ModelSerializer):
-    files = FileSerializer(many=True, required=False)
+    files = serializers.SerializerMethodField()
 
     class Meta:
         model = Dataset
-        fields = "__all__"
+        fields = [
+            "id",
+            "name",
+            "description",
+            "link",
+            "doi",
+            "files",
+        ]
+
+    def get_files(self, obj):
+        files_qs = File.objects.filter(
+            recording_session__in=obj.recording_session_list.all()
+        )
+        serializer = FileNestedSerializer(files_qs, many=True, context=self.context)
+        return serializer.data
 
 
 MODEL_MAP = {
