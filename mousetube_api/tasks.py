@@ -15,28 +15,38 @@ from mousetube_api.utils.repository import (
 
 logger = logging.getLogger(__name__)
 
+SUPPORTED_FORMATS = {choice[0].upper() for choice in File.FORMAT_CHOICES}
 
-AUDIO_EXTENSIONS = {
-    ".wav",
-    ".flac",
-    ".aiff",
-    ".aif",
-    ".ogg",
-    ".mp3",
-}
+AUDIO_FORMATS = {"WAV", "MP3", "FLAC", "OGG", "AIFF"}
 
 
 def extract_metadata(file_instance, local_path):
-    """Extract duration, sample rate, bit depth, format from the audio file.
-    Only fills empty attributes on the File instance.
-    Raises ValidationError if file is not a supported audio.
     """
+    Extract duration, sample rate, bit depth from audio files.
+    For non-audio files, only sets the format field.
+    """
+
     _, ext = os.path.splitext(local_path)
-    if ext.lower() not in AUDIO_EXTENSIONS:
-        raise ValidationError(f"Unsupported audio format: {ext}")
+    file_format = ext.lower().lstrip(".").upper()
 
     updated_fields = []
 
+    # --- Validate format based on model ---
+    if file_format not in SUPPORTED_FORMATS:
+        raise ValidationError(f"Unsupported format: {file_format}")
+
+    # --- Assign format if missing ---
+    if not file_instance.format:
+        file_instance.format = file_format
+        updated_fields.append("format")
+
+    # --- If not audio → stop here ---
+    if file_format not in AUDIO_FORMATS:
+        if updated_fields:
+            file_instance.save(update_fields=updated_fields)
+        return
+
+    # --- Audio metadata extraction ---
     try:
         with sf.SoundFile(local_path) as f:
             if not file_instance.sampling_rate:
@@ -55,16 +65,16 @@ def extract_metadata(file_instance, local_path):
                     "FLOAT": 32,
                     "DOUBLE": 64,
                 }
-                file_instance.bit_depth = bit_depth_map.get(f.subtype)
-                updated_fields.append("bit_depth")
+                bitdepth = bit_depth_map.get(f.subtype)
+
+                if bitdepth is not None:  # ❗ only save if real value
+                    file_instance.bit_depth = bitdepth
+                    updated_fields.append("bit_depth")
+
     except RuntimeError as e:
         raise ValidationError(f"Cannot read audio file: {e}")
 
-    if not file_instance.format:
-        _, ext = os.path.splitext(local_path)
-        file_instance.format = ext.lower().lstrip(".").upper()
-        updated_fields.append("format")
-
+    # --- Save only updated fields ---
     if updated_fields:
         file_instance.save(update_fields=updated_fields)
 
@@ -78,13 +88,13 @@ def process_file(self, file_id, repository_id):
     """
 
     file_instance = File.objects.get(id=file_id)
-    # ✅ if no repo_id, try to get from file
+
     if not repository_id and file_instance.repository_id:
         repository_id = file_instance.repository_id
 
-    # ✅ if still no repo_id, default to 1
     if not repository_id:
         repository_id = 1
+
     repository = Repository.objects.get(id=repository_id)
 
     try:
@@ -94,10 +104,12 @@ def process_file(self, file_id, repository_id):
         local_path = link_to_local_path(file_instance)
         extract_metadata(file_instance, local_path)
 
+        # --- Reference to the session ---
         rs = file_instance.recording_session
         if not rs:
             raise ValueError("File has no recording session assigned.")
 
+        # --- DDeposition repository ---
         deposition_id = prepare_repository_deposition_for_session(
             repository, rs, file_instance
         )
