@@ -68,6 +68,7 @@ class ProtocolAdmin(admin.ModelAdmin):
 class RecordingSessionAdmin(admin.ModelAdmin):
     list_display = (
         "name",
+        "id",
         "protocol",
         "display_studies",
         "date",
