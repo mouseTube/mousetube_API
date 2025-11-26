@@ -109,7 +109,7 @@ def process_file(self, file_id, repository_id):
         if not rs:
             raise ValueError("File has no recording session assigned.")
 
-        # --- DDeposition repository ---
+        # --- Deposition repository ---
         deposition_id = prepare_repository_deposition_for_session(
             repository, rs, file_instance
         )

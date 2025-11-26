@@ -297,11 +297,11 @@ def prepare_deposition_for_session(recording_session, new_file=None):
         deposition_id: Zenodo deposition ID.
     """
     # 🔹 Get valid files
-    files = (
-        File.objects.filter(recording_session=recording_session)
-        .exclude(status__in=["pending", "processing", "error"])
-        .exclude(doi__isnull=False)
-    )
+    files = [
+        f
+        for f in File.objects.filter(recording_session=recording_session)
+        if f.status not in ["pending", "processing", "error"] and not f.doi
+    ]
 
     if new_file and new_file not in files:
         # includ files
@@ -314,67 +314,70 @@ def prepare_deposition_for_session(recording_session, new_file=None):
     params = {"access_token": ZENODO_TOKEN}
     headers = {"Content-Type": "application/json"}
 
-    existing_file = next((f for f in files if f.repository and f.external_id), None)
-    if existing_file:
-        deposition_id = existing_file.external_id
-        repo = existing_file.repository
-        print(
-            f"ℹ️ Using existing {repo.name} repository with deposition ID {deposition_id}"
-        )
-    else:
-        # Create new zenodo repo
-        r = requests.post(
-            ZENODO_API + "/deposit/depositions",
-            params=params,
-            json={},
-            headers=headers,
-            timeout=60,
-        )
-        r.raise_for_status()
-        deposition_id = r.json()["id"]
-
-        repo, _ = Repository.objects.get_or_create(name="Zenodo")
-
-    # 🔹 Upload files
-    for file_instance in files:
-        if file_instance.external_id == deposition_id:
-            continue  # already uploaded
-
-        local_path = link_to_local_path(file_instance)
-        if not os.path.exists(local_path) or os.path.getsize(local_path) == 0:
+    try:
+        # 🔹 Check for existing deposition
+        existing_file = next((f for f in files if f.repository and f.external_id), None)
+        if existing_file:
+            deposition_id = existing_file.external_id
+            repo = existing_file.repository
             print(
-                f"⚠️ Skipping file {file_instance.id}, not found or empty: {local_path}"
+                f"ℹ️ Using existing {repo.name} repository with deposition ID {deposition_id}"
             )
-            file_instance.status = "error"
-            file_instance.save(update_fields=["status"])
-            continue
+        else:
+            # Create new zenodo repo
+            r = requests.post(
+                ZENODO_API + "/deposit/depositions",
+                params=params,
+                json={},
+                headers=headers,
+                timeout=60,
+            )
+            r.raise_for_status()
+            deposition_id = r.json()["id"]
 
-        filename = re.sub(r"[^a-zA-Z0-9._-]", "_", os.path.basename(local_path))
-        upload_url = f"{ZENODO_API + '/deposit/depositions'}/{deposition_id}/files"
+            repo, _ = Repository.objects.get_or_create(name="Zenodo")
 
-        try:
-            with open(local_path, "rb") as file_obj:
-                files_payload = {"file": (filename, file_obj)}
-                r = requests.post(
-                    upload_url, params=params, files=files_payload, timeout=60
+        # 🔹 Upload files
+        for file_instance in files:
+            if file_instance.external_id == deposition_id:
+                continue  # already uploaded
+
+            local_path = link_to_local_path(file_instance)
+            if not os.path.exists(local_path) or os.path.getsize(local_path) == 0:
+                print(
+                    f"⚠️ Skipping file {file_instance.id}, not found or empty: {local_path}"
                 )
-                r.raise_for_status()
-        except requests.exceptions.HTTPError as e:
-            print(f"❌ Failed to upload file {file_instance.id}: {e}")
-            file_instance.status = "error"
-            file_instance.save(update_fields=["status"])
-            continue
+                file_instance.status = "error"
+                file_instance.save(update_fields=["status"])
+                continue
 
-        # Update file after upload
-        file_instance.repository = repo
-        file_instance.external_id = deposition_id
-        file_instance.save(update_fields=["repository", "external_id"])
+            filename = re.sub(r"[^a-zA-Z0-9._-]", "_", os.path.basename(local_path))
+            upload_url = f"{ZENODO_API + '/deposit/depositions'}/{deposition_id}/files"
 
-    # 🔹 delete temporary files
-    for file_instance in files:
-        local_path = link_to_local_path(file_instance)
-        if "/temp/" in local_path and os.path.exists(local_path):
-            os.remove(local_path)
+            try:
+                with open(local_path, "rb") as file_obj:
+                    files_payload = {"file": (filename, file_obj)}
+                    r = requests.post(
+                        upload_url, params=params, files=files_payload, timeout=60
+                    )
+                    r.raise_for_status()
+            except requests.exceptions.HTTPError as e:
+                print(f"❌ Failed to upload file {file_instance.id}: {e}")
+                file_instance.status = "error"
+                file_instance.save(update_fields=["status"])
+                continue
+
+            # Update file after upload
+            file_instance.repository = repo
+            file_instance.external_id = deposition_id
+            file_instance.save(update_fields=["repository", "external_id"])
+
+    finally:
+        # 🔹 delete temporary files
+        for file_instance in files:
+            local_path = link_to_local_path(file_instance)
+            if "/temp/" in local_path and os.path.exists(local_path):
+                os.remove(local_path)
 
     # 🔹 update zenodo metadata
     metadata_payload = build_metadata_payload(recording_session, files)
