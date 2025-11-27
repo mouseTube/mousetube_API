@@ -330,7 +330,7 @@ def prepare_deposition_for_session(recording_session, new_file=None):
                 params=params,
                 json={},
                 headers=headers,
-                timeout=60,
+                timeout=300,
             )
             r.raise_for_status()
             deposition_id = r.json()["id"]
@@ -387,7 +387,7 @@ def prepare_deposition_for_session(recording_session, new_file=None):
         params=params,
         data=json.dumps({"metadata": metadata_payload}),
         headers=headers,
-        timeout=60,
+        timeout=300,
     )
     r.raise_for_status()
 
