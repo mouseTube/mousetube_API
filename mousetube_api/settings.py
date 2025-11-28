@@ -291,6 +291,8 @@ DJOSER = {
     "SEND_ACTIVATION_EMAIL": env.bool("DJOSER_SEND_ACTIVATION_EMAIL", default=False),
     "ACTIVATION_URL": "activate/{uid}/{token}",
     "SERIALIZERS": {
+        "user": "mousetube_api.serializers.CustomUserSerializer",
+        "current_user": "mousetube_api.serializers.CustomUserSerializer",
         "user_create": "mousetube_api.serializers.CustomUserCreateSerializer",
     },
     "USER_CREATE_FIELDS": [
@@ -340,6 +342,7 @@ CELERY_IMPORTS = ["mousetube_api.tasks"]
 CELERY_RESULT_BACKEND = "django-db"
 CACHE_BACKEND = "memcached://127.0.0.1:11211/"
 
+ZENODO_API = env("ZENODO_API", default="https://sandbox.zenodo.org/api/")
 ZENODO_TOKEN = env("ZENODO_TOKEN", default="")
 
 LOGS_DIR = Path(BASE_DIR) / "logs"
