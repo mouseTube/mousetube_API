@@ -71,4 +71,18 @@ server {
         expires 30d;
         add_header Cache-Control "public";
     }
+
+    # Django Swagger
+    location /swagger/ {
+        proxy_pass http://web:8000/swagger/;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+
+    # Django schema
+    location /schema/ {
+        proxy_pass http://web:8000/schema/;
+        proxy_set_header Host $host;
+    }
 }
