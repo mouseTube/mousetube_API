@@ -1007,6 +1007,7 @@ class FileAPIView(GenericAPIView):
         # --- Global text search ---
         search_query = request.GET.get("search", "").strip()
         if search_query:
+            print("gna!")
             file_fields = ["number", "link", "notes", "doi"]
 
             recording_session_fields = [
@@ -1042,8 +1043,7 @@ class FileAPIView(GenericAPIView):
 
             protocol_fields = [
                 "name",
-                "description",
-                "user__name_user",
+                # "user__name_user",
                 "animals_sex",
                 "animals_age",
                 "animals_housing",
@@ -1067,7 +1067,7 @@ class FileAPIView(GenericAPIView):
                 "unit",
                 "address",
                 "country",
-                "contact",
+                # "created_by",
             ]
 
             study_fields = ["name", "description"]
@@ -1077,13 +1077,14 @@ class FileAPIView(GenericAPIView):
                 for f in fields:
                     lookup = f"{prefix}{f}__icontains" if prefix else f"{f}__icontains"
                     q |= Q(**{lookup: search_query})
+                print(f"query: {q}")
                 return q
 
             combined_query = (
                 build_query("", file_fields)
                 | build_query("recording_session__", recording_session_fields)
                 | build_query("subjects__", subject_fields)
-                | build_query("subjects__user__", user_fields)
+                # | build_query("subjects__user__", user_fields)
                 | build_query("subjects__", strain_fields)
                 | build_query("recording_session__protocol__", protocol_fields)
                 | build_query("subjects__animal_profile__", animal_profile_fields)
