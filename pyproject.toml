@@ -24,7 +24,7 @@ dependencies = [
     "mkdocstrings[python]>=0.11",
     "django-countries>=7.5",
     "setuptools==78.1.1",
-    "pillow==11.3.0",
+    "pillow==12.1.1",
     "celery[redis]==5.4.0",
     "redis==5.0.8",
     "django-celery-results==2.5.1",
