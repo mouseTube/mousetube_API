@@ -305,9 +305,9 @@ DJOSER = {
     ],
     "EMAIL": {
         "activation": "mousetube_api.utils.email_activation.CustomActivationEmail",
-        "password_reset": "mousetube_api.utils.email_reset.CustomPasswordResetEmail",
+        "password_reset": "mousetube_api.utils.email_reset.CustomPasswordResetEmail", # nosec B105
     },
-    "PASSWORD_RESET_CONFIRM_URL": "password/reset/confirm/{uid}/{token}",
+    "PASSWORD_RESET_CONFIRM_URL": "password/reset/confirm/{uid}/{token}", # nosec B105
     "DOMAIN": env("FRONT_DOMAIN", default="localhost:3000"),
     "SITE_NAME": "mouseTube",
 }
