@@ -32,6 +32,7 @@ services:
       DB_HOST: db
       FIXTURE_FILE: /app/exported_data.json
       DEBUG: "true"
+    restart: unless-stopped
 
   frontend:
     build: ../mousetube_frontend
@@ -46,6 +47,7 @@ services:
       - ../mousetube_frontend/.env
     environment:
       - NPM_CONFIG_CACHE=/app/.npm
+    restart: unless-stopped
 
   celery:
     build:

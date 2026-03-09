@@ -30,6 +30,7 @@ services:
       DB_HOST: db
       FIXTURE_FILE: /app/exported_data.json
     user: "${UID:-1000}:${GID:-1000}"
+    restart: unless-stopped
 
   frontend:
     build: ../mousetube_frontend
@@ -43,8 +44,9 @@ services:
     env_file:
       - ../mousetube_frontend/.env
     environment:
-    - NPM_CONFIG_CACHE=/app/.npm
+      - NPM_CONFIG_CACHE=/app/.npm
     user: "${UID:-1000}:${GID:-1000}"
+    restart: unless-stopped
 
   celery:
     build:
