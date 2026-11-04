@@ -45,6 +45,16 @@ from .models import (
 )
 
 
+class ModerationMixin:
+    """Only staff may mark a record "validated" (the moderation step)."""
+
+    def validate_status(self, value):
+        request = self.context.get("request")
+        if value == "validated" and not (request and request.user.is_staff):
+            raise serializers.ValidationError("Only administrators can validate.")
+        return value
+
+
 class CustomUserCreateSerializer(BaseUserCreateSerializer):
     orcid = serializers.CharField(write_only=True, required=False, allow_blank=True)
 
@@ -110,7 +120,7 @@ class RepositorySerializer(serializers.ModelSerializer):
         fields = "__all__"
 
 
-class ReferenceSerializer(serializers.ModelSerializer):
+class ReferenceSerializer(ModerationMixin, serializers.ModelSerializer):
     class Meta:
         model = Reference
         fields = "__all__"
@@ -122,7 +132,7 @@ class ReferenceSerializer(serializers.ModelSerializer):
             return validate_url(value)
 
 
-class LaboratorySerializer(serializers.ModelSerializer):
+class LaboratorySerializer(ModerationMixin, serializers.ModelSerializer):
     country = CountryField()
 
     class Meta:
@@ -152,7 +162,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
         fields = "__all__"
 
 
-class ContactSerializer(serializers.ModelSerializer):
+class ContactSerializer(ModerationMixin, serializers.ModelSerializer):
     country = CountryField()
 
     class Meta:
@@ -160,7 +170,7 @@ class ContactSerializer(serializers.ModelSerializer):
         fields = "__all__"
 
 
-class HardwareSerializer(serializers.ModelSerializer):
+class HardwareSerializer(ModerationMixin, serializers.ModelSerializer):
     references = ReferenceSerializer(many=True, read_only=True)
 
     references_ids = serializers.PrimaryKeyRelatedField(
@@ -210,7 +220,7 @@ class HardwareSerializer(serializers.ModelSerializer):
         return instance
 
 
-class SoftwareSerializer(serializers.ModelSerializer):
+class SoftwareSerializer(ModerationMixin, serializers.ModelSerializer):
     references = ReferenceSerializer(many=True, read_only=True)
     contacts = ContactSerializer(many=True, read_only=True)
 
@@ -311,20 +321,20 @@ class SoftwareSerializer(serializers.ModelSerializer):
         return instance
 
 
-class SpeciesSerializer(serializers.ModelSerializer):
+class SpeciesSerializer(ModerationMixin, serializers.ModelSerializer):
     class Meta:
         model = Species
         fields = "__all__"
 
 
-class ProtocolSerializer(serializers.ModelSerializer):
+class ProtocolSerializer(ModerationMixin, serializers.ModelSerializer):
     class Meta:
         model = Protocol
         fields = "__all__"
         read_only_fields = ("created_by", "created_at", "modified_at")
 
 
-class SoftwareVersionSerializer(serializers.ModelSerializer):
+class SoftwareVersionSerializer(ModerationMixin, serializers.ModelSerializer):
     software = SoftwareSerializer(read_only=True)
     software_id = serializers.PrimaryKeyRelatedField(
         source="software",
@@ -360,7 +370,7 @@ class SoftwareVersionSerializer(serializers.ModelSerializer):
         ]
 
 
-class StrainSerializer(serializers.ModelSerializer):
+class StrainSerializer(ModerationMixin, serializers.ModelSerializer):
     species = SpeciesSerializer(read_only=True)  # lecture complète
     species_id = serializers.PrimaryKeyRelatedField(
         queryset=Species.objects.all(), write_only=True, source="species"
@@ -422,7 +432,7 @@ class StrainSerializer(serializers.ModelSerializer):
 #         fields = "__all__"
 
 
-class AnimalProfileSerializer(serializers.ModelSerializer):
+class AnimalProfileSerializer(ModerationMixin, serializers.ModelSerializer):
     strain = StrainSerializer(read_only=True)
     strain_id = serializers.PrimaryKeyRelatedField(
         queryset=Strain.objects.all(), write_only=True, source="strain"
@@ -554,7 +564,7 @@ class AnimalProfileSerializer(serializers.ModelSerializer):
 # ------------------------
 # Subject Serializer
 # ------------------------
-class SubjectSerializer(serializers.ModelSerializer):
+class SubjectSerializer(ModerationMixin, serializers.ModelSerializer):
     animal_profile = AnimalProfileSerializer()
 
     class Meta:
@@ -837,7 +847,7 @@ class RecordingSessionShortSerializer(serializers.ModelSerializer):
         fields = ("id", "name")
 
 
-class StudySerializer(serializers.ModelSerializer):
+class StudySerializer(ModerationMixin, serializers.ModelSerializer):
     recording_sessions = RecordingSessionShortSerializer(many=True, required=False)
 
     class Meta:

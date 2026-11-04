@@ -27,7 +27,7 @@ class Command(BaseCommand):
         ]
 
         # Extract all unique pages for the page selector
-        pages = list(set(view["path"] for view in data))
+        pages = list({view["path"] for view in data})
 
         # If you choose "All pages", group by date and add up the visits
         total_data = []

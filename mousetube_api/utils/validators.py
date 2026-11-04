@@ -6,7 +6,7 @@ from rest_framework import serializers
 def validate_doi(value: str) -> str:
     """Validate DOI format."""
     if value:
-        doi_pattern = re.compile(r"^10\.\d{4,9}/[-._;()/:A-Z0-9]+$", re.I)
+        doi_pattern = re.compile(r"^10\.\d{4,9}/[-._;()/:A-Z0-9]+$", re.IGNORECASE)
         if not doi_pattern.match(value.strip()):
             raise serializers.ValidationError("Invalid DOI format.")
     return value
@@ -37,14 +37,17 @@ def validate_doi_link_consistency(attrs):
             {"link": "A link is required when a DOI is provided."}
         )
 
-    if link and not doi:
-        if not (
-            link.startswith("http://127.0.0.1")
-            or link.startswith("http://localhost")
-            or link.startswith("http://mousetube.fr")
-            or "/media/" in link
-        ):
-            raise serializers.ValidationError(
-                {"doi": "A DOI is required when providing an external link."}
+    if (
+        link
+        and not doi
+        and not (
+            link.startswith(
+                ("http://127.0.0.1", "http://localhost", "http://mousetube.fr")
             )
+            or "/media/" in link
+        )
+    ):
+        raise serializers.ValidationError(
+            {"doi": "A DOI is required when providing an external link."}
+        )
     return attrs

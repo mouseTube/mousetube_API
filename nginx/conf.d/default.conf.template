@@ -8,6 +8,10 @@ server {
     listen 80;
     server_name ${DOMAIN};
 
+    server_tokens off;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+
     # ======================================
     # 🔐 BASIC AUTH PROTECTION (Global)
     # ======================================
@@ -86,6 +90,8 @@ server {
         access_log off;
         expires 30d;
         add_header Cache-Control "public";
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header Content-Security-Policy "default-src 'none'; sandbox" always;
     }
 
     # Django Swagger

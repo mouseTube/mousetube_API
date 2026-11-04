@@ -8,7 +8,7 @@ from django.conf import settings
 from django.db.models import ForeignKey
 
 from mousetube_api.models import File, Repository
-from mousetube_api.utils.file_handler import link_to_local_path
+from mousetube_api.utils.file_handler import is_temp_path, link_to_local_path
 
 ZENODO_API = getattr(settings, "ZENODO_API", "https://sandbox.zenodo.org/api/")
 ZENODO_TOKEN = getattr(settings, "ZENODO_TOKEN", None)
@@ -342,7 +342,10 @@ def prepare_deposition_for_session(recording_session, new_file=None):
             if file_instance.external_id == deposition_id:
                 continue  # already uploaded
 
-            local_path = link_to_local_path(file_instance)
+            try:
+                local_path = link_to_local_path(file_instance)
+            except ValueError:
+                local_path = ""
             if not os.path.exists(local_path) or os.path.getsize(local_path) == 0:
                 print(
                     f"⚠️ Skipping file {file_instance.id}, not found or empty: {local_path}"
@@ -375,8 +378,11 @@ def prepare_deposition_for_session(recording_session, new_file=None):
     finally:
         # 🔹 delete temporary files
         for file_instance in files:
-            local_path = link_to_local_path(file_instance)
-            if "/temp/" in local_path and os.path.exists(local_path):
+            try:
+                local_path = link_to_local_path(file_instance)
+            except ValueError:
+                continue
+            if is_temp_path(local_path) and os.path.exists(local_path):
                 os.remove(local_path)
 
     # 🔹 update zenodo metadata

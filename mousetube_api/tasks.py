@@ -119,10 +119,10 @@ def process_file(self, file_id, repository_id):
 
         return f"✅ File {file_instance.id} processed successfully on {repository.name}, deposition {deposition_id}."
 
-    except Exception as e:
+    except Exception:
         file_instance.status = "error"
         file_instance.save(update_fields=["status"])
-        logger.exception(f"Error processing file {file_instance.id}: {e}")
+        logger.exception(f"Error processing file {file_instance.id}")
         raise
 
 
@@ -161,8 +161,8 @@ def delete_file_from_repository(self, file_id, repository_id=None):
         logger.warning(f"⚠️ File {file_id} not found for deletion.")
         return f"File {file_id} not found."
 
-    except Exception as e:
-        logger.exception(f"❌ Error deleting file {file_id}: {e}")
+    except Exception:
+        logger.exception(f"❌ Error deleting file {file_id}")
         raise
 
 

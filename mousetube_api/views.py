@@ -9,6 +9,7 @@ Code under GPL v3.0 licence
 
 import json
 import os
+import uuid
 
 import django_filters
 from celery.result import AsyncResult
@@ -33,6 +34,7 @@ from django.db.models import (
 from django.db.models.functions import Cast
 from django.http import Http404
 from django.shortcuts import get_object_or_404, render
+from django.utils.text import get_valid_filename
 from django.utils.timezone import now
 from django_countries import countries
 from django_filters.rest_framework import DjangoFilterBackend
@@ -349,6 +351,9 @@ def repository_metadata_payload(request, repository_id: int, recording_session_i
         return Response(
             {"error": "Recording session not found."}, status=status.HTTP_404_NOT_FOUND
         )
+
+    if recording_session.created_by != request.user and not request.user.is_staff:
+        return Response({"detail": "Not authorized."}, status=status.HTTP_403_FORBIDDEN)
 
     files = File.objects.filter(recording_session=recording_session).exclude(
         status__in=["pending", "processing", "error"]
@@ -805,7 +810,7 @@ class ProtocolViewSet(viewsets.ModelViewSet):
         )
 
         # Check if a protocol with the same name already exists
-        protocol, created = Protocol.objects.get_or_create(
+        protocol, _created = Protocol.objects.get_or_create(
             name=name,
             defaults={
                 **validated_data,
@@ -1141,12 +1146,13 @@ class FileAPIView(GenericAPIView):
     # POST Celery
     # -----------------------------
     def post(self, request, *args, **kwargs):
-        if not request.user.is_staff:
-            if "plot" in request.data or "spectrogram" in request.data:
-                return Response(
-                    {"detail": "Only administrators can set plot or spectrogram."},
-                    status=status.HTTP_403_FORBIDDEN,
-                )
+        if not request.user.is_staff and (
+            "plot" in request.data or "spectrogram" in request.data
+        ):
+            return Response(
+                {"detail": "Only administrators can set plot or spectrogram."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         serializer = self.serializer_class(
             data=request.data, context={"request": request}
         )
@@ -1173,7 +1179,7 @@ class FileAPIView(GenericAPIView):
                 task = process_file.delay(file.id, file.repository.id)
                 file.celery_task_id = task.id
                 file.save(update_fields=["celery_task_id"])
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 - any broker error must flag the file
                 file.status = "error"
                 file.save(update_fields=["status"])
                 return Response(
@@ -1193,6 +1199,7 @@ class FileAPIView(GenericAPIView):
 # File status endpoint
 # ----------------------------
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def file_task_status(request, file_id):
     file = get_object_or_404(File, id=file_id)
 
@@ -1207,7 +1214,8 @@ def file_task_status(request, file_id):
         "status": file.status,
     }
 
-    if result.failed():
+    # error text can contain the Zenodo URL with its access_token: staff only
+    if result.failed() and request.user.is_staff:
         response["task_error"] = str(result.result)
         response["task_traceback"] = result.traceback
 
@@ -1237,12 +1245,13 @@ class FileUploadAsyncView(APIView):
         temp_dir = os.path.join(settings.MEDIA_ROOT, "temp")
         os.makedirs(temp_dir, exist_ok=True)
 
-        temp_path = os.path.join(temp_dir, uploaded_file.name)
+        # unique prefix: two users uploading "a.wav" must not overwrite each other
+        safe_name = f"{uuid.uuid4().hex}_{get_valid_filename(uploaded_file.name)}"
+        temp_path = os.path.join(temp_dir, safe_name)
         with open(temp_path, "wb+") as dest:
-            for chunk in uploaded_file.chunks():
-                dest.write(chunk)
+            dest.writelines(uploaded_file.chunks())
 
-        return Response({"temp_path": f"/media/temp/{uploaded_file.name}"})
+        return Response({"temp_path": f"/media/temp/{safe_name}"})
 
 
 # ----------------------------
@@ -1271,6 +1280,12 @@ class PublishSessionView(APIView):
 
         payload = request.data.get("payload")
 
+        session = get_object_or_404(RecordingSession, pk=recording_session_id)
+        if session.created_by != request.user and not request.user.is_staff:
+            return Response(
+                {"detail": "Not authorized."}, status=status.HTTP_403_FORBIDDEN
+            )
+
         task = publish_session_deposition.delay(
             recording_session_id, repository_id, payload
         )
@@ -1285,6 +1300,7 @@ class PublishSessionView(APIView):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_task_status(request):
     task_id = request.query_params.get("task_id")
     if not task_id:
@@ -1296,7 +1312,9 @@ def get_task_status(request):
         "task_id": task_id,
         "state": result.state,  # PENDING, STARTED, SUCCESS, FAILURE
         "success": result.successful(),
-        "error": str(result.result) if result.failed() else None,
+        "error": str(result.result)
+        if result.failed() and request.user.is_staff
+        else None,
         "progress": 0,
     }
 
@@ -1335,12 +1353,13 @@ class FileDetailAPIView(GenericAPIView):
             return Response(
                 {"detail": "File not found"}, status=status.HTTP_404_NOT_FOUND
             )
-        if not request.user.is_staff:
-            if "plot" in request.data or "spectrogram" in request.data:
-                return Response(
-                    {"detail": "Only administrators can set plot or spectrogram."},
-                    status=status.HTTP_403_FORBIDDEN,
-                )
+        if not request.user.is_staff and (
+            "plot" in request.data or "spectrogram" in request.data
+        ):
+            return Response(
+                {"detail": "Only administrators can set plot or spectrogram."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         serializer = self.serializer_class(file, data=request.data)
         if serializer.is_valid():
             file = serializer.save()
@@ -1758,6 +1777,7 @@ class FavoriteViewSet(viewsets.ModelViewSet):
 # ----------------------------
 class TrackPageView(GenericAPIView):
     serializer_class = TrackPageSerializer
+    permission_classes = [AllowAny]
 
     @extend_schema(exclude=True)
     def post(self, request):

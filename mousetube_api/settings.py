@@ -15,6 +15,7 @@ from datetime import timedelta
 from pathlib import Path
 
 import environ
+from django.core.exceptions import ImproperlyConfigured
 from django.core.management.utils import get_random_secret_key
 
 # Add two custom countries to django_countries
@@ -47,13 +48,17 @@ for env_path in env_files:
         break
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = env("DEBUG", default=True)
+DEBUG = env.bool("DEBUG", default=False)
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = (
-    env("SECRET_KEY") if env("SECRET_KEY", default=None) else get_random_secret_key()
-)
+SECRET_KEY = env("SECRET_KEY", default=None)
+if not SECRET_KEY:
+    if not DEBUG:
+        # A random key per process would break JWT/session validation across
+        # gunicorn workers and restarts, so refuse to start instead.
+        raise ImproperlyConfigured("SECRET_KEY must be set when DEBUG is false.")
+    SECRET_KEY = get_random_secret_key()
 
-ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=["localhost,127.0.0.1"])
+ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=["localhost", "127.0.0.1"])
 # CORS_ORIGIN_ALLOW_ALL = True
 
 CORS_ALLOWED_ORIGINS = env.list(
@@ -74,11 +79,14 @@ CSRF_TRUSTED_ORIGINS = env.list(
     ],
 )
 CORS_ALLOW_CREDENTIALS = True
-X_FRAME_OPTIONS = "ALLOW-FROM http://127.0.0.1:8001"
+X_FRAME_OPTIONS = "DENY"  # "ALLOW-FROM" is obsolete and ignored by browsers
 
 SECURE_SSL_REDIRECT = not DEBUG
 SESSION_COOKIE_SECURE = not DEBUG
 CSRF_COOKIE_SECURE = not DEBUG
+SECURE_HSTS_SECONDS = 0 if DEBUG else env.int("SECURE_HSTS_SECONDS", default=31536000)
+SECURE_HSTS_INCLUDE_SUBDOMAINS = not DEBUG
+SECURE_CONTENT_TYPE_NOSNIFF = True
 
 USE_X_FORWARDED_HOST = env.bool("USE_X_FORWARDED_HOST", default=False)
 SECURE_PROXY_SSL_HEADER = env.tuple(
@@ -234,9 +242,8 @@ REST_FRAMEWORK = {
         "rest_framework_simplejwt.authentication.JWTAuthentication",
     ],
     "DEFAULT_PERMISSION_CLASSES": [
-        # 'rest_framework.permissions.IsAuthenticated',
-        # 'rest_framework.permissions.DjangoModelPermissionsOrAnonReadOnly',
-        "rest_framework.permissions.AllowAny",
+        # Safe default: views that must accept anonymous writes opt in explicitly.
+        "rest_framework.permissions.IsAuthenticatedOrReadOnly",
     ],
 }
 

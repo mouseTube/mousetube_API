@@ -86,11 +86,12 @@ else
     echo "⚠️ Fixture file not found or not defined. Skipping fixture loading."
 fi
 
+# ✅ Always collect static files so nginx can serve /static/ (admin CSS, DRF browsable API)
+echo "🧪 Collecting static files..."
+python3 manage.py collectstatic --noinput
+
 # ✅ Starting the server
 if [ "$(echo "$DEBUG" | tr '[:upper:]' '[:lower:]')" = "false" ]; then
-    echo "🧪 Collecting static files..."
-    python3 manage.py collectstatic --noinput
-
     echo "🚀 Starting Gunicorn server..."
     exec gunicorn mousetube_api.asgi:application --bind 0.0.0.0:8000 --timeout 420 -k uvicorn.workers.UvicornWorker
 else
