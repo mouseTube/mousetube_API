@@ -7,7 +7,11 @@ PHENOMIN, CNRS UMR7104, INSERM U964, Université de Strasbourg
 Code under GPL v3.0 licence
 """
 
-from django.contrib import admin
+from allauth.account.models import EmailAddress
+from django.contrib import admin, messages
+from django.contrib.auth import get_user_model
+from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
+from django.db.models import Exists, OuterRef
 
 from .models import (
     AnimalProfile,
@@ -28,6 +32,7 @@ from .models import (
     Subject,
     UserProfile,
 )
+from .utils.registration import email_is_verified, send_account_activated_email
 
 
 class ContactAdmin(admin.ModelAdmin):
@@ -182,3 +187,60 @@ admin.site.register(Contact, ContactAdmin)
 admin.site.site_header = "Mousetube Admin"
 admin.site.site_title = "Mousetube Admin"
 admin.site.index_title = "Mousetube Database"
+
+
+# ----------------------------
+# User accounts: review of registration requests
+# ----------------------------
+User = get_user_model()
+admin.site.unregister(User)
+
+
+@admin.register(User)
+class UserAccountAdmin(DjangoUserAdmin):
+    """Shows who confirmed their e-mail and lets admins activate accounts in bulk."""
+
+    list_display = (*DjangoUserAdmin.list_display, "is_active", "email_confirmed")
+    list_filter = ("is_active", *DjangoUserAdmin.list_filter)
+    actions = ("activate_accounts",)
+
+    def get_queryset(self, request):
+        return (
+            super()
+            .get_queryset(request)
+            .annotate(
+                _email_confirmed=Exists(
+                    EmailAddress.objects.filter(
+                        user=OuterRef("pk"), email=OuterRef("email"), verified=True
+                    )
+                )
+            )
+        )
+
+    @admin.display(
+        boolean=True, description="E-mail confirmed", ordering="_email_confirmed"
+    )
+    def email_confirmed(self, obj):
+        return obj._email_confirmed
+
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        if change and "is_active" in form.changed_data and obj.is_active:
+            send_account_activated_email(obj)
+
+    @admin.action(description="Activate selected accounts (e-mail must be confirmed)")
+    def activate_accounts(self, request, queryset):
+        activated = 0
+        for user in queryset.filter(is_active=False):
+            if not email_is_verified(user):
+                self.message_user(
+                    request,
+                    f"{user.username}: e-mail not confirmed yet, not activated.",
+                    messages.WARNING,
+                )
+                continue
+            user.is_active = True
+            user.save(update_fields=["is_active"])
+            send_account_activated_email(user)
+            activated += 1
+        self.message_user(request, f"{activated} account(s) activated.")

@@ -58,7 +58,18 @@ The settings read `.env` at the root of the project, then `/etc/mousetube/mouset
 | `CLIENT_ID`, `CLIENT_SECRET` | for ORCID login | empty | ORCID OAuth application. |
 | `REQUIRE_INSTITUTIONAL_EMAIL` | no | `true` | Registration is refused for personal addresses (Gmail, Outlook...), see `mousetube_api/utils/email_domains.py`. Set `false` in local development if you only have a personal address. |
 | `ORCID_BASE_DOMAIN` | no | `orcid.org` | Use `sandbox.orcid.org` with a sandbox application. |
-| `DJOSER_SEND_ACTIVATION_EMAIL`, `DEFAULT_ADMIN_EMAIL`, `DEFAULT_FROM_EMAIL` | no | `false`, `mousetube@igbmc.fr`, `no-reply@mousetube.com` | New accounts are inactive until an admin activates them. |
+| `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_USER`, `EMAIL_PASSWORD`, `EMAIL_USE_TLS` | **yes in production** | no `EMAIL_HOST` = e-mails are printed in the logs | SMTP server. Needed for the confirmation e-mails below. |
+| `DEFAULT_ADMIN_EMAIL`, `DEFAULT_FROM_EMAIL` | yes in production | `mousetube@igbmc.fr`, `no-reply@mousetube.com` | The admin address receives the account requests. |
+| `ADMIN_BASE_URL` | no | `http://localhost:8000` in debug, otherwise `https://FRONT_DOMAIN` | Base of the admin link written in the e-mail to the admin. |
+| `DJOSER_SEND_ACTIVATION_EMAIL` | no | `true` | Keep it on: it sends the confirmation link to new users. |
+
+### Account requests
+
+1. The user registers with an **institutional** e-mail address (personal providers such as Gmail are refused).
+2. The account is created **inactive** and the user receives a link to confirm the address.
+3. Once the link is opened, `DEFAULT_ADMIN_EMAIL` receives a message with a link to the account in the admin. Opening the link twice does not send a second message.
+4. The admin ticks **Active** and saves, or selects several accounts in the users list and runs **Activate selected accounts**. The list shows an *E-mail confirmed* column. Accounts whose e-mail is not confirmed are refused by the action.
+5. The user receives an e-mail saying the account is active.
 
 Docker-only variables: `RESET_DB=true` recreates the database. It is refused when `DEBUG=false`. Migrations are no longer generated when the container starts, so commit them.
 

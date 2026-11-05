@@ -307,7 +307,8 @@ CSRF_COOKIE_SAMESITE = "None"
 
 # Djoser settings
 DJOSER = {
-    "SEND_ACTIVATION_EMAIL": env.bool("DJOSER_SEND_ACTIVATION_EMAIL", default=False),
+    # The link only confirms the address; an admin then activates the account.
+    "SEND_ACTIVATION_EMAIL": env.bool("DJOSER_SEND_ACTIVATION_EMAIL", default=True),
     "ACTIVATION_URL": "activate/{uid}/{token}",
     "SERIALIZERS": {
         "user": "mousetube_api.serializers.CustomUserSerializer",
@@ -340,14 +341,16 @@ SIMPLE_JWT = {
 # --------------------------------
 # Emails
 # --------------------------------
-# EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
-# EMAIL_HOST = env("EMAIL_HOST")
-# EMAIL_PORT = env.int("EMAIL_PORT")
-# EMAIL_USE_TLS = env.bool("EMAIL_USE_TLS", default=True)
-# EMAIL_HOST_USER = env("EMAIL_USER")
-# EMAIL_HOST_PASSWORD = env("EMAIL_PASSWORD")
-
-EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+EMAIL_HOST = env("EMAIL_HOST", default="")
+if EMAIL_HOST:
+    EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+    EMAIL_PORT = env.int("EMAIL_PORT", default=587)
+    EMAIL_USE_TLS = env.bool("EMAIL_USE_TLS", default=True)
+    EMAIL_HOST_USER = env("EMAIL_USER", default="")
+    EMAIL_HOST_PASSWORD = env("EMAIL_PASSWORD", default="")
+else:
+    # No SMTP server configured: e-mails are printed in the logs (development).
+    EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="no-reply@mousetube.com")
 DEFAULT_ADMIN_EMAIL = env("DEFAULT_ADMIN_EMAIL", default="mousetube@igbmc.fr")
 
@@ -379,6 +382,11 @@ LOGS_DIR = Path(BASE_DIR) / "logs"
 LOGS_DIR.mkdir(exist_ok=True)
 
 FRONT_DOMAIN = env("FRONT_DOMAIN", default="localhost:3000")
+FRONT_URL = f"{'http' if DEBUG else 'https'}://{FRONT_DOMAIN}"
+# Where admins open the Django admin from the e-mail they receive.
+ADMIN_BASE_URL = env(
+    "ADMIN_BASE_URL", default="http://localhost:8000" if DEBUG else FRONT_URL
+)
 
 LOGGING = {
     "version": 1,

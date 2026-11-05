@@ -6,6 +6,7 @@ _THROTTLED = (
     ("auth", "/auth/jwt/refresh"),
     ("auth", "/auth/users/reset_password"),
     ("auth", "/auth/users/resend_activation"),
+    ("auth", "/auth/users/activation"),
     ("register", "/auth/users/"),
 )
 

@@ -33,6 +33,7 @@ from django.views.static import serve
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 from rest_framework.routers import DefaultRouter
 
+from .account_views import CustomUserViewSet
 from .views import (
     AnimalProfileViewSet,
     ContactViewSet,
@@ -70,6 +71,8 @@ from .views import (
 )
 
 router = DefaultRouter()
+auth_router = DefaultRouter()  # same routes as djoser.urls, with our activation step
+auth_router.register("users", CustomUserViewSet, basename="user")
 router.register(r"protocol", ProtocolViewSet, basename="protocol")
 router.register(
     r"recording-session", RecordingSessionViewSet, basename="recording-session"
@@ -153,7 +156,7 @@ urlpatterns = [
     path(
         "swagger/", SpectacularSwaggerView.as_view(url_name="schema"), name="swagger-ui"
     ),
-    path("auth/", include("djoser.urls")),
+    path("auth/", include(auth_router.urls)),
     path("auth/", include("djoser.urls.jwt")),
     path("accounts/", include("allauth.socialaccount.urls")),
     path("accounts/", include("allauth.urls")),

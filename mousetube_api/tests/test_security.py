@@ -101,8 +101,18 @@ class PermissionTests(TestCase):
 LOCMEM = {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}}
 
 
+class FreshCache:
+    """LocMem is shared by the whole test process: reset the rate-limit counters."""
+
+    def setUp(self):
+        from django.core.cache import cache
+
+        cache.clear()
+        super().setUp()
+
+
 @override_settings(CACHES=LOCMEM)  # do not touch the real Redis counters
-class ThrottleTests(TestCase):
+class ThrottleTests(FreshCache, TestCase):
     def test_login_is_rate_limited(self):
         client = APIClient()
         codes = [
@@ -194,7 +204,7 @@ class OrcidAndPrivacyTests(TestCase):
 
 
 @override_settings(CACHES=LOCMEM)
-class InstitutionalEmailTests(TestCase):
+class InstitutionalEmailTests(FreshCache, TestCase):
     def test_personal_domains_are_detected(self):
         from mousetube_api.utils.email_domains import is_personal_email
 
@@ -234,3 +244,85 @@ class InstitutionalEmailTests(TestCase):
         body = APIClient().get("/api/personal-email-domains/").json()
         self.assertTrue(body["enforced"])
         self.assertIn("gmail.com", body["domains"])
+
+
+@override_settings(CACHES=LOCMEM)
+class AccountRequestWorkflowTests(FreshCache, TestCase):
+    """e-mail confirmation by the user, then activation by an admin."""
+
+    def setUp(self):
+        super().setUp()
+        from django.core import mail
+
+        self.mail = mail
+        self.client = APIClient()
+        r = self.client.post(
+            "/auth/users/",
+            {
+                "username": "newbie",
+                "email": "newbie@igbmc.fr",
+                "password": "Zx9!tr0ngPassw0rd#",
+            },
+            format="json",
+        )
+        self.assertEqual(r.status_code, 201)
+        self.user = get_user_model().objects.get(username="newbie")
+
+    def _link(self):
+        from django.contrib.auth.tokens import default_token_generator
+        from djoser import utils
+
+        return {
+            "uid": utils.encode_uid(self.user.pk),
+            "token": default_token_generator.make_token(self.user),
+        }
+
+    def test_registration_mails_the_user_not_the_admin(self):
+        self.assertFalse(self.user.is_active)
+        self.assertEqual([m.to for m in self.mail.outbox], [["newbie@igbmc.fr"]])
+
+    def test_confirmation_notifies_admin_once_and_does_not_activate(self):
+        self.mail.outbox.clear()
+        for _ in range(2):  # a second click must not mail the admin again
+            r = self.client.post("/auth/users/activation/", self._link(), format="json")
+            self.assertEqual(r.status_code, 204)
+        self.user.refresh_from_db()
+        self.assertFalse(self.user.is_active)
+        self.assertEqual(len(self.mail.outbox), 1)
+        self.assertEqual(self.mail.outbox[0].to, ["mousetube@igbmc.fr"])
+        self.assertIn(
+            f"/admin/auth/user/{self.user.pk}/change/", self.mail.outbox[0].body
+        )
+
+    def test_bad_token_is_refused(self):
+        link = self._link() | {"token": "forged"}
+        r = self.client.post("/auth/users/activation/", link, format="json")
+        self.assertEqual(r.status_code, 400)
+
+    def test_admin_action_activates_only_confirmed_accounts(self):
+        from django.contrib.admin.sites import site
+        from django.contrib.messages.storage.fallback import FallbackStorage
+        from django.test import RequestFactory
+
+        other = get_user_model().objects.create_user(
+            "unconfirmed", email="u@igbmc.fr", is_active=False
+        )
+        self.client.post("/auth/users/activation/", self._link(), format="json")
+        self.mail.outbox.clear()
+
+        request = RequestFactory().post("/admin/")
+        request.user = get_user_model().objects.create_superuser(
+            "root", "r@igbmc.fr", "x"
+        )
+        request.session = {}
+        request._messages = FallbackStorage(request)
+        admin_obj = site._registry[get_user_model()]
+        admin_obj.activate_accounts(
+            request, get_user_model().objects.filter(pk__in=[self.user.pk, other.pk])
+        )
+
+        self.user.refresh_from_db()
+        other.refresh_from_db()
+        self.assertTrue(self.user.is_active)
+        self.assertFalse(other.is_active)
+        self.assertEqual([m.to for m in self.mail.outbox], [["newbie@igbmc.fr"]])
