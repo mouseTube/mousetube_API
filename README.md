@@ -1,9 +1,9 @@
 <h1 align="center">MouseTube API</h1>
 
 ![Build Passing](https://img.shields.io/github/actions/workflow/status/mouseTube/mousetube_API/ci.yml?branch=main)
-[![Python 3.8+](https://img.shields.io/badge/Python-3.8%2B-blue.svg)](https://www.python.org/downloads/release/python-380/)
-[![Django 4.0+](https://img.shields.io/badge/Django-4.0%2B-blue.svg)](https://www.djangoproject.com/download/)
-[![Django REST framework 3.12+](https://img.shields.io/badge/Django%20REST%20framework-3.12%2B-blue.svg)](https://www.django-rest-framework.org/community/3.12.0/)
+[![Python 3.13](https://img.shields.io/badge/Python-3.13-blue.svg)](https://www.python.org/downloads/)
+[![Django 5.2](https://img.shields.io/badge/Django-5.2%20LTS-blue.svg)](https://www.djangoproject.com/download/)
+[![Django REST framework 3.18](https://img.shields.io/badge/Django%20REST%20framework-3.18-blue.svg)](https://www.django-rest-framework.org/)
 [![Documentation](https://img.shields.io/badge/docs-available-brightgreen)](https://mousetube.github.io/mousetube_APIv0-5/)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 
@@ -19,7 +19,7 @@
 
 ### 1. Create a Python environment
 
-We recommend creating a virtual environment to isolate the project's dependencies.
+Python **3.13** is required. We recommend creating a virtual environment to isolate the project's dependencies.
 
 ```bash
 # Create a virtual environment
@@ -32,20 +32,33 @@ source .venv/bin/activate
 
 ### 2. Create a `.env` file
 
-Create a `.env` file at the root of the project and fill in the following variables:
+Copy the example and fill it in:
 
-```env
-DEBUG=
-ALLOWED_HOSTS=
-DB_ENGINE=django.db.backends.mysql
-DB_ROOT_PASS=
-DB_NAME=
-DB_USER=
-DB_PASSWORD=
-DB_HOST=127.0.0.1
-DB_PORT=3306
-DB_SSL=True
+```bash
+cp .env.example .env
 ```
+
+The settings read `.env` at the root of the project, then `/etc/mousetube/mousetube.env` if there is no `.env`.
+
+| Variable | Required | Default | Notes |
+|---|---|---|---|
+| `DEBUG` | no | `false` | `true` only for local development. |
+| `SECRET_KEY` | **yes when `DEBUG` is false** | none | The app refuses to start without it. Generate one with `python -c "from django.core.management.utils import get_random_secret_key as k; print(k())"`. |
+| `ALLOWED_HOSTS` | yes in production | `localhost,127.0.0.1` | Comma-separated. |
+| `CORS_ALLOWED_ORIGINS`, `CSRF_TRUSTED_ORIGINS` | yes in production | localhost:3000 and mousetube.local | Comma-separated origins of the website. |
+| `FRONT_DOMAIN` | yes in production | `localhost:3000` | Used in e-mail links and the ORCID redirect. |
+| `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_HOST`, `DB_PORT` | yes | host `127.0.0.1`, port `3306` | `DB_ROOT_PASS` is also read by the Docker entrypoint. |
+| `DB_SSL`, `DB_SSL_CA`, `DB_SSL_CERT`, `DB_SSL_KEY` | no | `False` | |
+| `CELERY_BROKER_URL` | yes | `redis://127.0.0.1:6379/0` | Redis, see step 4. |
+| `CACHE_URL` | no | same Redis server, db `1` | Shared cache used by the rate limits. |
+| `DRF_NUM_PROXIES` | **yes behind proxies** | `0` | Number of reverse proxies in front of Django (HAProxy + nginx = `2`). With `0` every visitor shares the proxy's IP, so the login limit (10/min) applies to the whole site. Check that your proxy sets `X-Forwarded-For`. |
+| `SECURE_HSTS_SECONDS` | no | `31536000` | Only applied when `DEBUG` is false. |
+| `USE_X_FORWARDED_HOST` | no | `false` | |
+| `ZENODO_API`, `ZENODO_TOKEN` | to publish | sandbox URL, empty | The token is sent as a Bearer header, never in a URL. |
+| `CLIENT_ID`, `CLIENT_SECRET` | for ORCID login | empty | ORCID OAuth application. |
+| `DJOSER_SEND_ACTIVATION_EMAIL`, `DEFAULT_ADMIN_EMAIL`, `DEFAULT_FROM_EMAIL` | no | `false`, `mousetube@igbmc.fr`, `no-reply@mousetube.com` | New accounts are inactive until an admin activates them. |
+
+Docker-only variables: `RESET_DB=true` recreates the database. It is refused when `DEBUG=false`. Migrations are no longer generated when the container starts, so commit them.
 
 ### 3. Install and start MariaDB
 
@@ -63,7 +76,16 @@ sudo systemctl start mariadb
 sudo systemctl status mariadb
 ```
 
-### 4. Install system dependencies
+### 4. Install and start Redis
+
+Redis is needed by Celery (background tasks) and by the shared cache that backs the login rate limit. Without it, login requests fail.
+
+```bash
+sudo apt-get install redis-server
+sudo systemctl start redis-server
+```
+
+### 5. Install system dependencies
 
 You will need to install some system dependencies before installing **mousetube_api**:
 
@@ -73,7 +95,7 @@ sudo apt-get install pkg-config
 sudo apt-get install libmariadb-dev
 ```
 
-### 5. Install Python dependencies
+### 6. Install Python dependencies
 
 Once the system dependencies are installed, install **mousetube_api** and its Python dependencies:
 
@@ -81,7 +103,7 @@ Once the system dependencies are installed, install **mousetube_api** and its Py
 pip install -e .
 ```
 
-### 6. Run the server in development mode
+### 7. Run the server in development mode
 
 Finally, start the Django development server:
 
@@ -89,29 +111,39 @@ Finally, start the Django development server:
 mousetube_api runserver
 ```
 
+### 8. Run the tests
+
+The test runner creates its own database, so the database user needs the right to create one.
+
+```bash
+python manage.py test mousetube_api.tests
+```
+
 ## Docker Alternative FullStack Installation
 
 1. Clone the repositories:
 
    ```bash
-   git clone https://github.com/mouseTube/mousetube_APIv0-5.git
-   git clone https://github.com/mouseTube/mousetube_frontendv0-5.git
+   git clone https://github.com/mouseTube/mousetube_API.git
+   git clone https://github.com/mouseTube/mousetube_frontend.git
    ```
 
-2. Add a .env file in the mousetube_APIv0-5 folder as described earlier in the section "2. Create a .env file".
+2. Add a .env file in the mousetube_API folder as described earlier in the section "2. Create a .env file". In Docker, use `DB_HOST=db` and `CELERY_BROKER_URL=redis://redis:6379/0`. Both repositories must sit side by side (the compose file builds `../mousetube_frontend`).
 
-3. Add a .env file in the mousetube_frontendv0-5 folder with the following content:
+3. Add a .env file in the mousetube_frontend folder with the following content:
 
    ```env
    DEBUG=true
    NUXT_PUBLIC_API_BASE_URL=http://127.0.0.1:8000/api
    ```
 
-4. Navigate to the mousetube_APIv0-5 folder and run the following command to build the Docker image and start all required services:
+4. Navigate to the mousetube_API folder and run the following command to build the Docker image and start all required services:
 
    ```bash
    docker compose up --build
    ```
+
+   This starts MariaDB, Redis, the API (http://localhost:8000), Celery, the website (http://localhost:3000) and nginx. The database and Redis ports are only published on `127.0.0.1`.
 
 ### Docker Stop and Clean Up
 
@@ -138,16 +170,3 @@ docker image prune -a
 ## Check out mouseTube's publications:
 
 - Torquet N., de Chaumont F., Faure P., Bourgeron T., Ey E. mouseTube – a database to collaboratively unravel mouse ultrasonic communication [version 1; peer review: 2 approved]. F1000Research 2016, 5:2332 ([F1000Research Link](https://doi.org/10.12688/f1000research.9439.1)) (2016).
-
-## Security-related settings
-
-| Variable | Default | Notes |
-|---|---|---|
-| `DEBUG` | `false` | Must be `true` only for local development. |
-| `SECRET_KEY` | none | **Required when `DEBUG` is false**; the app refuses to start without it. |
-| `DRF_NUM_PROXIES` | `0` | Reverse proxies in front of Django (HAProxy + nginx = `2`). Needed for per-IP rate limits on login/registration; with `0` every user shares the proxy's IP. |
-| `CACHE_URL` | Redis db 1 on the Celery broker host | Shared cache for rate limits. |
-| `SECURE_HSTS_SECONDS` | `31536000` | Only applied when `DEBUG` is false. |
-| `ZENODO_TOKEN` | empty | Sent as a Bearer header; never put it in a URL. |
-
-`RESET_DB=true` is refused when `DEBUG=false`. Migrations are no longer generated at container start: commit them.
