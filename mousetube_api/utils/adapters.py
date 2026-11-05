@@ -12,6 +12,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 
 from mousetube_api.models import UserProfile
 from mousetube_api.utils.orcid_proof import make_orcid_proof
+from mousetube_api.utils.registration import email_is_verified
 
 User = get_user_model()
 
@@ -59,6 +60,16 @@ class MySocialAccountAdapter(DefaultSocialAccountAdapter):
         try:
             profile = UserProfile.objects.get(orcid=orcid_id)
             user = profile.user
+            if not user.is_active:
+                # ORCID proved who they are, so showing the state of the request is safe.
+                state = (
+                    "awaiting_review"
+                    if email_is_verified(user)
+                    else "awaiting_email_confirmation"
+                )
+                query = urlencode({"account_status": state})
+                redirect_url = f"{protocol}://{domain}/account/login?{query}"
+                raise ImmediateHttpResponse(HttpResponseRedirect(redirect_url))
             token = str(RefreshToken.for_user(user).access_token)
 
             # Fragment (#), not query (?): it is never sent to servers, logs or Referer.

@@ -504,3 +504,43 @@ class OrcidProofExpiryTests(FreshCache, TestCase):
         self.assertEqual(
             APIClient().post("/auth/users/", body, format="json").status_code, 201
         )
+
+
+class OrcidLoginRedirectTests(TestCase):
+    """ORCID login of an account that is not active yet must not hand out a token."""
+
+    def _redirect(self, user):
+        from allauth.core.exceptions import ImmediateHttpResponse
+        from django.test import RequestFactory
+
+        from mousetube_api.utils.adapters import MySocialAccountAdapter
+
+        request = RequestFactory().get("/")
+        request.session = {}
+        sociallogin = SimpleNamespace(
+            account=SimpleNamespace(
+                provider="orcid",
+                uid=user.user_profile.orcid,
+                extra_data={},
+            )
+        )
+        with self.assertRaises(ImmediateHttpResponse) as caught:
+            MySocialAccountAdapter().pre_social_login(request, sociallogin)
+        return caught.exception.response.url
+
+    def _user(self, **kwargs):
+        user = get_user_model().objects.create_user(
+            "orcid_user", email="o@igbmc.fr", **kwargs
+        )
+        user.user_profile.orcid = "0000-0002-1825-0097"
+        user.user_profile.save()
+        return user
+
+    def test_pending_account_is_sent_back_to_login_with_its_status(self):
+        url = self._redirect(self._user(is_active=False))
+        self.assertIn("/account/login?account_status=awaiting_email_confirmation", url)
+        self.assertNotIn("token", url)
+
+    def test_active_account_gets_a_token_in_the_fragment(self):
+        url = self._redirect(self._user())
+        self.assertIn("/auth/callback#token=", url)
