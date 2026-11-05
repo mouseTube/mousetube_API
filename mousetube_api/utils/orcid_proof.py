@@ -3,7 +3,7 @@
 from django.core import signing
 
 _SALT = "mousetube.orcid-proof"
-MAX_AGE = 600  # seconds
+MAX_AGE = 1800  # seconds: enough to fill in the registration form
 
 
 def make_orcid_proof(orcid):

@@ -477,3 +477,30 @@ class PendingLoginStatusTests(FreshCache, TestCase):
         code, body = self._login("live")
         self.assertEqual(code, 200)
         self.assertIn("access", body)
+
+
+@override_settings(CACHES=LOCMEM)
+class OrcidProofExpiryTests(FreshCache, TestCase):
+    def test_expired_proof_is_refused_at_registration(self):
+        import time
+        from unittest import mock
+
+        from mousetube_api.utils.orcid_proof import MAX_AGE, make_orcid_proof
+
+        proof = make_orcid_proof("0000-0002-1825-0097")
+        body = {
+            "username": "late",
+            "email": "late@igbmc.fr",
+            "password": "Zx9!tr0ngPassw0rd#",
+            "orcid_proof": proof,
+        }
+        with mock.patch(
+            "django.core.signing.time.time", return_value=time.time() + MAX_AGE + 5
+        ):
+            r = APIClient().post("/auth/users/", body, format="json")
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("orcid_proof", r.json())
+        # still valid inside the window
+        self.assertEqual(
+            APIClient().post("/auth/users/", body, format="json").status_code, 201
+        )
