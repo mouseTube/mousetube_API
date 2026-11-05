@@ -423,3 +423,57 @@ class AdminAccountReviewTests(TestCase):
         self.assertTrue(users.filter(pk=self.old.pk).exists())
         self.assertEqual([m.to for m in self.mail.outbox], [["p@igbmc.fr"]])
         self.assertIn("Use your institutional address", self.mail.outbox[0].body)
+
+
+@override_settings(CACHES=LOCMEM)
+class PendingLoginStatusTests(FreshCache, TestCase):
+    """The owner of a pending account sees where the request stands; nobody else learns more."""
+
+    def setUp(self):
+        super().setUp()
+        from allauth.account.models import EmailAddress
+
+        User = get_user_model()
+        self.review = User.objects.create_user(
+            "review", email="r@igbmc.fr", password="Zx9!tr0ng", is_active=False
+        )
+        EmailAddress.objects.create(
+            user=self.review, email="r@igbmc.fr", verified=True, primary=True
+        )
+        self.unconfirmed = User.objects.create_user(
+            "unconf", email="u@igbmc.fr", password="Zx9!tr0ng", is_active=False
+        )
+        User.objects.create_user("live", email="l@igbmc.fr", password="Zx9!tr0ng")
+
+    def _login(self, username, password="Zx9!tr0ng"):
+        r = APIClient().post(
+            "/auth/jwt/create/",
+            {"username": username, "password": password},
+            format="json",
+        )
+        return r.status_code, r.json()
+
+    def test_states_are_shown_with_the_right_password(self):
+        code, body = self._login("review")
+        self.assertEqual((code, body["account_status"]), (401, "awaiting_review"))
+        code, body = self._login("unconf")
+        self.assertEqual(body["account_status"], "awaiting_email_confirmation")
+
+    def test_nothing_more_is_revealed_without_the_password(self):
+        generic = "No active account found with the given credentials"
+        for username, password in (
+            ("review", "wrong"),
+            ("unconf", "wrong"),
+            ("live", "wrong"),
+            ("nobody", "whatever"),
+        ):
+            with self.subTest(username=username):
+                code, body = self._login(username, password)
+                self.assertEqual(code, 401)
+                self.assertEqual(body["detail"], generic)
+                self.assertNotIn("account_status", body)
+
+    def test_active_account_still_logs_in(self):
+        code, body = self._login("live")
+        self.assertEqual(code, 200)
+        self.assertIn("access", body)

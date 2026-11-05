@@ -8,6 +8,7 @@ Code under GPL v3.0 licence
 """
 
 from django.conf import settings
+from django.contrib.auth import get_user_model
 from django.contrib.auth.models import User
 from django.contrib.contenttypes.models import ContentType
 from django.core import signing
@@ -15,9 +16,12 @@ from django.db.models import Count, Q
 from django_countries.serializer_fields import CountryField
 from djoser.serializers import UserCreateSerializer as BaseUserCreateSerializer
 from rest_framework import serializers
+from rest_framework.exceptions import AuthenticationFailed
+from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
 from mousetube_api.utils.email_domains import is_personal_email
 from mousetube_api.utils.orcid_proof import read_orcid_proof
+from mousetube_api.utils.registration import email_is_verified
 from mousetube_api.utils.validators import (
     validate_doi,
     validate_doi_link_consistency,
@@ -55,6 +59,42 @@ class ModerationMixin:
         if value == "validated" and not (request and request.user.is_staff):
             raise serializers.ValidationError("Only administrators can validate.")
         return value
+
+
+class PendingAwareTokenObtainPairSerializer(TokenObtainPairSerializer):
+    """Login that tells the owner of a pending account where the request stands.
+
+    The state is only revealed when the password is correct, so it does not tell anyone
+    which usernames exist. Exactly one extra password hash is computed in every failing
+    case, so the response time does not give it away either.
+    """
+
+    def validate(self, attrs):
+        try:
+            return super().validate(attrs)
+        except AuthenticationFailed:
+            user_model = get_user_model()
+            username = attrs.get(self.username_field)
+            user = user_model.objects.filter(**{self.username_field: username}).first()
+            password = attrs.get("password", "")
+            if user is not None and not user.is_active:
+                password_ok = user.check_password(password)
+            else:
+                user_model().set_password(password)  # same cost, result ignored
+                password_ok = False
+            if password_ok:
+                state = (
+                    "awaiting_review"
+                    if email_is_verified(user)
+                    else "awaiting_email_confirmation"
+                )
+                raise AuthenticationFailed(
+                    {
+                        "detail": "Your account is not active yet.",
+                        "account_status": state,
+                    }
+                ) from None
+            raise
 
 
 class CustomUserCreateSerializer(BaseUserCreateSerializer):
