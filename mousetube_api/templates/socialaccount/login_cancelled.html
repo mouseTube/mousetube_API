@@ -1,0 +1,8 @@
+{% extends "oauth_base.html" %}
+{% block head_title %}Login cancelled - mouseTube{% endblock %}
+{% block content %}
+  <div class="icon" aria-hidden="true">&#128683;</div>
+  <h1>Login cancelled</h1>
+  <p>You cancelled the ORCID login. Nothing was changed.</p>
+  <a class="btn btn-primary" href="{{ FRONT_URL }}/account/login">Back to the login page</a>
+{% endblock %}

@@ -1,0 +1,24 @@
+{% extends "oauth_base.html" %}
+{% block head_title %}{% if process == "connect" %}Link your ORCID iD{% else %}Log in with ORCID{% endif %} - mouseTube{% endblock %}
+{% block content %}
+  <svg class="icon" xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="#4caf50" role="img" aria-label="ORCID">
+    <path d="M12 0C5.373 0 0 5.373 0 12a12 12 0 002.763 7.73l.011-.011 1.086-1.08a9.927 9.927 0 01-1.984-6.638c0-5.515 4.484-10 10-10s10 4.485 10 10-4.485 10-10 10c-2.248 0-4.318-.766-5.967-2.04l-1.137 1.13a11.97 11.97 0 007.104 2.22c6.627 0 12-5.373 12-12S18.627 0 12 0z"/>
+    <path d="M7.763 12a4.237 4.237 0 014.237-4.237A4.237 4.237 0 0116.237 12a4.237 4.237 0 01-4.237 4.237A4.237 4.237 0 017.763 12zm6.708 0a2.472 2.472 0 10-4.944 0 2.472 2.472 0 004.944 0z"/>
+  </svg>
+  {% if process == "connect" %}
+    <h1>Link your ORCID iD</h1>
+    <p>You are about to sign in to ORCID to link your ORCID iD to your mouseTube account.</p>
+  {% else %}
+    <h1>Log in with ORCID</h1>
+    <p>You are about to sign in to ORCID to log in to mouseTube.</p>
+  {% endif %}
+  <p class="muted">
+    ORCID will ask you to sign in and to authorise mouseTube. mouseTube only reads your ORCID iD
+    and public name. Nothing is changed on your ORCID record.
+  </p>
+  <form method="post">
+    {% csrf_token %}
+    <button type="submit" class="btn btn-orcid">Continue to ORCID</button>
+  </form>
+  <a class="btn btn-link" href="{{ FRONT_URL }}/account/login">Cancel</a>
+{% endblock %}

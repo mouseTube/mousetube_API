@@ -326,3 +326,31 @@ class AccountRequestWorkflowTests(FreshCache, TestCase):
         self.assertTrue(self.user.is_active)
         self.assertFalse(other.is_active)
         self.assertEqual([m.to for m in self.mail.outbox], [["newbie@igbmc.fr"]])
+
+
+class OauthPagesTests(SimpleTestCase):
+    """The allauth screens use our templates (no allauth menu, link back to the website)."""
+
+    def _render(self, name, **ctx):
+        from django.template.loader import render_to_string
+        from django.test import RequestFactory
+
+        return render_to_string(name, ctx, request=RequestFactory().get("/"))
+
+    def test_continue_page_explains_and_posts(self):
+        html = self._render(
+            "socialaccount/login.html",
+            process="connect",
+            provider=SimpleNamespace(name="ORCID"),
+        )
+        self.assertIn("Continue to ORCID", html)
+        self.assertIn("csrfmiddlewaretoken", html)
+        self.assertNotIn("Menu:", html)
+
+    def test_error_and_cancel_pages_link_back_to_login(self):
+        for name in (
+            "socialaccount/authentication_error.html",
+            "socialaccount/login_cancelled.html",
+        ):
+            with self.subTest(name=name):
+                self.assertIn("/account/login", self._render(name))
