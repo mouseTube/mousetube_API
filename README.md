@@ -199,5 +199,7 @@ A dataset is a set of recording sessions; the page shows the files of those sess
   python manage.py import_dataset_metadata --url https://mousetube.fr/api/dataset/
   ```
 
+  Add `--with-images` to also copy the spectrogram and plot image of each file from the old site into `media/` (about 100 MB for the two datasets of mouseTube 0.5; the images are files stored on the old server, not Zenodo previews). The 0.5 download counters are imported too.
+
   `--file` reads a saved JSON, `--created-by USERNAME` sets the owner of the created records (default: first superuser; sessions need one). Running it twice creates nothing new. Protocols are matched on their attributes because `Protocol.save()` rewrites their name.
 

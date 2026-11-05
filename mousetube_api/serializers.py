@@ -947,6 +947,7 @@ class FileSerializer(serializers.ModelSerializer):
 class FileNestedSerializer(serializers.ModelSerializer):
     plot_url = serializers.SerializerMethodField()
     spectrogram_url = serializers.SerializerMethodField()
+    session = serializers.SerializerMethodField()
 
     class Meta:
         model = File
@@ -958,7 +959,36 @@ class FileNestedSerializer(serializers.ModelSerializer):
             "plot_url",
             "spectrogram_url",
             "status",
+            "downloads",
+            "session",
         ]
+
+    def get_session(self, obj):
+        """Short description of the session, shown as chips next to the file."""
+        rs = obj.recording_session
+        if rs is None:
+            return None
+        p = rs.protocol
+        chips = (
+            [
+                value
+                for value in (
+                    p.animals_sex,
+                    p.animals_age,
+                    p.context_duration,
+                    p.context_cage,
+                    p.context_bedding,
+                )
+                if value and value != "unspecified"
+            ]
+            if p
+            else []
+        )
+        return {
+            "name": rs.name,
+            "chips": chips,
+            "animal_profiles": [a.name for a in rs.animal_profiles.all()],
+        }
 
     def get_plot_url(self, obj):
         if obj.plot and hasattr(obj.plot, "url"):
@@ -1009,8 +1039,10 @@ class DatasetSerializer(serializers.ModelSerializer):
         ]
 
     def get_files(self, obj):
-        files_qs = File.objects.filter(
-            recording_session__in=obj.recording_session_list.all()
+        files_qs = (
+            File.objects.filter(recording_session__in=obj.recording_session_list.all())
+            .select_related("recording_session__protocol")
+            .prefetch_related("recording_session__animal_profiles")
         )
         serializer = FileNestedSerializer(files_qs, many=True, context=self.context)
         return serializer.data

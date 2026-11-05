@@ -9,7 +9,10 @@ its `file_list`. Contact e-mails are never exported: the route is public.
 """
 
 import datetime as dt
+import os
 
+import requests
+from django.core.files.base import ContentFile
 from django.db import transaction
 from django.utils import timezone
 from django.utils.dateparse import parse_date, parse_datetime
@@ -290,9 +293,14 @@ def _datetime(value):
     )
 
 
+MAX_IMAGE_BYTES = 20 * 1024 * 1024
+
+
 class DatasetImporter:
-    def __init__(self, created_by=None):
+    def __init__(self, created_by=None, images_from=None):
         self.created_by = created_by
+        self.images_from = images_from  # site that serves the 0.5 /media/ images
+        self.images = {}  # file name -> {"spectrogram": path, "plot": path}
         self.stats = Stats()
 
     def _get_or_create(self, model, lookup, defaults=None):
@@ -550,7 +558,38 @@ class DatasetImporter:
             },
         )
         f.subjects.add(*[s for s in map(self.subject, d.get("subjects") or []) if s])
+        self.fetch_images(f)
         return f
+
+    def fetch_images(self, f):
+        """From the 0.5 list of files: download counter, then spectrogram and plot."""
+        paths = self.images.get(f.name) or {}
+        if paths.get("downloads") and not f.downloads:
+            # the counter of the 0.5 list is the real one (the one in `metadata` is 0)
+            f.downloads = paths["downloads"]
+            f.save(update_fields=["downloads"])
+        for field in ("spectrogram", "plot"):
+            path = paths.get(field)
+            if not path or not self.images_from:
+                continue
+            if getattr(f, field):
+                self.stats.add("Image", False)
+                continue
+            url = self.images_from.rstrip("/") + "/" + path.lstrip("/")
+            try:
+                response = requests.get(url, timeout=60)
+            except requests.RequestException:
+                self.stats.add("Image (failed)", True)
+                continue
+            is_image = response.headers.get("content-type", "").startswith("image/")
+            too_big = len(response.content) > MAX_IMAGE_BYTES
+            if response.status_code != 200 or not is_image or too_big:
+                self.stats.add("Image (failed)", True)
+                continue
+            getattr(f, field).save(
+                os.path.basename(path), ContentFile(response.content), save=True
+            )
+            self.stats.add("Image", True)
 
     # -- datasets ---------------------------------------------------------------
     def dataset(self, d):
@@ -564,6 +603,7 @@ class DatasetImporter:
             },
         )
         self.stats.add("Dataset", created)
+        self.images = d.get("_images") or {}
         dataset.recording_session_list.add(
             *[
                 self.session(s)
@@ -591,6 +631,15 @@ def datasets_from_payload(payload):
             dataset["description"] = item.get("description") or dataset.get(
                 "description"
             )
+            dataset["_images"] = {
+                f["name"]: {
+                    "spectrogram": f.get("spectrogram"),
+                    "plot": f.get("plot"),
+                    "downloads": f.get("downloads") or 0,
+                }
+                for f in item.get("files") or []
+                if f.get("name")
+            }
             found.append(dataset)
         else:
             found.append(item["dataset"])
@@ -598,8 +647,11 @@ def datasets_from_payload(payload):
 
 
 @transaction.atomic
-def import_datasets(payload, created_by=None, dry_run=False):
-    importer = DatasetImporter(created_by=created_by)
+def import_datasets(payload, created_by=None, dry_run=False, images_from=None):
+    # no download in a dry run: nothing would be kept anyway
+    importer = DatasetImporter(
+        created_by=created_by, images_from=None if dry_run else images_from
+    )
     for d in datasets_from_payload(payload):
         importer.dataset(d)
     if dry_run:

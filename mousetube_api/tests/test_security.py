@@ -666,3 +666,96 @@ class DatasetMetadataTests(FreshCache, TestCase):
         self.assertEqual(
             self.client.get("/admin/mousetube_api/dataset/").status_code, 200
         )
+
+
+PNG = (
+    b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00"
+    b"\x00\x1f\x15\xc4\x89\x00\x00\x00\rIDATx\x9cc\xf8\xff\xff?\x00\x05\xfe\x02\xfe\xa7"
+    b"5\x81\x84\x00\x00\x00\x00IEND\xaeB`\x82"
+)
+
+
+class _Response:
+    def __init__(self, status=200, content_type="image/png", content=PNG):
+        self.status_code, self.content = status, content
+        self.headers = {"content-type": content_type}
+
+
+@override_settings(CACHES=LOCMEM)
+class DatasetImagesAndChipsTests(FreshCache, TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        import json
+        from pathlib import Path
+
+        cls.payload = json.loads(
+            (Path(__file__).parent / "data" / "dataset_0_5_sample.json").read_text()
+        )
+        cls.admin = get_user_model().objects.create_superuser("adm", "a@igbmc.fr", "x")
+
+    def setUp(self):
+        super().setUp()
+        import shutil
+        import tempfile
+
+        self.media = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.media, True)
+
+    def _import(self, **kwargs):
+        from mousetube_api.utils.dataset_metadata import import_datasets
+
+        with override_settings(MEDIA_ROOT=self.media):
+            return import_datasets(self.payload, self.admin, **kwargs)
+
+    def test_no_download_unless_asked(self):
+        from unittest import mock
+
+        from mousetube_api.models import File
+
+        with mock.patch("mousetube_api.utils.dataset_metadata.requests.get") as get:
+            self._import()
+        get.assert_not_called()
+        self.assertFalse(File.objects.exclude(spectrogram="").exclude(spectrogram=None))
+
+    def test_images_are_copied_from_the_old_site_once(self):
+        from unittest import mock
+
+        from mousetube_api.models import File
+
+        with mock.patch(
+            "mousetube_api.utils.dataset_metadata.requests.get",
+            return_value=_Response(),
+        ) as get:
+            stats = self._import(images_from="https://old.example")
+            self.assertEqual(stats["Image"]["created"], 2 * File.objects.count())
+            self.assertTrue(
+                get.call_args_list[0].args[0].startswith("https://old.example/media/")
+            )
+            calls = get.call_count
+            again = self._import(images_from="https://old.example")
+        self.assertEqual(again["Image"]["created"], 0)
+        self.assertEqual(get.call_count, calls)  # nothing downloaded twice
+        f = File.objects.first()
+        self.assertTrue(f.spectrogram.name.endswith(".png"))
+        self.assertTrue(f.plot.name.endswith(".png"))
+
+    def test_a_bad_image_is_counted_as_failed_not_fatal(self):
+        from unittest import mock
+
+        with mock.patch(
+            "mousetube_api.utils.dataset_metadata.requests.get",
+            return_value=_Response(status=404),
+        ):
+            stats = self._import(images_from="https://old.example")
+        self.assertGreater(stats["Image (failed)"]["created"], 0)
+        self.assertEqual(stats["Dataset"]["created"], 2)
+
+    def test_dataset_api_gives_chips_and_downloads_for_each_file(self):
+        self._import()
+        body = APIClient().get("/api/dataset/").json()
+        mouse = next(d for d in body["results"] if d["name"] == "Mouse dataset")
+        first = mouse["files"][0]
+        self.assertIn("downloads", first)
+        self.assertIn("pup", first["session"]["chips"])
+        self.assertNotIn("unspecified", first["session"]["chips"])
+        self.assertTrue(first["session"]["animal_profiles"])

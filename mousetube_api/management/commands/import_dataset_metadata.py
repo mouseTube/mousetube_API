@@ -1,4 +1,5 @@
 import json
+from urllib.parse import urlsplit
 
 import requests
 from django.contrib.auth import get_user_model
@@ -22,6 +23,17 @@ class Command(BaseCommand):
         )
         parser.add_argument(
             "--dry-run", action="store_true", help="Do everything, then roll back."
+        )
+        parser.add_argument(
+            "--with-images",
+            nargs="?",
+            const="",
+            metavar="SITE",
+            help=(
+                "Also copy the spectrogram and plot images of each file from the old "
+                "site (about 100 MB for the two 0.5 datasets). SITE defaults to the "
+                "origin of --url, e.g. https://mousetube.fr."
+            ),
         )
 
     def handle(self, *args, **options):
@@ -55,8 +67,21 @@ class Command(BaseCommand):
                 raise CommandError("No superuser found: pass --created-by USERNAME.")
         self.stdout.write(f"Creator of the imported records: {created_by.username}")
 
+        images_from = options["with_images"]
+        if images_from == "":  # flag given without a value: use the origin of --url
+            if not options["url"]:
+                raise CommandError(
+                    "--with-images needs a SITE value when using --file."
+                )
+            parts = urlsplit(options["url"])
+            images_from = f"{parts.scheme}://{parts.netloc}"
+        if images_from and not images_from.startswith(("http://", "https://")):
+            raise CommandError("--with-images SITE must start with http:// or https://")
+
         try:
-            stats = import_datasets(payload, created_by, options["dry_run"])
+            stats = import_datasets(
+                payload, created_by, options["dry_run"], images_from
+            )
         except (KeyError, TypeError) as exc:
             raise CommandError(f"Unexpected JSON structure: {exc!r}") from exc
 
