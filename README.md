@@ -56,6 +56,7 @@ The settings read `.env` at the root of the project, then `/etc/mousetube/mouset
 | `USE_X_FORWARDED_HOST` | no | `false` | |
 | `ZENODO_API`, `ZENODO_TOKEN` | to publish | sandbox URL, empty | The token is sent as a Bearer header, never in a URL. |
 | `CLIENT_ID`, `CLIENT_SECRET` | for ORCID login | empty | ORCID OAuth application. |
+| `REQUIRE_INSTITUTIONAL_EMAIL` | no | `true` | Registration is refused for personal addresses (Gmail, Outlook...), see `mousetube_api/utils/email_domains.py`. Set `false` in local development if you only have a personal address. |
 | `ORCID_BASE_DOMAIN` | no | `orcid.org` | Use `sandbox.orcid.org` with a sandbox application. |
 | `DJOSER_SEND_ACTIVATION_EMAIL`, `DEFAULT_ADMIN_EMAIL`, `DEFAULT_FROM_EMAIL` | no | `false`, `mousetube@igbmc.fr`, `no-reply@mousetube.com` | New accounts are inactive until an admin activates them. |
 

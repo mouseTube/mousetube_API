@@ -17,6 +17,7 @@ from django_countries.serializer_fields import CountryField
 from djoser.serializers import UserCreateSerializer as BaseUserCreateSerializer
 from rest_framework import serializers
 
+from mousetube_api.utils.email_domains import is_personal_email
 from mousetube_api.utils.orcid_proof import read_orcid_proof
 from mousetube_api.utils.validators import (
     validate_doi,
@@ -72,6 +73,15 @@ class CustomUserCreateSerializer(BaseUserCreateSerializer):
             "last_name",
             "orcid_proof",
         )
+
+    def validate_email(self, value):
+        if settings.REQUIRE_INSTITUTIONAL_EMAIL and is_personal_email(value):
+            raise serializers.ValidationError(
+                "Please use your institutional email address (university, research "
+                "institute, hospital...). Personal addresses such as Gmail, Outlook, "
+                "Yahoo or iCloud are not accepted."
+            )
+        return value
 
     def validate(self, attrs):
         proof = attrs.pop("orcid_proof", None)

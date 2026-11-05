@@ -263,6 +263,10 @@ SPECTACULAR_SETTINGS = {
 
 SITE_ID = 1
 
+# Registration is refused for personal addresses (gmail, outlook...), see utils/email_domains.py.
+# Set to false in local development if you only have a personal address.
+REQUIRE_INSTITUTIONAL_EMAIL = env.bool("REQUIRE_INSTITUTIONAL_EMAIL", default=True)
+
 SOCIALACCOUNT_PROVIDERS = {
     "orcid": {
         "APP": {

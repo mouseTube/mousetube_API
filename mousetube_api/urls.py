@@ -64,6 +64,7 @@ from .views import (
     UserProfileListAPIView,
     file_task_status,
     get_task_status,
+    personal_email_domains,
     repository_metadata_payload,
     repository_metadata_schema,
 )
@@ -138,6 +139,11 @@ urlpatterns = [
         name="hardware-detail",
     ),
     path("api/country/", CountryAPIView.as_view(), name="country"),
+    path(
+        "api/personal-email-domains/",
+        personal_email_domains,
+        name="personal-email-domains",
+    ),
     path("api/file/<int:pk>/", FileDetailAPIView.as_view(), name="file-detail"),
     path("api/track-page/", TrackPageView.as_view(), name="track-page"),
     path(

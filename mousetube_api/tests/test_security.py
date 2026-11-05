@@ -98,11 +98,12 @@ class PermissionTests(TestCase):
         self.assertEqual(r.status_code, 400)
 
 
+LOCMEM = {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}}
+
+
+@override_settings(CACHES=LOCMEM)  # do not touch the real Redis counters
 class ThrottleTests(TestCase):
     def test_login_is_rate_limited(self):
-        from django.core.cache import cache
-
-        cache.clear()
         client = APIClient()
         codes = [
             client.post(
@@ -112,7 +113,6 @@ class ThrottleTests(TestCase):
         ]
         self.assertEqual(codes[:10], [401] * 10)
         self.assertEqual(codes[10], 429)
-        cache.clear()
 
 
 class OrcidAndPrivacyTests(TestCase):
@@ -191,3 +191,46 @@ class OrcidAndPrivacyTests(TestCase):
         self.assertTrue(PageView.objects.filter(path="/hardware").exists())
         r = APIClient().post("/api/track-page/", {"path": "no-slash"})
         self.assertEqual(r.status_code, 400)
+
+
+@override_settings(CACHES=LOCMEM)
+class InstitutionalEmailTests(TestCase):
+    def test_personal_domains_are_detected(self):
+        from mousetube_api.utils.email_domains import is_personal_email
+
+        for email in (
+            "a@gmail.com",
+            "a@GMAIL.com",
+            "a@mail.yahoo.com",  # subdomain of a provider
+            "a@free.fr",
+            "a@mailinator.com",
+        ):
+            with self.subTest(email=email):
+                self.assertTrue(is_personal_email(email))
+        for email in ("a@igbmc.fr", "a@unistra.fr", "a@univ-lyon1.fr", "a@ox.ac.uk"):
+            with self.subTest(email=email):
+                self.assertFalse(is_personal_email(email))
+
+    def _register(self, email):
+        return APIClient().post(
+            "/auth/users/",
+            {"username": "n", "email": email, "password": "Zx9!tr0ngPassw0rd#"},
+            format="json",
+        )
+
+    def test_registration_with_personal_email_is_refused(self):
+        r = self._register("someone@gmail.com")
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("email", r.json())
+
+    @override_settings(REQUIRE_INSTITUTIONAL_EMAIL=False)
+    def test_check_can_be_turned_off_for_local_dev(self):
+        self.assertEqual(self._register("someone@gmail.com").status_code, 201)
+
+    def test_registration_with_institutional_email_works(self):
+        self.assertEqual(self._register("someone@igbmc.fr").status_code, 201)
+
+    def test_domains_endpoint_is_public(self):
+        body = APIClient().get("/api/personal-email-domains/").json()
+        self.assertTrue(body["enforced"])
+        self.assertIn("gmail.com", body["domains"])

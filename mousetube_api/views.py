@@ -61,6 +61,7 @@ from mousetube_api.tasks import (
     process_file,
     publish_session_deposition,
 )
+from mousetube_api.utils.email_domains import PERSONAL_EMAIL_DOMAINS
 from mousetube_api.utils.orcid_proof import read_orcid_proof
 from mousetube_api.utils.repository import (
     build_repository_metadata_payload,
@@ -286,6 +287,22 @@ class LaboratoryAPIView(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
+
+
+# ----------------------------
+# Personal e-mail domains (for the registration form)
+# ----------------------------
+@extend_schema(exclude=True)
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def personal_email_domains(request):
+    """Same list the API enforces, so the website can warn before submitting."""
+    return Response(
+        {
+            "enforced": settings.REQUIRE_INSTITUTIONAL_EMAIL,
+            "domains": sorted(PERSONAL_EMAIL_DOMAINS),
+        }
+    )
 
 
 # ----------------------------
