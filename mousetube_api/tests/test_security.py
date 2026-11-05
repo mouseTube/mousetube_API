@@ -96,3 +96,98 @@ class PermissionTests(TestCase):
             f"/api/hardware/{r.data['id']}/", {"status": "validated"}, format="json"
         )
         self.assertEqual(r.status_code, 400)
+
+
+class ThrottleTests(TestCase):
+    def test_login_is_rate_limited(self):
+        from django.core.cache import cache
+
+        cache.clear()
+        client = APIClient()
+        codes = [
+            client.post(
+                "/auth/jwt/create/", {"username": "x", "password": "y"}, format="json"
+            ).status_code
+            for _ in range(12)
+        ]
+        self.assertEqual(codes[:10], [401] * 10)
+        self.assertEqual(codes[10], 429)
+        cache.clear()
+
+
+class OrcidAndPrivacyTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.user = User.objects.create_user("u", password="x")  # nosec B106
+        self.other = User.objects.create_user(
+            "o",
+            email="o@example.org",
+            password="x",  # nosec B106
+        )
+        self.client = APIClient()
+
+    def test_link_orcid_needs_a_valid_proof(self):
+        from mousetube_api.utils.orcid_proof import make_orcid_proof
+
+        self.client.force_authenticate(self.user)
+        r = self.client.post("/api/link-orcid/", {"orcid": "0000-0002-1825-0097"})
+        self.assertEqual(r.status_code, 400)  # raw iD, no proof
+        r = self.client.post("/api/link-orcid/", {"orcid_proof": "forged"})
+        self.assertEqual(r.status_code, 400)
+        proof = make_orcid_proof("0000-0002-1825-0097")
+        r = self.client.post("/api/link-orcid/", {"orcid_proof": proof})
+        self.assertEqual(r.status_code, 200)
+        self.user.user_profile.refresh_from_db()
+        self.assertEqual(self.user.user_profile.orcid, "0000-0002-1825-0097")
+
+    def test_orcid_cannot_be_patched_directly(self):
+        self.client.force_authenticate(self.user)
+        pid = self.user.user_profile.id
+        self.client.patch(f"/api/user_profile/{pid}/", {"orcid": "x"}, format="json")
+        self.user.user_profile.refresh_from_db()
+        self.assertFalse(self.user.user_profile.orcid)
+
+    def test_profile_list_is_limited_to_own_profile(self):
+        self.client.force_authenticate(self.user)
+        ids = [p["user"]["id"] for p in self.client.get("/api/user_profile/").json()]
+        self.assertEqual(ids, [self.user.id])
+
+    def test_anonymous_does_not_see_contact_email(self):
+        from mousetube_api.models import Contact
+
+        Contact.objects.create(
+            first_name="a",
+            last_name="b",
+            email="secret@example.org",
+            status="validated",
+            created_by=self.other,
+        )
+        body = APIClient().get("/api/contact/").content.decode()
+        self.assertNotIn("secret@example.org", body)
+        self.client.force_authenticate(self.user)
+        self.assertIn(
+            "secret@example.org", self.client.get("/api/contact/").content.decode()
+        )
+
+    def test_publish_twice_is_refused(self):
+        s = RecordingSession.objects.create(
+            name="p", is_multiple=True, created_by=self.user
+        )
+        # the publish task writes "published" with update() (not in the model choices)
+        RecordingSession.objects.filter(pk=s.pk).update(status="published")
+        self.client.force_authenticate(self.user)
+        r = self.client.post(
+            "/api/file/publish_session/",
+            {"recording_session_id": s.id, "repository_id": 1},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 409)
+
+    def test_track_page_drops_query_string(self):
+        from mousetube_api.models import PageView
+
+        r = APIClient().post("/api/track-page/", {"path": "/hardware?x=1#top"})
+        self.assertEqual(r.status_code, 200)
+        self.assertTrue(PageView.objects.filter(path="/hardware").exists())
+        r = APIClient().post("/api/track-page/", {"path": "no-slash"})
+        self.assertEqual(r.status_code, 400)

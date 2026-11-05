@@ -34,6 +34,11 @@ if [ -z "$DB_NAME" ] || [ -z "$DB_USER" ] || [ -z "$DB_PASSWORD" ]; then
     exit 1
 fi
 
+if [ "$RESET_DB" = "true" ] && [ "$(echo "$DEBUG" | tr '[:upper:]' '[:lower:]')" = "false" ]; then
+    echo "❌ RESET_DB=true is refused when DEBUG=false (it would drop the production database)."
+    exit 1
+fi
+
 if [ "$RESET_DB" = "true" ]; then
     echo "🚀 RESET_DB=true → Recreating the database..."
     mariadb -h db -u root -p"$DB_ROOT_PASS" <<EOF
@@ -49,9 +54,6 @@ else
     mariadb -h db -u root -p"$DB_ROOT_PASS" -e "CREATE USER IF NOT EXISTS '$DB_USER'@'localhost' IDENTIFIED BY '$DB_PASSWORD';"
     mariadb -h db -u root -p"$DB_ROOT_PASS" -e "GRANT ALL PRIVILEGES ON $DB_NAME.* TO '$DB_USER'@'localhost'; FLUSH PRIVILEGES;"
 fi
-
-echo "🛠️ Running makemigrations..."
-python3 manage.py makemigrations mousetube_api --noinput
 
 echo "📦 Applying migrations..."
 python3 manage.py migrate --noinput

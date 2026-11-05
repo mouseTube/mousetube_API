@@ -16,8 +16,8 @@ from celery.result import AsyncResult
 from django.apps import apps
 from django.conf import settings
 from django.contrib.contenttypes.models import ContentType
+from django.core import signing
 from django.core.cache import cache
-from django.core.management import call_command
 from django.db.models import (
     BooleanField,
     Case,
@@ -57,9 +57,11 @@ from rest_framework.views import APIView
 
 from mousetube_api.tasks import (
     delete_file_from_repository,
+    export_page_views,
     process_file,
     publish_session_deposition,
 )
+from mousetube_api.utils.orcid_proof import read_orcid_proof
 from mousetube_api.utils.repository import (
     build_repository_metadata_payload,
     get_repository_metadata_schema,
@@ -146,14 +148,19 @@ class LinkOrcidView(APIView):
     """
 
     def post(self, request):
-        orcid = request.data.get("orcid", "").strip()
+        try:
+            # Only an iD proven by the ORCID login is accepted, never a free-text one.
+            orcid = read_orcid_proof(request.data.get("orcid_proof", ""))
+        except signing.BadSignature:
+            orcid = ""
         first_name = request.data.get("firstName", "").strip()
         last_name = request.data.get("lastName", "").strip()
         user = request.user
 
         if not orcid:
             return Response(
-                {"error": "Missing ORCID"}, status=status.HTTP_400_BAD_REQUEST
+                {"error": "Missing or expired ORCID proof"},
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
         # ORCID already bind to another user
@@ -507,6 +514,8 @@ class UserProfileListAPIView(GenericAPIView):
     @extend_schema(operation_id="api_user_profile_list_get")
     def get(self, request, *args, **kwargs):
         queryset = UserProfile.objects.all()
+        if not request.user.is_staff:  # profiles expose e-mails: own profile only
+            queryset = queryset.filter(user=request.user)
         user_id = request.query_params.get("user_id")
         if user_id:
             queryset = queryset.filter(user__id=user_id)
@@ -1285,6 +1294,11 @@ class PublishSessionView(APIView):
             return Response(
                 {"detail": "Not authorized."}, status=status.HTTP_403_FORBIDDEN
             )
+        if session.status == "published":
+            return Response(
+                {"detail": "Session already published."},
+                status=status.HTTP_409_CONFLICT,
+            )
 
         task = publish_session_deposition.delay(
             recording_session_id, repository_id, payload
@@ -1453,13 +1467,9 @@ class ContactViewSet(viewsets.ModelViewSet):
                 qs = qs.filter(Q(created_by=user) | Q(status="validated"))
 
         if search_query:
-            search_fields = [
-                "last_name",
-                "first_name",
-                "email",
-                "institution",
-                "status",
-            ]
+            search_fields = ["last_name", "first_name", "institution", "status"]
+            if user.is_authenticated:  # e-mail is hidden from anonymous users
+                search_fields.append("email")
             q = Q()
             for f in search_fields:
                 q |= Q(**{f"{f}__icontains": search_query})
@@ -1794,11 +1804,9 @@ class TrackPageView(GenericAPIView):
         if not created:
             PageView.objects.filter(pk=obj.pk).update(count=F("count") + 1)
 
-        cache_key = f"pageview-log-generated-{today}"
-
-        if not cache.get(cache_key):
-            call_command("export_page_view", verbosity=0)
-            cache.set(cache_key, True, 60 * 60 * 24)
+        # cache.add is atomic and the cache is shared (Redis): one export per day
+        if cache.add(f"pageview-log-generated-{today}", True, 60 * 60 * 24):
+            export_page_views.delay()
 
         return Response(PageViewSerializer(obj).data, status=status.HTTP_200_OK)
 

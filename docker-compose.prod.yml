@@ -1,6 +1,6 @@
 services:
   db:
-    image: mariadb:latest
+    image: mariadb:12.2
     restart: always
     environment:
       MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASS}

@@ -1,3 +1,5 @@
+from urllib.parse import urlencode
+
 from allauth.core.exceptions import ImmediateHttpResponse
 from allauth.socialaccount.adapter import DefaultSocialAccountAdapter
 from allauth.socialaccount.models import SocialApp
@@ -9,6 +11,7 @@ from django.http import HttpResponseRedirect
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from mousetube_api.models import UserProfile
+from mousetube_api.utils.orcid_proof import make_orcid_proof
 
 User = get_user_model()
 
@@ -58,22 +61,24 @@ class MySocialAccountAdapter(DefaultSocialAccountAdapter):
             user = profile.user
             token = str(RefreshToken.for_user(user).access_token)
 
-            redirect_url = f"{protocol}://{domain}/auth/callback?token={token}"
+            # Fragment (#), not query (?): it is never sent to servers, logs or Referer.
+            redirect_url = (
+                f"{protocol}://{domain}/auth/callback#{urlencode({'token': token})}"
+            )
             raise ImmediateHttpResponse(HttpResponseRedirect(redirect_url))
 
         except UserProfile.DoesNotExist:
-            if process == "connect":
-                redirect_url = (
-                    f"{protocol}://{domain}/account/link-orcid"
-                    f"?orcid={orcid_id}&first_name={given_names}&last_name={family_name}"
-                )
-                raise ImmediateHttpResponse(HttpResponseRedirect(redirect_url))
-            else:
-                redirect_url = (
-                    f"{protocol}://{domain}/account/register"
-                    f"?orcid={orcid_id}&first_name={given_names}&last_name={family_name}"
-                )
-                raise ImmediateHttpResponse(HttpResponseRedirect(redirect_url))
+            page = "link-orcid" if process == "connect" else "register"
+            query = urlencode(
+                {
+                    "orcid": orcid_id,
+                    "orcid_proof": make_orcid_proof(orcid_id),
+                    "first_name": given_names,
+                    "last_name": family_name,
+                }
+            )
+            redirect_url = f"{protocol}://{domain}/account/{page}?{query}"
+            raise ImmediateHttpResponse(HttpResponseRedirect(redirect_url))
 
     def get_app(self, request, provider, client_id=None):
         site = get_current_site(request)

@@ -138,3 +138,16 @@ docker image prune -a
 ## Check out mouseTube's publications:
 
 - Torquet N., de Chaumont F., Faure P., Bourgeron T., Ey E. mouseTube – a database to collaboratively unravel mouse ultrasonic communication [version 1; peer review: 2 approved]. F1000Research 2016, 5:2332 ([F1000Research Link](https://doi.org/10.12688/f1000research.9439.1)) (2016).
+
+## Security-related settings
+
+| Variable | Default | Notes |
+|---|---|---|
+| `DEBUG` | `false` | Must be `true` only for local development. |
+| `SECRET_KEY` | none | **Required when `DEBUG` is false**; the app refuses to start without it. |
+| `DRF_NUM_PROXIES` | `0` | Reverse proxies in front of Django (HAProxy + nginx = `2`). Needed for per-IP rate limits on login/registration; with `0` every user shares the proxy's IP. |
+| `CACHE_URL` | Redis db 1 on the Celery broker host | Shared cache for rate limits. |
+| `SECURE_HSTS_SECONDS` | `31536000` | Only applied when `DEBUG` is false. |
+| `ZENODO_TOKEN` | empty | Sent as a Bearer header; never put it in a URL. |
+
+`RESET_DB=true` is refused when `DEBUG=false`. Migrations are no longer generated at container start: commit them.

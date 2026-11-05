@@ -10,12 +10,14 @@ Code under GPL v3.0 licence
 from django.conf import settings
 from django.contrib.auth.models import User
 from django.contrib.contenttypes.models import ContentType
+from django.core import signing
 from django.core.mail import send_mail
 from django.db.models import Count, Q
 from django_countries.serializer_fields import CountryField
 from djoser.serializers import UserCreateSerializer as BaseUserCreateSerializer
 from rest_framework import serializers
 
+from mousetube_api.utils.orcid_proof import read_orcid_proof
 from mousetube_api.utils.validators import (
     validate_doi,
     validate_doi_link_consistency,
@@ -56,7 +58,9 @@ class ModerationMixin:
 
 
 class CustomUserCreateSerializer(BaseUserCreateSerializer):
-    orcid = serializers.CharField(write_only=True, required=False, allow_blank=True)
+    orcid_proof = serializers.CharField(
+        write_only=True, required=False, allow_blank=True
+    )
 
     class Meta(BaseUserCreateSerializer.Meta):
         fields = (
@@ -66,11 +70,23 @@ class CustomUserCreateSerializer(BaseUserCreateSerializer):
             "password",
             "first_name",
             "last_name",
-            "orcid",
+            "orcid_proof",
         )
 
     def validate(self, attrs):
-        orcid = attrs.pop("orcid", None)
+        proof = attrs.pop("orcid_proof", None)
+        orcid = None
+        if proof:
+            try:
+                orcid = read_orcid_proof(proof)
+            except signing.BadSignature:
+                raise serializers.ValidationError(
+                    {"orcid_proof": "Invalid or expired ORCID proof."}
+                ) from None
+            if UserProfile.objects.filter(orcid=orcid).exists():
+                raise serializers.ValidationError(
+                    {"orcid_proof": "This ORCID is already linked to another user."}
+                )
         attrs = super().validate(attrs)
         self._orcid = orcid
         return attrs
@@ -125,11 +141,11 @@ class ReferenceSerializer(ModerationMixin, serializers.ModelSerializer):
         model = Reference
         fields = "__all__"
 
-        def validate_doi(self, value):
-            return validate_doi(value)
+    def validate_doi(self, value):
+        return validate_doi(value)
 
-        def validate_url(self, value):
-            return validate_url(value)
+    def validate_url(self, value):
+        return validate_url(value)
 
 
 class LaboratorySerializer(ModerationMixin, serializers.ModelSerializer):
@@ -160,6 +176,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = UserProfile
         fields = "__all__"
+        read_only_fields = ("orcid",)  # only set through the verified ORCID flow
 
 
 class ContactSerializer(ModerationMixin, serializers.ModelSerializer):
@@ -168,6 +185,13 @@ class ContactSerializer(ModerationMixin, serializers.ModelSerializer):
     class Meta:
         model = Contact
         fields = "__all__"
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        request = self.context.get("request")
+        if not (request and request.user.is_authenticated):
+            data.pop("email", None)
+        return data
 
 
 class HardwareSerializer(ModerationMixin, serializers.ModelSerializer):
@@ -1023,3 +1047,10 @@ class PageViewSerializer(serializers.ModelSerializer):
 
 class TrackPageSerializer(serializers.Serializer):
     path = serializers.CharField(max_length=255)
+
+    def validate_path(self, value):
+        # keep the page, drop query/fragment: otherwise every ?x=<random> is a new row
+        value = value.split("?")[0].split("#")[0]
+        if not value.startswith("/") or any(c.isspace() or ord(c) < 32 for c in value):
+            raise serializers.ValidationError("Invalid path.")
+        return value

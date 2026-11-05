@@ -4,6 +4,7 @@ import os
 import soundfile as sf
 from celery import shared_task
 from django.core.exceptions import ValidationError
+from django.core.management import call_command
 
 from mousetube_api.models import File, RecordingSession, Reference, Repository, Software
 from mousetube_api.utils.file_handler import link_to_local_path
@@ -247,3 +248,9 @@ def publish_session_deposition(self, recording_session_id, repository_id, payloa
     self.update_state(state="STARTED", meta={"progress": 90})
 
     return {"message": f"✅ Session {rs.id} published with DOI {doi}.", "progress": 100}
+
+
+@shared_task
+def export_page_views():
+    """Regenerate the static page-view report (was run inside a web request)."""
+    call_command("export_page_view", verbosity=0)

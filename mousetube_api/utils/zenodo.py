@@ -11,10 +11,15 @@ from mousetube_api.models import File, Repository
 from mousetube_api.utils.file_handler import is_temp_path, link_to_local_path
 
 ZENODO_API = getattr(settings, "ZENODO_API", "https://sandbox.zenodo.org/api/")
-ZENODO_TOKEN = getattr(settings, "ZENODO_TOKEN", None)
 
-if not ZENODO_TOKEN:
-    raise ValueError("Zenodo token not configured in settings.")
+
+def _auth_headers():
+    """Bearer header instead of ?access_token=: URLs end up in logs and error messages."""
+    token = getattr(settings, "ZENODO_TOKEN", None)
+    if not token:
+        raise ValueError("Zenodo token not configured in settings.")
+    return {"Authorization": f"Bearer {token}"}
+
 
 METADATA_SCHEMA = {
     "type": "object",
@@ -311,8 +316,8 @@ def prepare_deposition_for_session(recording_session, new_file=None):
         raise ValueError("No valid files found for this recording session.")
 
     # 🔹 parameters
-    params = {"access_token": ZENODO_TOKEN}
-    headers = {"Content-Type": "application/json"}
+    auth = _auth_headers()
+    headers = {**auth, "Content-Type": "application/json"}
 
     try:
         # 🔹 Check for existing deposition
@@ -327,7 +332,6 @@ def prepare_deposition_for_session(recording_session, new_file=None):
             # Create new zenodo repo
             r = requests.post(
                 ZENODO_API + "/deposit/depositions",
-                params=params,
                 json={},
                 headers=headers,
                 timeout=300,
@@ -361,7 +365,7 @@ def prepare_deposition_for_session(recording_session, new_file=None):
                 with open(local_path, "rb") as file_obj:
                     files_payload = {"file": (filename, file_obj)}
                     r = requests.post(
-                        upload_url, params=params, files=files_payload, timeout=60
+                        upload_url, headers=auth, files=files_payload, timeout=60
                     )
                     r.raise_for_status()
             except requests.exceptions.HTTPError as e:
@@ -390,7 +394,6 @@ def prepare_deposition_for_session(recording_session, new_file=None):
 
     r = requests.put(
         f"{ZENODO_API + '/deposit/depositions'}/{deposition_id}",
-        params=params,
         data=json.dumps({"metadata": metadata_payload}),
         headers=headers,
         timeout=300,
@@ -413,12 +416,12 @@ def delete_file(file_instance):
     if not filename:
         raise ValueError(f"File {file_instance.id} has no name to delete on Zenodo.")
 
-    params = {"access_token": ZENODO_TOKEN}
-    headers = {"Content-Type": "application/json"}
+    auth = _auth_headers()
+    headers = {**auth, "Content-Type": "application/json"}
 
     # 🔹 List files
     list_url = f"{ZENODO_API}/deposit/depositions/{deposition_id}/files"
-    r = requests.get(list_url, params=params, headers=headers, timeout=30)
+    r = requests.get(list_url, headers=headers, timeout=30)
     r.raise_for_status()
 
     files = r.json()
@@ -431,7 +434,7 @@ def delete_file(file_instance):
     delete_url = (
         f"{ZENODO_API}/deposit/depositions/{deposition_id}/files/{target['id']}"
     )
-    r = requests.delete(delete_url, params=params, timeout=30)
+    r = requests.delete(delete_url, headers=auth, timeout=30)
     if r.status_code not in (200, 204):
         raise ValueError(f"Zenodo deletion failed: {r.status_code} {r.text}")
 
@@ -450,14 +453,13 @@ def publish_deposition(recording_session, payload=None):
         raise ValueError("No Zenodo deposition_id found for this file/session.")
     deposition_id = first_file_with_id.external_id
 
-    params = {"access_token": ZENODO_TOKEN}
+    auth = _auth_headers()
 
     # Update metadata if provided
     if payload:
-        headers = {"Content-Type": "application/json"}
+        headers = {**auth, "Content-Type": "application/json"}
         r = requests.put(
             f"{ZENODO_API}/deposit/depositions/{deposition_id}",
-            params=params,
             data=json.dumps({"metadata": payload}),
             headers=headers,
             timeout=60,
@@ -468,7 +470,7 @@ def publish_deposition(recording_session, payload=None):
     try:
         r = requests.post(
             f"{ZENODO_API}/deposit/depositions/{deposition_id}/actions/publish",
-            params=params,
+            headers=auth,
             timeout=60,
         )
         r.raise_for_status()

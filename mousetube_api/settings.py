@@ -82,8 +82,6 @@ CORS_ALLOW_CREDENTIALS = True
 X_FRAME_OPTIONS = "DENY"  # "ALLOW-FROM" is obsolete and ignored by browsers
 
 SECURE_SSL_REDIRECT = not DEBUG
-SESSION_COOKIE_SECURE = not DEBUG
-CSRF_COOKIE_SECURE = not DEBUG
 SECURE_HSTS_SECONDS = 0 if DEBUG else env.int("SECURE_HSTS_SECONDS", default=31536000)
 SECURE_HSTS_INCLUDE_SUBDOMAINS = not DEBUG
 SECURE_CONTENT_TYPE_NOSNIFF = True
@@ -241,6 +239,12 @@ REST_FRAMEWORK = {
         # "rest_framework.authentication.TokenAuthentication",
         "rest_framework_simplejwt.authentication.JWTAuthentication",
     ],
+    # Only brute-forceable auth endpoints are throttled (see mousetube_api/throttles.py).
+    "DEFAULT_THROTTLE_CLASSES": ["mousetube_api.throttles.AuthEndpointsThrottle"],
+    "DEFAULT_THROTTLE_RATES": {"auth": "10/min", "register": "5/hour"},
+    # Number of reverse proxies in front of Django (HAProxy + nginx = 2). With the
+    # default 0 the client IP is REMOTE_ADDR, which is never spoofable.
+    "NUM_PROXIES": env.int("DRF_NUM_PROXIES", default=0),
     "DEFAULT_PERMISSION_CLASSES": [
         # Safe default: views that must accept anonymous writes opt in explicitly.
         "rest_framework.permissions.IsAuthenticatedOrReadOnly",
@@ -288,6 +292,8 @@ ACCOUNT_SESSION_REMEMBER = None
 ACCOUNT_LOGOUT_ON_GET = False
 SOCIALACCOUNT_EMAIL_VERIFICATION = "none"
 ACCOUNT_CONFIRM_EMAIL_ON_GET = False
+# The SPA is on another origin (localhost:3000 in dev), so cookies must be cross-site.
+# "None" requires Secure; browsers accept Secure cookies on http://localhost.
 SESSION_COOKIE_SECURE = True
 SESSION_COOKIE_SAMESITE = "None"
 CSRF_COOKIE_SECURE = True
@@ -308,7 +314,7 @@ DJOSER = {
         "password",
         "first_name",
         "last_name",
-        "orcid",
+        "orcid_proof",
     ],
     "EMAIL": {
         "activation": "mousetube_api.utils.email_activation.CustomActivationEmail",
@@ -320,7 +326,8 @@ DJOSER = {
 }
 
 SIMPLE_JWT = {
-    "ACCESS_TOKEN_LIFETIME": timedelta(hours=12),
+    # Short-lived: the frontend renews it with the refresh token (plugins/axios-refresh.ts).
+    "ACCESS_TOKEN_LIFETIME": timedelta(hours=1),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
 }
 
@@ -347,7 +354,17 @@ CELERY_TIMEZONE = "Europe/Paris"
 # CELERY_IMPORTS = "mousetube_api.tasks"
 CELERY_IMPORTS = ["mousetube_api.tasks"]
 CELERY_RESULT_BACKEND = "django-db"
-CACHE_BACKEND = "memcached://127.0.0.1:11211/"
+
+# Shared cache (throttling, daily-export flag): the default per-process LocMemCache
+# would give every gunicorn worker its own counters.
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        "LOCATION": env(
+            "CACHE_URL", default=CELERY_BROKER_URL.rsplit("/", 1)[0] + "/1"
+        ),
+    }
+}
 
 ZENODO_API = env("ZENODO_API", default="https://sandbox.zenodo.org/api/")
 ZENODO_TOKEN = env("ZENODO_TOKEN", default="")
