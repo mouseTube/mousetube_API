@@ -269,6 +269,8 @@ SOCIALACCOUNT_PROVIDERS = {
             "client_id": env("CLIENT_ID", default=""),
             "secret": env("CLIENT_SECRET", default=""),
         },
+        # "sandbox.orcid.org" to test with a sandbox ORCID application
+        "BASE_DOMAIN": env("ORCID_BASE_DOMAIN", default="orcid.org"),
         "LOGIN_URL": "/accounts/orcid/login/",
         "SCOPE": ["/authenticate"],
         "AUTH_PARAMS": {"access_type": "online"},
