@@ -43,7 +43,7 @@ from drf_spectacular.utils import (
     extend_schema,
 )
 from rest_framework import filters, permissions, status, viewsets
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.generics import GenericAPIView
 from rest_framework.pagination import PageNumberPagination
@@ -61,6 +61,7 @@ from mousetube_api.tasks import (
     process_file,
     publish_session_deposition,
 )
+from mousetube_api.utils.dataset_metadata import build_dataset_metadata
 from mousetube_api.utils.email_domains import PERSONAL_EMAIL_DOMAINS
 from mousetube_api.utils.orcid_proof import read_orcid_proof
 from mousetube_api.utils.repository import (
@@ -1902,9 +1903,71 @@ class DatasetViewSet(viewsets.ModelViewSet):
     search_fields = ["name"]
 
     def get_permissions(self):
-        if self.action in ["create", "update", "partial_update", "destroy"]:
+        # get_permissions replaces the permission_classes given to @action, so every
+        # admin-only action must be listed here
+        if self.action in [
+            "create",
+            "update",
+            "partial_update",
+            "destroy",
+            "session_choices",
+        ]:
             return [IsAuthenticated(), IsAdminUser()]
         return [permissions.AllowAny()]
 
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
+
+    @extend_schema(exclude=True)
+    @action(
+        detail=False,
+        methods=["get"],
+        url_path="metadata",
+        permission_classes=[AllowAny],
+    )
+    def metadata_all(self, request):
+        """Metadata JSON of every dataset (public, like the Dataset page)."""
+        return Response(
+            {
+                "datasets": [
+                    build_dataset_metadata(d)["dataset"] for d in self.get_queryset()
+                ]
+            }
+        )
+
+    @extend_schema(exclude=True)
+    @action(
+        detail=True, methods=["get"], url_path="metadata", permission_classes=[AllowAny]
+    )
+    def metadata(self, request, pk=None):
+        """Metadata JSON of one dataset: sessions, protocols, animals, equipment, files."""
+        return Response(build_dataset_metadata(self.get_object()))
+
+    @extend_schema(exclude=True)
+    @action(
+        detail=False,
+        methods=["get"],
+        url_path="session-choices",
+        permission_classes=[IsAuthenticated, IsAdminUser],
+    )
+    def session_choices(self, request):
+        """Sessions an admin can put in a dataset (all of them, not only their own)."""
+        search = request.query_params.get("search", "").strip()
+        sessions = RecordingSession.objects.select_related("laboratory").annotate(
+            files_count=Count("file")
+        )
+        if search:
+            sessions = sessions.filter(
+                Q(name__icontains=search) | Q(laboratory__name__icontains=search)
+            )
+        return Response(
+            [
+                {
+                    "id": rs.id,
+                    "name": rs.name,
+                    "laboratory": rs.laboratory.name if rs.laboratory else None,
+                    "files_count": rs.files_count,
+                }
+                for rs in sessions.order_by("name")[:50]
+            ]
+        )

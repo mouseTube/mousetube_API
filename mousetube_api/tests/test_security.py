@@ -544,3 +544,125 @@ class OrcidLoginRedirectTests(TestCase):
     def test_active_account_gets_a_token_in_the_fragment(self):
         url = self._redirect(self._user())
         self.assertIn("/auth/callback#token=", url)
+
+
+# ----------------------------------------------------------------------------
+# Datasets: import of the 0.5 metadata, public metadata route, admin-only form
+# ----------------------------------------------------------------------------
+@override_settings(CACHES=LOCMEM)
+class DatasetMetadataTests(FreshCache, TestCase):
+    sample = None
+
+    @classmethod
+    def setUpTestData(cls):
+        import json
+        from pathlib import Path
+
+        cls.payload = json.loads(
+            (Path(__file__).parent / "data" / "dataset_0_5_sample.json").read_text()
+        )
+        cls.admin = get_user_model().objects.create_superuser("adm", "a@igbmc.fr", "x")
+        cls.user = get_user_model().objects.create_user("usr", "u@igbmc.fr", "x")
+
+    def _import(self, payload=None):
+        from mousetube_api.utils.dataset_metadata import import_datasets
+
+        return import_datasets(payload or self.payload, self.admin)
+
+    def test_import_creates_both_datasets_with_their_own_names(self):
+        from mousetube_api.models import Dataset, File
+
+        stats = self._import()
+        self.assertEqual(stats["Dataset"]["created"], 2)
+        # the production quirk: metadata of "Rat dataset" is named "Mouse dataset"
+        self.assertEqual(
+            sorted(Dataset.objects.values_list("name", flat=True)),
+            ["Mouse dataset", "Rat dataset"],
+        )
+        self.assertEqual(RecordingSession.objects.count(), 4)
+        self.assertEqual(File.objects.count(), 4)
+        f = File.objects.first()
+        self.assertTrue(f.doi.startswith("10.5281/zenodo"))
+        self.assertEqual(f.repository.name, "Zenodo")
+
+    def test_import_twice_creates_nothing_new(self):
+        from mousetube_api.models import File
+
+        self._import()
+        again = self._import()
+        self.assertEqual(again["Dataset"]["created"], 0)
+        self.assertEqual(again["RecordingSession"]["created"], 0)
+        self.assertEqual(again["File"]["created"], 0)
+        self.assertEqual(File.objects.count(), 4)
+
+    def test_dry_run_changes_nothing(self):
+        from mousetube_api.models import Dataset
+        from mousetube_api.utils.dataset_metadata import import_datasets
+
+        import_datasets(self.payload, self.admin, dry_run=True)
+        self.assertEqual(Dataset.objects.count(), 0)
+
+    def test_metadata_route_is_public_and_has_no_emails(self):
+        from mousetube_api.models import Dataset
+
+        self._import()
+        ds = Dataset.objects.get(name="Mouse dataset")
+        r = APIClient().get(f"/api/dataset/{ds.id}/metadata/")
+        self.assertEqual(r.status_code, 200)
+        body = r.json()["dataset"]
+        self.assertEqual(body["name"], "Mouse dataset")
+        self.assertEqual(len(body["recording_session_list"]), 2)
+        session = body["recording_session_list"][0]
+        self.assertTrue(session["file_list"][0]["doi"].startswith("10.5281/zenodo"))
+        self.assertNotIn("@", r.content.decode())  # no contact e-mail
+        all_ = APIClient().get("/api/dataset/metadata/").json()["datasets"]
+        self.assertEqual([d["name"] for d in all_], ["Mouse dataset", "Rat dataset"])
+
+    def test_export_then_import_gives_the_same_dataset(self):
+        from mousetube_api.models import Dataset, File
+
+        self._import()
+        ds = Dataset.objects.get(name="Mouse dataset")
+        exported = APIClient().get(f"/api/dataset/{ds.id}/metadata/").json()
+        first = exported["dataset"]["recording_session_list"][0]
+        Dataset.objects.all().delete()
+        RecordingSession.objects.all().delete()
+        File.objects.all().delete()
+        self._import(exported)
+        again = Dataset.objects.get(name="Mouse dataset")
+        self.assertEqual(
+            APIClient()
+            .get(f"/api/dataset/{again.id}/metadata/")
+            .json()["dataset"]["recording_session_list"][0]["file_list"][0]["doi"],
+            first["file_list"][0]["doi"],
+        )
+
+    def test_only_admins_create_datasets_and_list_session_choices(self):
+        self._import()
+        ids = list(RecordingSession.objects.values_list("id", flat=True)[:2])
+        body = {"name": "Mine", "description": "d", "recording_session_ids": ids}
+        anon, usr, adm = APIClient(), APIClient(), APIClient()
+        usr.force_authenticate(self.user)
+        adm.force_authenticate(self.admin)
+        self.assertEqual(
+            anon.post("/api/dataset/", body, format="json").status_code, 401
+        )
+        self.assertEqual(
+            usr.post("/api/dataset/", body, format="json").status_code, 403
+        )
+        r = adm.post("/api/dataset/", body, format="json")
+        self.assertEqual(r.status_code, 201)
+        self.assertEqual(len(r.json()["recording_sessions"]), 2)
+        self.assertEqual(usr.get("/api/dataset/session-choices/").status_code, 403)
+        choices = adm.get("/api/dataset/session-choices/?search=").json()
+        self.assertEqual(len(choices), 4)
+        self.assertIn("files_count", choices[0])
+
+    def test_django_admin_dataset_form_renders_for_a_superuser(self):
+        self.client.force_login(self.admin)
+        self.assertEqual(
+            self.client.get("/admin/mousetube_api/dataset/add/").status_code, 200
+        )
+        self.assertEqual(
+            self.client.get("/admin/mousetube_api/dataset/").status_code, 200
+        )

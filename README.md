@@ -185,3 +185,19 @@ docker image prune -a
 ## Check out mouseTube's publications:
 
 - Torquet N., de Chaumont F., Faure P., Bourgeron T., Ey E. mouseTube – a database to collaboratively unravel mouse ultrasonic communication [version 1; peer review: 2 approved]. F1000Research 2016, 5:2332 ([F1000Research Link](https://doi.org/10.12688/f1000research.9439.1)) (2016).
+
+## Datasets
+
+A dataset is a set of recording sessions; the page shows the files of those sessions.
+
+- **Metadata JSON (public):** `GET /api/dataset/<id>/metadata/` gives one dataset, `GET /api/dataset/metadata/` all of them. It lists the sessions with protocol, laboratory, animals, equipment, references and files (DOI, repository). Contact e-mails are never included.
+- **Add a dataset (admins only):** in the admin, *Mousetube_Api > Datasets > Add*, or on the website, page *Dataset*, button *Add a dataset*. The API (`POST /api/dataset/`) refuses everyone else.
+- **Import from mouseTube 0.5 or from another instance:**
+
+  ```bash
+  python manage.py import_dataset_metadata --url https://mousetube.fr/api/dataset/ --dry-run
+  python manage.py import_dataset_metadata --url https://mousetube.fr/api/dataset/
+  ```
+
+  `--file` reads a saved JSON, `--created-by USERNAME` sets the owner of the created records (default: first superuser; sessions need one). Running it twice creates nothing new. Protocols are matched on their attributes because `Protocol.save()` rewrites their name.
+

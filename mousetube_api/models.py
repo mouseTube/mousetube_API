@@ -488,10 +488,11 @@ class Protocol(models.Model):
             "night": "N",
             "both": "B",
         }
+        # "unspecified" (a valid choice) has no entry in the maps: code "U", not a KeyError
         self.name = (
-            f"{self.context_number_of_animals}{SEX_MAP[self.animals_sex]}{AGE_MAP[self.animals_age]}{HOUSING_MAP[self.animals_housing]}_"
-            f"{DURATION_MAP[self.context_duration]}_"
-            f"{CAGE_MAP[self.context_cage]}{BEDDING_MAP[self.context_bedding]}{LIGHT_MAP[self.context_light_cycle]}"
+            f"{self.context_number_of_animals}{SEX_MAP.get(self.animals_sex, 'U')}{AGE_MAP[self.animals_age]}{HOUSING_MAP.get(self.animals_housing, 'U')}_"
+            f"{DURATION_MAP.get(self.context_duration, 'U')}_"
+            f"{CAGE_MAP.get(self.context_cage, 'U')}{BEDDING_MAP.get(self.context_bedding, 'U')}{LIGHT_MAP.get(self.context_light_cycle, 'U')}"
         )
         self.status = "validated"
         super().save(*args, **kwargs)

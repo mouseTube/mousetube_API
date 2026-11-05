@@ -979,6 +979,15 @@ class FileNestedSerializer(serializers.ModelSerializer):
 
 class DatasetSerializer(serializers.ModelSerializer):
     files = serializers.SerializerMethodField()
+    # read: id and name of the sessions; write (admins only): ids
+    recording_sessions = serializers.SerializerMethodField()
+    recording_session_ids = serializers.PrimaryKeyRelatedField(
+        queryset=RecordingSession.objects.all(),
+        source="recording_session_list",
+        many=True,
+        write_only=True,
+        required=False,
+    )
 
     class Meta:
         model = Dataset
@@ -989,6 +998,14 @@ class DatasetSerializer(serializers.ModelSerializer):
             "link",
             "doi",
             "files",
+            "recording_sessions",
+            "recording_session_ids",
+        ]
+
+    def get_recording_sessions(self, obj):
+        return [
+            {"id": rs.id, "name": rs.name}
+            for rs in obj.recording_session_list.order_by("name")
         ]
 
     def get_files(self, obj):

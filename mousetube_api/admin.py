@@ -12,7 +12,7 @@ from django.contrib import admin, messages
 from django.contrib.admin import helpers
 from django.contrib.auth import get_user_model
 from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
-from django.db.models import Exists, OuterRef
+from django.db.models import Count, Exists, OuterRef
 from django.template.response import TemplateResponse
 
 from .models import (
@@ -100,6 +100,48 @@ class RecordingSessionAdmin(admin.ModelAdmin):
         )
 
 
+class DatasetAdmin(admin.ModelAdmin):
+    """Add a dataset: pick its sessions in a searchable two-column list."""
+
+    list_display = ("name", "id", "sessions_count", "files_count", "doi", "created_at")
+    search_fields = ("name", "description", "doi")
+    filter_horizontal = ("recording_session_list",)
+    readonly_fields = ("created_at", "modified_at")
+    fields = (
+        "name",
+        "description",
+        "doi",
+        "link",
+        "recording_session_list",
+        "created_by",
+        "created_at",
+        "modified_at",
+    )
+
+    def get_queryset(self, request):
+        return (
+            super()
+            .get_queryset(request)
+            .annotate(
+                _sessions=Count("recording_session_list", distinct=True),
+                _files=Count("recording_session_list__file", distinct=True),
+            )
+        )
+
+    @admin.display(description="Sessions", ordering="_sessions")
+    def sessions_count(self, obj):
+        return obj._sessions
+
+    @admin.display(description="Files", ordering="_files")
+    def files_count(self, obj):
+        return obj._files
+
+    def save_model(self, request, obj, form, change):
+        if obj.created_by is None:
+            obj.created_by = request.user
+        super().save_model(request, obj, form, change)
+
+
 class FileAdmin(admin.ModelAdmin):
     list_display = (
         "name",
@@ -180,7 +222,7 @@ admin.site.register(Species)
 admin.site.register(Strain, StrainAdmin)
 admin.site.register(Protocol, ProtocolAdmin)
 admin.site.register(File, FileAdmin)
-admin.site.register(Dataset)
+admin.site.register(Dataset, DatasetAdmin)
 admin.site.register(Software, SoftwareAdmin)
 admin.site.register(Hardware, HardwareAdmin)
 admin.site.register(RecordingSession, RecordingSessionAdmin)
