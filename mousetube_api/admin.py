@@ -9,9 +9,11 @@ Code under GPL v3.0 licence
 
 from allauth.account.models import EmailAddress
 from django.contrib import admin, messages
+from django.contrib.admin import helpers
 from django.contrib.auth import get_user_model
 from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
 from django.db.models import Exists, OuterRef
+from django.template.response import TemplateResponse
 
 from .models import (
     AnimalProfile,
@@ -32,7 +34,11 @@ from .models import (
     Subject,
     UserProfile,
 )
-from .utils.registration import email_is_verified, send_account_activated_email
+from .utils.registration import (
+    email_is_verified,
+    send_account_activated_email,
+    send_account_rejected_email,
+)
 
 
 class ContactAdmin(admin.ModelAdmin):
@@ -196,13 +202,32 @@ User = get_user_model()
 admin.site.unregister(User)
 
 
+class AccountRequestFilter(admin.SimpleListFilter):
+    title = "account request"
+    parameter_name = "account_request"
+
+    def lookups(self, request, model_admin):
+        return [
+            ("review", "To review (e-mail confirmed)"),
+            ("unconfirmed", "Waiting for e-mail confirmation"),
+        ]
+
+    def queryset(self, request, queryset):
+        # queryset comes from UserAccountAdmin.get_queryset, so _email_confirmed exists
+        if self.value() == "review":
+            return queryset.filter(is_active=False, _email_confirmed=True)
+        if self.value() == "unconfirmed":
+            return queryset.filter(is_active=False, _email_confirmed=False)
+        return queryset
+
+
 @admin.register(User)
 class UserAccountAdmin(DjangoUserAdmin):
-    """Shows who confirmed their e-mail and lets admins activate accounts in bulk."""
+    """Account requests: who confirmed their e-mail, activate or reject in bulk."""
 
     list_display = (*DjangoUserAdmin.list_display, "is_active", "email_confirmed")
-    list_filter = ("is_active", *DjangoUserAdmin.list_filter)
-    actions = ("activate_accounts",)
+    list_filter = (AccountRequestFilter, "is_active", *DjangoUserAdmin.list_filter)
+    actions = ("activate_accounts", "reject_accounts")
 
     def get_queryset(self, request):
         return (
@@ -228,7 +253,10 @@ class UserAccountAdmin(DjangoUserAdmin):
         if change and "is_active" in form.changed_data and obj.is_active:
             send_account_activated_email(obj)
 
-    @admin.action(description="Activate selected accounts (e-mail must be confirmed)")
+    @admin.action(
+        description="Activate selected accounts (e-mail must be confirmed)",
+        permissions=["change"],
+    )
     def activate_accounts(self, request, queryset):
         activated = 0
         for user in queryset.filter(is_active=False):
@@ -244,3 +272,43 @@ class UserAccountAdmin(DjangoUserAdmin):
             send_account_activated_email(user)
             activated += 1
         self.message_user(request, f"{activated} account(s) activated.")
+
+    @admin.action(
+        description="Reject selected requests (delete and notify by e-mail)",
+        permissions=["delete"],
+    )
+    def reject_accounts(self, request, queryset):
+        # Only brand-new requests: never an account that was ever used or that has staff rights.
+        requests = queryset.filter(
+            is_active=False, is_staff=False, is_superuser=False, last_login__isnull=True
+        )
+        if "apply" not in request.POST:
+            return TemplateResponse(
+                request,
+                "admin/reject_accounts.html",
+                {
+                    **self.admin_site.each_context(request),
+                    "title": "Reject account requests",
+                    "opts": self.model._meta,
+                    "requests": requests,
+                    "skipped": queryset.count() - requests.count(),
+                    "action_checkbox_name": helpers.ACTION_CHECKBOX_NAME,
+                },
+            )
+
+        reason = request.POST.get("reason", "").strip()
+        rejected = 0
+        for user in requests:
+            try:
+                send_account_rejected_email(user, reason)
+            except Exception as exc:  # noqa: BLE001 - keep the request so it can be retried
+                self.message_user(
+                    request,
+                    f"{user.username}: e-mail could not be sent ({exc}); request kept.",
+                    messages.ERROR,
+                )
+                continue
+            user.delete()
+            rejected += 1
+        self.message_user(request, f"{rejected} request(s) rejected and deleted.")
+        return None

@@ -23,6 +23,11 @@ def confirm_email_and_notify_admin(user):
         return False
 
     profile = getattr(user, "user_profile", None)
+    list_url = (
+        settings.ADMIN_BASE_URL
+        + reverse("admin:auth_user_changelist")
+        + "?account_request=review"
+    )
     admin_url = settings.ADMIN_BASE_URL + reverse(
         "admin:auth_user_change", args=[user.pk]
     )
@@ -35,8 +40,9 @@ def confirm_email_and_notify_admin(user):
         f"ORCID: {getattr(profile, 'orcid', None) or '-'}\n\n"
         "To activate the account, open it, tick 'Active' and save:\n"
         f"{admin_url}\n\n"
-        "Several requests: select them in the users list and use the action "
-        "'Activate selected accounts'.",
+        f"All requests waiting for your decision ({pending_review_count() + 1}), "
+        "with the actions 'Activate selected accounts' and 'Reject selected requests':\n"
+        f"{list_url}",
         settings.DEFAULT_FROM_EMAIL,
         [settings.DEFAULT_ADMIN_EMAIL],
         fail_silently=False,
@@ -44,6 +50,16 @@ def confirm_email_and_notify_admin(user):
     address.verified = True
     address.save(update_fields=["verified"])
     return True
+
+
+def pending_review_count():
+    """Inactive accounts whose e-mail is confirmed: waiting for an administrator."""
+    return (
+        EmailAddress.objects.filter(verified=True, user__is_active=False)
+        .values("user")
+        .distinct()
+        .count()
+    )
 
 
 def email_is_verified(user):
@@ -65,3 +81,21 @@ def send_account_activated_email(user):
         )
     except Exception:
         logger.exception("Could not send the activation notice to user %s", user.pk)
+
+
+def send_account_rejected_email(user, reason=""):
+    """Raises if the mail cannot be sent: the caller then keeps the request."""
+    reason_text = f"\nReason: {reason}\n" if reason else ""
+    send_mail(
+        "[mouseTube] Your account request",
+        f"Hello {user.first_name or user.username},\n\n"
+        "Your mouseTube account request was not approved."
+        f"{reason_text}\n"
+        f"You can register again at {settings.FRONT_URL}/account/register "
+        "with your institutional email address, or reply to this message if you think "
+        "this is a mistake.\n\n"
+        "The mouseTube team",
+        settings.DEFAULT_FROM_EMAIL,
+        [user.email],
+        fail_silently=False,
+    )

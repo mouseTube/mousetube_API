@@ -354,3 +354,72 @@ class OauthPagesTests(SimpleTestCase):
         ):
             with self.subTest(name=name):
                 self.assertIn("/account/login", self._render(name))
+
+
+@override_settings(CACHES=LOCMEM)
+class AdminAccountReviewTests(TestCase):
+    """The admin list of account requests, and the reject action."""
+
+    def setUp(self):
+        from allauth.account.models import EmailAddress
+        from django.core import mail
+
+        self.mail = mail
+        User = get_user_model()
+        self.root = User.objects.create_superuser("root", "root@igbmc.fr", "x")
+        self.pending = User.objects.create_user(
+            "pending", email="p@igbmc.fr", is_active=False
+        )
+        EmailAddress.objects.create(
+            user=self.pending, email="p@igbmc.fr", verified=True, primary=True
+        )
+        self.unconfirmed = User.objects.create_user(
+            "unconf", email="u@igbmc.fr", is_active=False
+        )
+        self.active = User.objects.create_user("active", email="a@igbmc.fr")
+        self.old = User.objects.create_user("old", email="o@igbmc.fr", is_active=False)
+        User.objects.filter(pk=self.old.pk).update(last_login="2024-01-01T00:00:00Z")
+        self.client.force_login(self.root)
+        self.url = "/admin/auth/user/"
+
+    def _usernames(self, query):
+        html = self.client.get(self.url + query).content.decode()
+        return [
+            u for u in ("pending", "unconf", "active", "old") if f">{u}</a>" in html
+        ]
+
+    def test_filter_lists_only_requests_waiting_for_a_decision(self):
+        self.assertEqual(self._usernames("?account_request=review"), ["pending"])
+        self.assertEqual(
+            self._usernames("?account_request=unconfirmed"), ["unconf", "old"]
+        )
+
+    def _reject(self, users, **extra):
+        return self.client.post(
+            self.url,
+            {
+                "action": "reject_accounts",
+                "_selected_action": [u.pk for u in users],
+                **extra,
+            },
+        )
+
+    def test_reject_asks_for_a_reason_first(self):
+        r = self._reject([self.pending])
+        self.assertContains(r, "Reason")
+        self.assertTrue(get_user_model().objects.filter(pk=self.pending.pk).exists())
+
+    def test_reject_deletes_the_request_and_mails_the_reason(self):
+        r = self._reject(
+            [self.pending, self.active, self.old],
+            apply="1",
+            reason="Use your institutional address",
+        )
+        self.assertEqual(r.status_code, 302)
+        users = get_user_model().objects
+        self.assertFalse(users.filter(pk=self.pending.pk).exists())
+        # an active account and an account that already logged in are never deleted
+        self.assertTrue(users.filter(pk=self.active.pk).exists())
+        self.assertTrue(users.filter(pk=self.old.pk).exists())
+        self.assertEqual([m.to for m in self.mail.outbox], [["p@igbmc.fr"]])
+        self.assertIn("Use your institutional address", self.mail.outbox[0].body)
