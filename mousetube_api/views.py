@@ -1900,7 +1900,22 @@ class DatasetViewSet(viewsets.ModelViewSet):
     queryset = Dataset.objects.all().order_by("name")
     serializer_class = DatasetSerializer
     filter_backends = [filters.SearchFilter]
-    search_fields = ["name"]
+    # the name, but also what people look for: a file, a session, an animal profile, a DOI
+    search_fields = [
+        "name",
+        "description",
+        "doi",
+        "recording_session_list__name",
+        "recording_session_list__file__name",
+        "recording_session_list__file__doi",
+        "recording_session_list__animal_profiles__name",
+        # what the file rows show as chips (sex, age, duration, cage, bedding)
+        "recording_session_list__protocol__animals_sex",
+        "recording_session_list__protocol__animals_age",
+        "recording_session_list__protocol__context_duration",
+        "recording_session_list__protocol__context_cage",
+        "recording_session_list__protocol__context_bedding",
+    ]
 
     def get_permissions(self):
         # get_permissions replaces the permission_classes given to @action, so every

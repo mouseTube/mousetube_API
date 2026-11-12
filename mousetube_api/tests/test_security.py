@@ -585,6 +585,20 @@ class DatasetMetadataTests(FreshCache, TestCase):
         self.assertTrue(f.doi.startswith("10.5281/zenodo"))
         self.assertEqual(f.repository.name, "Zenodo")
 
+    def test_search_finds_a_dataset_by_its_files_and_does_not_repeat_it(self):
+        from mousetube_api.models import File
+
+        self._import()
+        name = File.objects.first().name
+        dataset = (
+            File.objects.first().recording_session.dataset_recording_sessions.get()
+        )
+        found = self.client.get("/api/dataset/", {"search": name}).json()["results"]
+        self.assertEqual([d["id"] for d in found], [dataset.id])
+        self.assertEqual(
+            self.client.get("/api/dataset/", {"search": "zzzz"}).json()["count"], 0
+        )
+
     def test_import_twice_creates_nothing_new(self):
         from mousetube_api.models import File
 
