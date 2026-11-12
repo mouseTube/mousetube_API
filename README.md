@@ -73,7 +73,7 @@ The settings read `.env` at the root of the project, then `/etc/mousetube/mouset
    - select them and run **Reject selected requests**: a page asks for an optional reason, then the request is deleted and the person is told by e-mail. Only inactive accounts that never logged in can be rejected; if the e-mail cannot be sent, the request is kept.
 5. The user receives an e-mail saying the account is active (or the refusal, with the reason).
 
-Docker-only variables: `RESET_DB=true` recreates the database. It is refused when `DEBUG=false`. Migrations are no longer generated when the container starts, so commit them.
+Docker-only variables: `RESET_DB=true` recreates the database. It is refused when `DEBUG=false`. Migrations are generated and applied when the container starts (`makemigrations`, `migrate`) and are not versioned; the conversions of existing rows that a structure change needs are done by `python manage.py normalize_data`, which the container runs after `migrate` (it is safe to run again).
 
 ### 3. Install and start MariaDB
 

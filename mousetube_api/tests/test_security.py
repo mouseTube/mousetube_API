@@ -1223,27 +1223,21 @@ class ModerationTests(FreshCache, TestCase):
             )
             mail.outbox.clear()
 
-    def test_the_migration_gives_the_same_spelling_to_old_rows(self):
-        from importlib import import_module
-
-        from django.apps import apps
-
-        from mousetube_api.migrations import (
-            __path__ as migrations_path,  # noqa: F401 - the package must be importable
-        )
+    def test_the_old_spelling_of_the_waiting_status_is_converted(self):
         from mousetube_api.models import Contact, Strain
+        from mousetube_api.utils.data_upgrades import normalize_statuses
 
-        migration = import_module("mousetube_api.migrations.0003_align_statuses")
         contact = Contact.objects.create(
             last_name="C", email="c@igbmc.fr", created_by=self.alice
         )
         Contact.objects.filter(pk=contact.pk).update(status="waiting_validation")
         Strain.objects.filter(pk=self.strain.pk).update(status="waiting_validation")
-        migration.waiting_with_a_space(apps, None)
+        self.assertEqual(normalize_statuses(), 2)
         contact.refresh_from_db()
         self.strain.refresh_from_db()
         self.assertEqual(contact.status, "waiting validation")
         self.assertEqual(self.strain.status, "waiting validation")
+        self.assertEqual(normalize_statuses(), 0)  # nothing left to do
 
     # ---- sessions -------------------------------------------------------------------
     def test_a_session_using_validated_entries_is_shared_at_once(self):
@@ -1472,21 +1466,18 @@ class ProfilePageTests(FreshCache, TestCase):
         self.assertEqual(response.json()[0]["user"]["username"], "old")
         self.assertEqual(UserProfile.objects.filter(user=user).count(), 1)
 
-    def test_the_migration_gives_a_profile_to_every_account(self):
-        from importlib import import_module
-
-        from django.apps import apps
-
+    def test_every_account_gets_a_profile_and_running_again_changes_nothing(self):
         from mousetube_api.models import UserProfile
+        from mousetube_api.utils.data_upgrades import create_missing_profiles
 
-        migration = import_module("mousetube_api.migrations.0004_profiles_for_everyone")
         users = [
             get_user_model().objects.create_user(f"u{i}", f"u{i}@igbmc.fr", "x")
             for i in range(2)
         ]
         UserProfile.objects.all().delete()
-        migration.create_missing_profiles(apps, None)
+        self.assertEqual(create_missing_profiles(), len(users))
         self.assertEqual(UserProfile.objects.count(), len(users))
+        self.assertEqual(create_missing_profiles(), 0)
 
 
 def _fake_vocabularies(url, params=None, **kwargs):
@@ -1795,3 +1786,38 @@ class OwnAccountTests(FreshCache, TestCase):
         )
         profile.refresh_from_db()
         self.assertFalse(profile.administrator)
+
+
+class DataUpgradeCommandTests(TestCase):
+    """manage.py normalize_data runs after migrate: it converts what a change of structure
+    leaves behind and is safe to run every time."""
+
+    def test_species_and_sex_get_their_terms_without_any_network_call(self):
+        from io import StringIO
+        from unittest import mock
+
+        from django.core.management import call_command
+
+        from mousetube_api.models import AnimalProfile, Species, Strain
+
+        species = Species.objects.create(name="Mus musculus")
+        strain = Strain.objects.create(
+            name="B6", background="b", species=species, status="validated"
+        )
+        profile = AnimalProfile.objects.create(
+            name="AP", strain=strain, sex="female", genotype="+/+"
+        )
+        with mock.patch(
+            "mousetube_api.utils.ontologies.requests.get",
+            side_effect=AssertionError("no network call"),
+        ):
+            out = StringIO()
+            call_command("normalize_data", stdout=out)
+            self.assertIn("terms linked: 2", out.getvalue())
+            species.refresh_from_db()
+            profile.refresh_from_db()
+            self.assertEqual(species.ontology_term.curie, "NCBITaxon:10090")
+            self.assertEqual(profile.sex_term.curie, "PATO:0000383")
+            again = StringIO()
+            call_command("normalize_data", stdout=again)
+            self.assertIn("terms linked: 0", again.getvalue())

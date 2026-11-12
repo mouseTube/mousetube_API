@@ -42,6 +42,12 @@ SEX_TERMS = {
     "female": ("PATO:0000383", "female"),
 }
 
+# Species whose NCBI Taxonomy term is known (checked in the Ontology Lookup Service)
+SPECIES_TERMS = {
+    "mus musculus": ("NCBITaxon:10090", "Mus musculus"),
+    "rattus norvegicus": ("NCBITaxon:10116", "Rattus norvegicus"),
+}
+
 # The units of the numeric fields (Units Ontology), for the documentation of the API
 UNITS = {
     "sampling_rate": {"unit": "hertz", "curie": "UO:0000106"},
@@ -220,6 +226,22 @@ def sex_term(sex):
         defaults={
             "label": label,
             "ontology": "pato",
+            "iri": f"http://purl.obolibrary.org/obo/{curie.replace(':', '_')}",
+        },
+    )
+    return term
+
+
+def known_term(curie, label):
+    """The OntologyTerm of an identifier we already know, without any network call."""
+    from mousetube_api.models import OntologyTerm
+
+    prefix = curie.split(":")[0]
+    term, _ = OntologyTerm.objects.get_or_create(
+        curie=curie,
+        defaults={
+            "label": label,
+            "ontology": prefix.lower(),
             "iri": f"http://purl.obolibrary.org/obo/{curie.replace(':', '_')}",
         },
     )

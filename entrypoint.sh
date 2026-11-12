@@ -55,8 +55,16 @@ else
     mariadb -h db -u root -p"$DB_ROOT_PASS" -e "GRANT ALL PRIVILEGES ON $DB_NAME.* TO '$DB_USER'@'localhost'; FLUSH PRIVILEGES;"
 fi
 
+echo "🛠️ Running makemigrations..."
+python3 manage.py makemigrations mousetube_api --noinput
+
 echo "📦 Applying migrations..."
 python3 manage.py migrate --noinput
+
+# migrations are generated here and not versioned, so they only change the structure:
+# the conversions of existing rows are done by this command (safe to run every time)
+echo "🔧 Upgrading existing data..."
+python3 manage.py normalize_data
 
 # 🚨 Explicit check of critical tables before loading data
 echo "🔍 Verifying that all required tables exist before loading fixtures..."
