@@ -39,6 +39,14 @@ class Laboratory(models.Model):
     institution = models.CharField(max_length=255, blank=True, null=True)
     unit = models.CharField(max_length=255, blank=True, null=True)
     address = models.CharField(max_length=255, blank=True, null=True)
+    organization = models.ForeignKey(
+        "OntologyTerm",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="laboratories",
+        help_text="The organization in the ROR registry.",
+    )
     country = CountryField(blank=True, null=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="draft")
     created_at = models.DateTimeField(auto_now_add=True, null=True)
@@ -70,6 +78,7 @@ class UserProfile(models.Model):
         address (CharField): Physical address of the user.
         country (CountryField): Country of the user.
         orcid (CharField): ORCID researcher identifier.
+        email_public (BooleanField): Whether the e-mail is shown to visitors (default: no).
         administrator (BooleanField): Whether the user has admin privileges.
         date_joined (DateTimeField): Timestamp when the profile was created.
         modified_at (DateTimeField): Last modification timestamp.
@@ -106,6 +115,11 @@ class UserProfile(models.Model):
     ]
     view_mode = models.CharField(
         max_length=10, choices=VIEW_MODE_CHOICES, default="cards"
+    )
+    email_public = models.BooleanField(
+        default=False,
+        help_text="Show the e-mail address next to the recordings of this user "
+        "(hidden from everybody else by default).",
     )
 
     def __str__(self):
@@ -145,7 +159,7 @@ class Contact(models.Model):
         max_length=20,
         choices=[
             ("draft", "Draft"),
-            ("waiting_validation", "Waiting Validation"),
+            ("waiting validation", "Waiting validation"),
             ("validated", "Validated"),
         ],
         default="draft",
@@ -167,6 +181,28 @@ class Contact(models.Model):
         verbose_name_plural = "Contacts"
 
 
+class OntologyTerm(models.Model):
+    """A term of an ontology (or an organization of the ROR registry), checked at the source.
+
+    The identifier is a CURIE (PATO:0000384, NCBITaxon:10090, ROR:0015ws592). Records point
+    to it from the fields where a controlled vocabulary exists, next to their free text.
+    """
+
+    curie = models.CharField(max_length=64, unique=True)
+    label = models.CharField(max_length=255)
+    ontology = models.CharField(
+        max_length=32
+    )  # lower case prefix: pato, ncbitaxon, ror...
+    iri = models.URLField(max_length=255, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.label} ({self.curie})"
+
+    class Meta:
+        ordering = ["ontology", "label"]
+
+
 class Species(models.Model):
     """
     Represents a biological species relevant to the data.
@@ -179,6 +215,14 @@ class Species(models.Model):
     """
 
     name = models.CharField(max_length=255, unique=True)
+    ontology_term = models.ForeignKey(
+        OntologyTerm,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="species",
+        help_text="NCBI Taxonomy term of the species.",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     modified_at = models.DateTimeField(auto_now=True)
     created_by = models.ForeignKey(
@@ -213,7 +257,7 @@ class Strain(models.Model):
 
     STATUS_CHOICES = [
         ("draft", "Draft"),
-        ("waiting_validation", "Waiting Validation"),
+        ("waiting validation", "Waiting validation"),
         ("validated", "Validated"),
     ]
 
@@ -270,7 +314,7 @@ class AnimalProfile(models.Model):
 
     STATUS_CHOICES = [
         ("draft", "Draft"),
-        ("waiting_validation", "Waiting Validation"),
+        ("waiting validation", "Waiting validation"),
         ("validated", "Validated"),
     ]
 
@@ -289,6 +333,30 @@ class AnimalProfile(models.Model):
     )
     genotype = models.CharField(max_length=255)
     treatment = models.CharField(max_length=255, null=True, blank=True)
+    sex_term = models.ForeignKey(
+        OntologyTerm,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="animal_profiles_sex",
+        help_text="PATO term of the sex.",
+    )
+    age_term = models.ForeignKey(
+        OntologyTerm,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="animal_profiles_age",
+        help_text="Developmental stage (MmusDv) when the age class is not precise enough.",
+    )
+    treatment_term = models.ForeignKey(
+        OntologyTerm,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="animal_profiles_treatment",
+        help_text="ChEBI term of the compound of the treatment.",
+    )
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="draft")
     created_at = models.DateTimeField(auto_now_add=True, null=True)
     modified_at = models.DateTimeField(auto_now=True, null=True)
@@ -801,9 +869,13 @@ class RecordingSession(models.Model):
         ("no specific sound isolation", "No specific sound isolation"),
     ]
 
+    # draft -> (sharing asks for a review when the session uses entries nobody
+    # validated yet) waiting validation -> shared -> published (deposited with a DOI)
     STATUS = [
         ("draft", "Draft"),
+        ("waiting validation", "Waiting validation"),
         ("shared", "Shared"),
+        ("published", "Published"),
     ]
 
     name = models.CharField(max_length=255)
@@ -822,6 +894,12 @@ class RecordingSession(models.Model):
     )
     description = models.TextField(blank=True, null=True)
     date = models.DateTimeField(blank=True, null=True)
+    behavior_terms = models.ManyToManyField(
+        OntologyTerm,
+        blank=True,
+        related_name="recording_sessions",
+        help_text="Behaviors recorded, as terms of the Neuro Behavior Ontology.",
+    )
     status = models.CharField(
         max_length=20,
         choices=STATUS,

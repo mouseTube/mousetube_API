@@ -242,7 +242,11 @@ REST_FRAMEWORK = {
     ],
     # Only brute-forceable auth endpoints are throttled (see mousetube_api/throttles.py).
     "DEFAULT_THROTTLE_CLASSES": ["mousetube_api.throttles.AuthEndpointsThrottle"],
-    "DEFAULT_THROTTLE_RATES": {"auth": "10/min", "register": "20/hour"},
+    "DEFAULT_THROTTLE_RATES": {
+        "auth": "10/min",
+        "register": "20/hour",
+        "ontology": "60/min",
+    },
     # Number of reverse proxies in front of Django (HAProxy + nginx = 2). With the
     # default 0 the client IP is REMOTE_ADDR, which is never spoofable.
     "NUM_PROXIES": env.int("DRF_NUM_PROXIES", default=0),

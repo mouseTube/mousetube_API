@@ -1,0 +1,21 @@
+{% extends "admin/index.html" %}
+
+{% block content %}
+{% if moderation_total %}
+<div class="module" style="margin-bottom: 24px">
+  <table>
+    <caption>To review ({{ moderation_total }})</caption>
+    {% for row in moderation_rows %}
+      {% if row.count %}
+      <tr>
+        <th scope="row"><a href="{{ row.url }}">{{ row.label }}</a></th>
+        <td>{{ row.count }} waiting</td>
+        <td><a href="{{ row.url }}" class="viewlink">Review</a></td>
+      </tr>
+      {% endif %}
+    {% endfor %}
+  </table>
+</div>
+{% endif %}
+{{ block.super }}
+{% endblock %}

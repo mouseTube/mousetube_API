@@ -47,6 +47,7 @@ from .views import (
     HardwareDetailAPIView,
     LaboratoryAPIView,
     LinkOrcidView,
+    OntologySearchView,
     ProtocolViewSet,
     PublishSessionView,
     RecordingSessionViewSet,
@@ -142,6 +143,7 @@ urlpatterns = [
         name="hardware-detail",
     ),
     path("api/country/", CountryAPIView.as_view(), name="country"),
+    path("api/ontology/search/", OntologySearchView.as_view(), name="ontology-search"),
     path(
         "api/personal-email-domains/",
         personal_email_domains,

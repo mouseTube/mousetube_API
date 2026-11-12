@@ -1,0 +1,37 @@
+{% extends "admin/base_site.html" %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">Home</a> &rsaquo;
+  {{ opts.verbose_name_plural|capfirst }} &rsaquo; Send back to draft
+</div>
+{% endblock %}
+
+{% block content %}
+<p>
+  {% if entries %}
+    The following {{ entries|length }} item(s) go back to <strong>draft</strong>. Their creator
+    is told by e-mail (when we have an address) and can change them, then submit them again.
+  {% else %}
+    None of the selected items can be sent back: they are already drafts.
+  {% endif %}
+</p>
+{% if entries %}
+<ul>{% for e in entries %}<li>{{ e }}</li>{% endfor %}</ul>
+<form method="post">
+  {% csrf_token %}
+  {% for e in entries %}
+    <input type="hidden" name="{{ action_checkbox_name }}" value="{{ e.pk }}">
+  {% endfor %}
+  <input type="hidden" name="action" value="{{ action }}">
+  <input type="hidden" name="apply" value="1">
+  <p>
+    <label for="reason"><strong>Reason</strong> (optional, added to the e-mail):</label><br>
+    <textarea id="reason" name="reason" rows="4" cols="70"
+      placeholder="For example: please add the reference of the microphone."></textarea>
+  </p>
+  <input type="submit" class="default" value="Send back and notify">
+  <a href="javascript:history.back()" class="button cancel-link">Cancel</a>
+</form>
+{% endif %}
+{% endblock %}

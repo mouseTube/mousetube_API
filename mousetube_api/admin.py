@@ -14,6 +14,8 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
 from django.db.models import Count, Exists, OuterRef
 from django.template.response import TemplateResponse
+from django.urls import reverse
+from django.utils.html import format_html, format_html_join
 
 from .models import (
     AnimalProfile,
@@ -22,6 +24,7 @@ from .models import (
     File,
     Hardware,
     Laboratory,
+    OntologyTerm,
     Protocol,
     RecordingSession,
     Reference,
@@ -34,6 +37,13 @@ from .models import (
     Subject,
     UserProfile,
 )
+from .utils.moderation import (
+    notify_creator,
+    promote_ready_sessions,
+    session_pending_entries,
+    validate_entries,
+    validate_session,
+)
 from .utils.registration import (
     email_is_verified,
     send_account_activated_email,
@@ -41,7 +51,63 @@ from .utils.registration import (
 )
 
 
-class ContactAdmin(admin.ModelAdmin):
+class ModerationAdminMixin:
+    """Review of what users add: validate in bulk, or send back to draft with a reason.
+
+    Filter by status (the dashboard links to "waiting validation"), then select and act.
+    Validating entries also shares the sessions that were only waiting for them.
+    """
+
+    actions = ("validate_selected", "send_back_to_draft")
+
+    @admin.action(description="Validate the selected entries")
+    def validate_selected(self, request, queryset):
+        entries = [(None, obj) for obj in queryset.exclude(status="validated")]
+        changed = validate_entries(entries)
+        for _kind, obj in entries:
+            notify_creator(
+                obj,
+                f"[mouseTube] Your {obj._meta.verbose_name} '{obj}' was validated",
+                "An administrator validated it: it is now visible to everybody.",
+            )
+        shared = promote_ready_sessions()
+        message = f"{changed} entr{'y' if changed == 1 else 'ies'} validated."
+        if shared:
+            message += f" {len(shared)} session(s) shared as a result."
+        self.message_user(request, message, messages.SUCCESS)
+
+    @admin.action(description="Send back to draft (with a reason)")
+    def send_back_to_draft(self, request, queryset):
+        entries = queryset.exclude(status="draft")
+        if "apply" not in request.POST:
+            return TemplateResponse(
+                request,
+                "admin/send_back.html",
+                {
+                    **self.admin_site.each_context(request),
+                    "title": f"Send back {self.model._meta.verbose_name_plural}",
+                    "opts": self.model._meta,
+                    "entries": entries,
+                    "action_checkbox_name": helpers.ACTION_CHECKBOX_NAME,
+                    "action": "send_back_to_draft",
+                },
+            )
+        reason = request.POST.get("reason", "").strip()
+        sent = list(entries)
+        entries.update(status="draft")
+        for obj in sent:
+            notify_creator(
+                obj,
+                f"[mouseTube] Your {obj._meta.verbose_name} '{obj}' needs changes",
+                "An administrator sent it back to draft."
+                + (f"\n\nReason: {reason}" if reason else "")
+                + "\n\nChange it, then submit it again for review.",
+            )
+        self.message_user(request, f"{len(sent)} sent back to draft.", messages.SUCCESS)
+        return None
+
+
+class ContactAdmin(ModerationAdminMixin, admin.ModelAdmin):
     list_display = (
         "first_name",
         "last_name",
@@ -54,10 +120,10 @@ class ContactAdmin(admin.ModelAdmin):
     list_filter = ("country", "status")
 
 
-class StrainAdmin(admin.ModelAdmin):
-    list_display = ("name", "background", "species")
+class StrainAdmin(ModerationAdminMixin, admin.ModelAdmin):
+    list_display = ("name", "background", "species", "status")
     search_fields = ("name",)
-    list_filter = ("background",)
+    list_filter = ("status", "background")
 
 
 class SubjectAdmin(admin.ModelAdmin):
@@ -80,6 +146,8 @@ class RecordingSessionAdmin(admin.ModelAdmin):
     list_display = (
         "name",
         "id",
+        "status",
+        "to_validate",
         "protocol",
         "display_studies",
         "date",
@@ -87,7 +155,9 @@ class RecordingSessionAdmin(admin.ModelAdmin):
         "display_equipment_acquisition_software",
     )
     search_fields = ("name", "protocol__name")
-    list_filter = ("protocol", "date")
+    list_filter = ("status", "protocol", "date")
+    readonly_fields = ("entries_to_validate",)
+    actions = ("validate_sessions", "send_back_sessions")
 
     @admin.display(description="Studies")
     def display_studies(self, obj):
@@ -98,6 +168,90 @@ class RecordingSessionAdmin(admin.ModelAdmin):
         return ", ".join(
             [str(soft) for soft in obj.equipment_acquisition_software.all()]
         )
+
+    @admin.display(description="To validate")
+    def to_validate(self, obj):
+        return len(session_pending_entries(obj))
+
+    @admin.display(description="Entries nobody validated yet")
+    def entries_to_validate(self, obj):
+        if not obj.pk:
+            return "-"
+        pending = session_pending_entries(obj)
+        if not pending:
+            return "Nothing: everything this session uses is validated."
+        return format_html(
+            "<ul>{}</ul>",
+            format_html_join(
+                "",
+                '<li>{}: <a href="{}">{}</a> ({})</li>',
+                (
+                    (
+                        kind,
+                        reverse(
+                            f"admin:{o._meta.app_label}_{o._meta.model_name}_change",
+                            args=[o.pk],
+                        ),
+                        o,
+                        o.status,
+                    )
+                    for kind, o in pending
+                ),
+            ),
+        )
+
+    @admin.action(
+        description="Validate the sessions and everything they use, then share"
+    )
+    def validate_sessions(self, request, queryset):
+        entries = 0
+        for session in queryset.exclude(status="published"):
+            done, session = validate_session(session)
+            entries += len(done)
+            notify_creator(
+                session,
+                f"[mouseTube] Your recording session '{session.name}' is shared",
+                "An administrator validated your session and what it uses. "
+                "It is now visible to everybody.",
+            )
+        self.message_user(
+            request,
+            f"{queryset.count()} session(s) shared, {entries} entr"
+            f"{'y' if entries == 1 else 'ies'} validated.",
+            messages.SUCCESS,
+        )
+
+    @admin.action(description="Send back to draft (with a reason)")
+    def send_back_sessions(self, request, queryset):
+        sessions = queryset.exclude(status__in=("draft", "published"))
+        if "apply" not in request.POST:
+            return TemplateResponse(
+                request,
+                "admin/send_back.html",
+                {
+                    **self.admin_site.each_context(request),
+                    "title": "Send back recording sessions",
+                    "opts": self.model._meta,
+                    "entries": sessions,
+                    "action_checkbox_name": helpers.ACTION_CHECKBOX_NAME,
+                    "action": "send_back_sessions",
+                },
+            )
+        reason = request.POST.get("reason", "").strip()
+        sent = list(sessions)
+        sessions.update(status="draft")
+        for session in sent:
+            notify_creator(
+                session,
+                f"[mouseTube] Your recording session '{session.name}' needs changes",
+                "An administrator sent it back to draft."
+                + (f"\n\nReason: {reason}" if reason else "")
+                + "\n\nChange it, then share it again.",
+            )
+        self.message_user(
+            request, f"{len(sent)} session(s) sent back to draft.", messages.SUCCESS
+        )
+        return None
 
 
 class DatasetAdmin(admin.ModelAdmin):
@@ -166,14 +320,16 @@ class FileAdmin(admin.ModelAdmin):
         return ", ".join([str(s) for s in obj.subjects.all()])
 
 
-class SoftwareAdmin(admin.ModelAdmin):
+class SoftwareAdmin(ModerationAdminMixin, admin.ModelAdmin):
     list_display = (
         "name",
         "type",
         "made_by",
+        "status",
         "description",
         "technical_requirements",
     )
+    list_filter = ("status", "type")
     search_fields = (
         "name",
         "type",
@@ -184,13 +340,15 @@ class SoftwareAdmin(admin.ModelAdmin):
     filter_horizontal = ("references", "contacts")
 
 
-class ReferenceAdmin(admin.ModelAdmin):
+class ReferenceAdmin(ModerationAdminMixin, admin.ModelAdmin):
     list_display = (
         "name",
         "description",
         "url",
         "doi",
+        "status",
     )
+    list_filter = ("status",)
     search_fields = (
         "name",
         "description",
@@ -199,13 +357,15 @@ class ReferenceAdmin(admin.ModelAdmin):
     )
 
 
-class HardwareAdmin(admin.ModelAdmin):
+class HardwareAdmin(ModerationAdminMixin, admin.ModelAdmin):
     list_display = (
         "name",
         "type",
         "made_by",
+        "status",
         "description",
     )
+    list_filter = ("status", "type")
     search_fields = (
         "name",
         "type",
@@ -215,7 +375,32 @@ class HardwareAdmin(admin.ModelAdmin):
     filter_horizontal = ("references",)
 
 
+class OntologyTermAdmin(admin.ModelAdmin):
+    list_display = ("curie", "label", "ontology")
+    list_filter = ("ontology",)
+    search_fields = ("curie", "label")
+
+
+class LaboratoryAdmin(ModerationAdminMixin, admin.ModelAdmin):
+    list_display = ("name", "institution", "unit", "country", "status")
+    list_filter = ("status", "country")
+    search_fields = ("name", "institution", "unit")
+
+
+class StudyAdmin(ModerationAdminMixin, admin.ModelAdmin):
+    list_display = ("name", "start_date", "end_date", "status")
+    list_filter = ("status",)
+    search_fields = ("name",)
+
+
+class AnimalProfileAdmin(ModerationAdminMixin, admin.ModelAdmin):
+    list_display = ("name", "strain", "sex", "age", "genotype", "status")
+    list_filter = ("status", "sex", "age")
+    search_fields = ("name", "genotype")
+
+
 admin.site.register(UserProfile)
+admin.site.register(OntologyTerm, OntologyTermAdmin)
 admin.site.register(Repository)
 admin.site.register(Reference, ReferenceAdmin)
 admin.site.register(Species)
@@ -227,10 +412,10 @@ admin.site.register(Software, SoftwareAdmin)
 admin.site.register(Hardware, HardwareAdmin)
 admin.site.register(RecordingSession, RecordingSessionAdmin)
 admin.site.register(Subject, SubjectAdmin)
-admin.site.register(AnimalProfile)
+admin.site.register(AnimalProfile, AnimalProfileAdmin)
 admin.site.register(SoftwareVersion)
-admin.site.register(Laboratory)
-admin.site.register(Study)
+admin.site.register(Laboratory, LaboratoryAdmin)
+admin.site.register(Study, StudyAdmin)
 admin.site.register(Contact, ContactAdmin)
 admin.site.site_header = "Mousetube Admin"
 admin.site.site_title = "Mousetube Admin"
@@ -259,7 +444,11 @@ class AccountRequestFilter(admin.SimpleListFilter):
         if self.value() == "review":
             return queryset.filter(is_active=False, _email_confirmed=True)
         if self.value() == "unconfirmed":
-            return queryset.filter(is_active=False, _email_confirmed=False)
+            # accounts without a usable password are the authors imported from mouseTube
+            # 0.5 (they only carry a name): nobody is waiting for them
+            return queryset.filter(is_active=False, _email_confirmed=False).exclude(
+                password__startswith="!"
+            )
         return queryset
 
 
@@ -354,3 +543,32 @@ class UserAccountAdmin(DjangoUserAdmin):
             rejected += 1
         self.message_user(request, f"{rejected} request(s) rejected and deleted.")
         return None
+
+
+# ----------------------------
+# Dashboard: what waits for a decision (accounts and entries), like the account requests
+# ----------------------------
+_original_index = admin.site.index
+
+
+def _index_with_moderation(request, extra_context=None):
+    from .utils.moderation import pending_counts
+    from .utils.registration import pending_review_count
+
+    rows = [
+        {
+            "label": "Account requests",
+            "count": pending_review_count(),
+            "url": reverse("admin:auth_user_changelist") + "?account_request=review",
+        },
+        *pending_counts(),
+    ]
+    context = {
+        "moderation_rows": rows,
+        "moderation_total": sum(row["count"] for row in rows),
+    }
+    return _original_index(request, {**context, **(extra_context or {})})
+
+
+admin.site.index = _index_with_moderation
+admin.site.index_template = "admin/moderation_index.html"

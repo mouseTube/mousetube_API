@@ -12,14 +12,28 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.models import User
 from django.contrib.contenttypes.models import ContentType
 from django.core import signing
+from django.core.exceptions import ValidationError as DjangoValidationError
+from django.db import transaction
 from django.db.models import Count, Q
 from django_countries.serializer_fields import CountryField
 from djoser.serializers import UserCreateSerializer as BaseUserCreateSerializer
 from rest_framework import serializers
-from rest_framework.exceptions import AuthenticationFailed
+from rest_framework.exceptions import AuthenticationFailed, PermissionDenied
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
 from mousetube_api.utils.email_domains import is_personal_email
+from mousetube_api.utils.moderation import (
+    SESSION_LOCKED,
+    VALIDATED,
+    WAITING,
+    notify_admin_review,
+    session_pending_entries,
+)
+from mousetube_api.utils.ontologies import (
+    OntologyError,
+    get_or_create_term,
+    sex_term,
+)
 from mousetube_api.utils.orcid_proof import read_orcid_proof
 from mousetube_api.utils.registration import email_is_verified
 from mousetube_api.utils.validators import (
@@ -36,6 +50,7 @@ from .models import (
     File,
     Hardware,
     Laboratory,
+    OntologyTerm,
     PageView,
     Protocol,
     RecordingSession,
@@ -52,13 +67,66 @@ from .models import (
 
 
 class ModerationMixin:
-    """Only staff may mark a record "validated" (the moderation step)."""
+    """Moderation of a catalog entry: draft -> waiting validation -> validated.
+
+    The owner moves it between draft and "waiting validation" (submit / withdraw);
+    only an administrator validates. The administrator is told when something is submitted.
+    """
 
     def validate_status(self, value):
         request = self.context.get("request")
-        if value == "validated" and not (request and request.user.is_staff):
+        if value == VALIDATED and not (request and request.user.is_staff):
             raise serializers.ValidationError("Only administrators can validate.")
         return value
+
+    def save(self, **kwargs):
+        # save() rather than create()/update(): several serializers define their own
+        before = self.instance.status if self.instance is not None else None
+        instance = super().save(**kwargs)
+        if instance.status == WAITING and before != WAITING:
+            notify_admin_review(instance)
+        return instance
+
+
+class OntologyTermSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = OntologyTerm
+        fields = ("curie", "label", "ontology", "iri")
+
+
+class OntologyTermField(serializers.Field):
+    """A term of a vocabulary: written as {"curie": "PATO:0000384"} (or the bare identifier),
+    read as {curie, label, ontology, iri}. The term is checked at its source."""
+
+    def __init__(self, vocabulary, **kwargs):
+        self.vocabulary = vocabulary
+        kwargs.setdefault("required", False)
+        kwargs.setdefault("allow_null", True)
+        super().__init__(**kwargs)
+
+    def to_representation(self, value):
+        return OntologyTermSerializer(value).data
+
+    def to_internal_value(self, data):
+        curie = data.get("curie") if isinstance(data, dict) else data
+        try:
+            return get_or_create_term(self.vocabulary, str(curie or "").strip())
+        except OntologyError as exc:
+            raise serializers.ValidationError(str(exc)) from None
+
+
+class OntologyTermsField(OntologyTermField):
+    """A list of terms of one vocabulary."""
+
+    def to_representation(self, value):
+        return [OntologyTermSerializer(term).data for term in value.all()]
+
+    def to_internal_value(self, data):
+        if not isinstance(data, list):
+            raise serializers.ValidationError("A list of terms is expected.")
+        return [
+            super(OntologyTermsField, self).to_internal_value(item) for item in data
+        ]
 
 
 class PendingAwareTokenObtainPairSerializer(TokenObtainPairSerializer):
@@ -164,12 +232,14 @@ class RepositorySerializer(serializers.ModelSerializer):
     class Meta:
         model = Repository
         fields = "__all__"
+        read_only_fields = ("created_by",)  # set by the server, never by the client
 
 
 class ReferenceSerializer(ModerationMixin, serializers.ModelSerializer):
     class Meta:
         model = Reference
         fields = "__all__"
+        read_only_fields = ("created_by",)  # set by the server, never by the client
 
     def validate_doi(self, value):
         return validate_doi(value)
@@ -180,16 +250,40 @@ class ReferenceSerializer(ModerationMixin, serializers.ModelSerializer):
 
 class LaboratorySerializer(ModerationMixin, serializers.ModelSerializer):
     country = CountryField()
+    organization = OntologyTermField("organization")
 
     class Meta:
         model = Laboratory
         fields = "__all__"
+        read_only_fields = ("created_by",)  # set by the server, never by the client
 
 
 class CustomUserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ["id", "username", "first_name", "last_name", "email", "is_staff"]
+        # This serializer also answers PATCH /auth/users/me/: a user changes his own
+        # name, nothing else. The role above all: it used to be writable, so anybody could
+        # make himself an administrator. The e-mail needs a confirmation (not built yet).
+        read_only_fields = ["id", "username", "email", "is_staff"]
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        # The name of an author is public (it is shown on his recordings). His e-mail is
+        # hidden unless he chose to show it; his role is only for him and the administrators.
+        request = self.context.get("request")
+        viewer = getattr(request, "user", None)
+        private_ok = bool(
+            viewer
+            and viewer.is_authenticated
+            and (viewer.is_staff or viewer.pk == instance.pk)
+        )
+        if not private_ok:
+            data.pop("is_staff", None)
+            profile = getattr(instance, "user_profile", None)
+            if not (profile and profile.email_public):
+                data.pop("email", None)
+        return data
 
 
 class UserProfileSerializer(serializers.ModelSerializer):
@@ -206,7 +300,11 @@ class UserProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = UserProfile
         fields = "__all__"
-        read_only_fields = ("orcid",)  # only set through the verified ORCID flow
+        read_only_fields = (
+            "orcid",
+            "created_by",
+            "administrator",
+        )  # orcid: verified flow only; created_by, administrator: the server
 
 
 class ContactSerializer(ModerationMixin, serializers.ModelSerializer):
@@ -215,6 +313,7 @@ class ContactSerializer(ModerationMixin, serializers.ModelSerializer):
     class Meta:
         model = Contact
         fields = "__all__"
+        read_only_fields = ("created_by",)  # set by the server, never by the client
 
     def to_representation(self, instance):
         data = super().to_representation(instance)
@@ -238,6 +337,7 @@ class HardwareSerializer(ModerationMixin, serializers.ModelSerializer):
     class Meta:
         model = Hardware
         fields = "__all__"
+        read_only_fields = ("created_by",)  # set by the server, never by the client
 
     def create(self, validated_data):
         references_data = validated_data.pop("references", [])
@@ -313,15 +413,19 @@ class SoftwareSerializer(ModerationMixin, serializers.ModelSerializer):
         Annotate linked session counts uniquement si detail=True
         """
         if detail:
+            # for a visitor, every linked session belongs to "other users"
+            others = (
+                ~Q(versions__recording_sessions_as_software__created_by=user)
+                if user is not None and user.is_authenticated
+                else None
+            )
             queryset = queryset.annotate(
                 linked_sessions_count=Count(
                     "versions__recording_sessions_as_software", distinct=True
                 ),
                 linked_sessions_from_other_users=Count(
                     "versions__recording_sessions_as_software",
-                    filter=~Q(
-                        versions__recording_sessions_as_software__created_by=user
-                    ),
+                    filter=others,
                     distinct=True,
                 ),
             )
@@ -376,9 +480,12 @@ class SoftwareSerializer(ModerationMixin, serializers.ModelSerializer):
 
 
 class SpeciesSerializer(ModerationMixin, serializers.ModelSerializer):
+    ontology_term = OntologyTermField("species")
+
     class Meta:
         model = Species
         fields = "__all__"
+        read_only_fields = ("created_by",)  # set by the server, never by the client
 
 
 class ProtocolSerializer(ModerationMixin, serializers.ModelSerializer):
@@ -433,6 +540,7 @@ class StrainSerializer(ModerationMixin, serializers.ModelSerializer):
     class Meta:
         model = Strain
         fields = "__all__"
+        read_only_fields = ("created_by",)  # set by the server, never by the client
 
     def create(self, validated_data):
         return Strain.objects.create(**validated_data)
@@ -491,10 +599,21 @@ class AnimalProfileSerializer(ModerationMixin, serializers.ModelSerializer):
     strain_id = serializers.PrimaryKeyRelatedField(
         queryset=Strain.objects.all(), write_only=True, source="strain"
     )
+    sex_term = OntologyTermField("sex")
+    age_term = OntologyTermField("age")
+    treatment_term = OntologyTermField("treatment")
 
     class Meta:
         model = AnimalProfile
         fields = "__all__"
+        read_only_fields = ("created_by",)  # set by the server, never by the client
+
+    def validate(self, data):
+        # "male" / "female" are enough to know the PATO term: no need to ask for it
+        sex = data.get("sex")
+        if sex and not data.get("sex_term") and "sex_term" not in data:
+            data["sex_term"] = sex_term(sex)
+        return data
 
 
 # class AnimalProfileSerializer(serializers.ModelSerializer):
@@ -624,6 +743,7 @@ class SubjectSerializer(ModerationMixin, serializers.ModelSerializer):
     class Meta:
         model = Subject
         fields = "__all__"
+        read_only_fields = ("created_by",)  # set by the server, never by the client
 
     def create(self, validated_data):
         animal_profile_data = validated_data.pop("animal_profile", None)
@@ -669,6 +789,38 @@ class StudyShortSerializer(serializers.ModelSerializer):
         fields = ("id", "name", "description")
 
 
+def _django_errors(exc):
+    """A Django ValidationError as the dict / list a DRF ValidationError expects."""
+    return exc.message_dict if hasattr(exc, "error_dict") else exc.messages
+
+
+class VisiblePrimaryKeyRelatedField(serializers.PrimaryKeyRelatedField):
+    """Only the objects the signed-in user may use: published ones and his own.
+
+    Without it, anybody could attach another user's private draft (protocol, animal
+    profile, hardware...) to his own session and read it in the answer.
+    """
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        user = getattr(self.context.get("request"), "user", None)
+        if user is not None and user.is_staff:
+            return queryset
+        model = queryset.model
+        names = {f.name for f in model._meta.get_fields()}
+        if model is SoftwareVersion:  # a version is as public as its software
+            published = Q(software__status="validated")
+            own = Q(software__created_by=user)
+        elif {"status", "created_by"} <= names:
+            published = Q(status="validated")
+            own = Q(created_by=user)
+        else:
+            return queryset
+        if user is not None and user.is_authenticated:
+            published |= own
+        return queryset.filter(published)
+
+
 class RecordingSessionSerializer(serializers.ModelSerializer):
     # ---- Nested serializers GET (read only) ----
     protocol = ProtocolSerializer(read_only=True)
@@ -694,76 +846,77 @@ class RecordingSessionSerializer(serializers.ModelSerializer):
     created_by = CustomUserSerializer(read_only=True)
 
     # ---- Write fields POST/PUT/PATCH ----
-    protocol_id = serializers.PrimaryKeyRelatedField(
+    protocol_id = VisiblePrimaryKeyRelatedField(
         queryset=Protocol.objects.all(),
         source="protocol",
         write_only=True,
         required=False,
         allow_null=True,
     )
-    study_ids = serializers.PrimaryKeyRelatedField(
+    study_ids = VisiblePrimaryKeyRelatedField(
         queryset=Study.objects.all(),
         source="studies",
         many=True,
         write_only=True,
         required=False,
     )
-    laboratory_id = serializers.PrimaryKeyRelatedField(
+    laboratory_id = VisiblePrimaryKeyRelatedField(
         queryset=Laboratory.objects.all(),
         source="laboratory",
         write_only=True,
         required=False,
         allow_null=True,
     )
-    animal_profile_ids = serializers.PrimaryKeyRelatedField(
+    animal_profile_ids = VisiblePrimaryKeyRelatedField(
         queryset=AnimalProfile.objects.all(),
         source="animal_profiles",
         many=True,
         write_only=True,
         required=False,
     )
-    equipment_acquisition_software_ids = serializers.PrimaryKeyRelatedField(
+    equipment_acquisition_software_ids = VisiblePrimaryKeyRelatedField(
         queryset=SoftwareVersion.objects.all(),
         source="equipment_acquisition_software",
         many=True,
         write_only=True,
         required=False,
     )
-    equipment_acquisition_hardware_soundcard_ids = serializers.PrimaryKeyRelatedField(
+    equipment_acquisition_hardware_soundcard_ids = VisiblePrimaryKeyRelatedField(
         queryset=Hardware.objects.filter(type="soundcard"),
         source="equipment_acquisition_hardware_soundcards",
         many=True,
         write_only=True,
         required=False,
     )
-    equipment_acquisition_hardware_speaker_ids = serializers.PrimaryKeyRelatedField(
+    equipment_acquisition_hardware_speaker_ids = VisiblePrimaryKeyRelatedField(
         queryset=Hardware.objects.filter(type="speaker"),
         source="equipment_acquisition_hardware_speakers",
         many=True,
         write_only=True,
         required=False,
     )
-    equipment_acquisition_hardware_amplifier_ids = serializers.PrimaryKeyRelatedField(
+    equipment_acquisition_hardware_amplifier_ids = VisiblePrimaryKeyRelatedField(
         queryset=Hardware.objects.filter(type="amplifier"),
         source="equipment_acquisition_hardware_amplifiers",
         many=True,
         write_only=True,
         required=False,
     )
-    equipment_acquisition_hardware_microphone_ids = serializers.PrimaryKeyRelatedField(
+    equipment_acquisition_hardware_microphone_ids = VisiblePrimaryKeyRelatedField(
         queryset=Hardware.objects.filter(type="microphone"),
         source="equipment_acquisition_hardware_microphones",
         many=True,
         write_only=True,
         required=False,
     )
-    references_ids = serializers.PrimaryKeyRelatedField(
+    references_ids = VisiblePrimaryKeyRelatedField(
         queryset=Reference.objects.all(),
         source="references",
         many=True,
         write_only=True,
         required=False,
     )
+    behavior_terms = OntologyTermsField("behavior")
 
     equipment_channels = serializers.CharField(
         required=False, allow_null=True, allow_blank=True
@@ -782,9 +935,34 @@ class RecordingSessionSerializer(serializers.ModelSerializer):
 
     is_multiple = serializers.BooleanField(required=False, default=False)
 
+    # what an administrator still has to validate before the session can be shared
+    pending_entries = serializers.SerializerMethodField()
+
     class Meta:
         model = RecordingSession
         fields = "__all__"
+
+    def get_pending_entries(self, obj):
+        request = self.context.get("request")
+        view = self.context.get("view")
+        user = getattr(request, "user", None)
+        mine = (
+            user
+            and user.is_authenticated
+            and (user.is_staff or obj.created_by_id == user.id)
+        )
+        detail = getattr(view, "action", None) in (
+            "retrieve",
+            "create",
+            "update",
+            "partial_update",
+        )
+        if not (mine and detail) or obj.status in ("shared", "published"):
+            return []
+        return [
+            {"kind": kind, "id": entry.pk, "name": str(entry), "status": entry.status}
+            for kind, entry in session_pending_entries(obj)
+        ]
 
     # ---- Validation ----
     def validate(self, data):
@@ -846,6 +1024,7 @@ class RecordingSessionSerializer(serializers.ModelSerializer):
                 "equipment_acquisition_hardware_amplifiers", None
             ),
             "references": validated_data.pop("references", None),
+            "behavior_terms": validated_data.pop("behavior_terms", None),
         }
 
     def _assign_m2m(self, instance, m2m_fields):
@@ -853,45 +1032,90 @@ class RecordingSessionSerializer(serializers.ModelSerializer):
             if value is not None:
                 getattr(instance, field).set(value)
 
+    # ---- Status ----
+    def validate_status(self, value):
+        user = self.context["request"].user
+        if value == "published" and not user.is_staff:
+            raise serializers.ValidationError(
+                "A session becomes published through the deposit in a repository."
+            )
+        return value
+
+    def _final_status(self, instance, requested, is_staff):
+        """The status once the session is saved and its entries are known.
+
+        An administrator sets what he wants. The owner asks for "shared" (or "waiting
+        validation"): the session is shared at once when everything it uses is validated,
+        otherwise it waits for a review of the new entries.
+        """
+        if requested is None:
+            return instance.status
+        if is_staff or requested == "draft":
+            return requested
+        return WAITING if session_pending_entries(instance) else "shared"
+
     # ---- Create ----
     def create(self, validated_data):
+        request = self.context["request"]
         m2m_fields = self._extract_m2m(validated_data)
         laboratory = validated_data.pop("laboratory", None)
+        requested = validated_data.pop("status", None)
 
-        if (
-            validated_data.get("status") == "published"
-            and validated_data.get("protocol") is None
-        ):
-            raise serializers.ValidationError(
-                {"protocol_id": "A protocol is required for published sessions."}
-            )
-
-        instance = RecordingSession.objects.create(
-            **validated_data, laboratory=laboratory
-        )
-        self._assign_m2m(instance, m2m_fields)
+        try:
+            with transaction.atomic():
+                instance = RecordingSession.objects.create(
+                    **validated_data, laboratory=laboratory
+                )
+                self._assign_m2m(instance, m2m_fields)
+                final = self._final_status(instance, requested, request.user.is_staff)
+                if final != instance.status:
+                    instance.status = final
+                    instance.save()
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(_django_errors(exc)) from None
+        if instance.status == WAITING:
+            notify_admin_review(instance)
         return instance
 
     # ---- Update ----
     def update(self, instance, validated_data):
-        m2m_fields = self._extract_m2m(validated_data)
+        request = self.context["request"]
+        is_staff = request.user.is_staff
+        before = instance.status
+        requested = validated_data.pop("status", None)
 
-        if (
-            validated_data.get("status") == "published"
-            and validated_data.get("protocol") is None
-        ):
-            raise serializers.ValidationError(
-                {"protocol_id": "A protocol is required for published sessions."}
+        # waiting for a review, shared or published: the owner can only withdraw his request
+        withdraws = (
+            before == WAITING
+            and requested == "draft"
+            and not validated_data
+            and not self.initial_data.keys() - {"status"}
+        )
+        if not is_staff and before in SESSION_LOCKED and not withdraws:
+            raise PermissionDenied(
+                "This session is waiting for a review or already shared: "
+                "it can no longer be edited."
             )
 
+        m2m_fields = self._extract_m2m(validated_data)
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
 
         if "laboratory" in validated_data:
             instance.laboratory = validated_data["laboratory"]
 
-        self._assign_m2m(instance, m2m_fields)
-        instance.save()
+        try:
+            with transaction.atomic():
+                instance.save()  # checks the whole model: it may refuse
+                self._assign_m2m(instance, m2m_fields)
+                final = self._final_status(instance, requested, is_staff)
+                if final != instance.status:
+                    instance.status = final
+                    instance.save()
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(_django_errors(exc)) from None
+        if instance.status == WAITING and before != WAITING:
+            notify_admin_review(instance)
         return instance
 
 
@@ -907,6 +1131,16 @@ class StudySerializer(ModerationMixin, serializers.ModelSerializer):
     class Meta:
         model = Study
         fields = "__all__"
+        read_only_fields = ("created_by",)  # set by the server, never by the client
+
+    def validate(self, data):
+        start = data.get("start_date", getattr(self.instance, "start_date", None))
+        end = data.get("end_date", getattr(self.instance, "end_date", None))
+        if start and end and end < start:
+            raise serializers.ValidationError(
+                {"end_date": "The end date cannot be before the start date."}
+            )
+        return data
 
 
 class FileSerializer(serializers.ModelSerializer):

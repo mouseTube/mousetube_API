@@ -6,7 +6,7 @@ from celery import shared_task
 from django.core.exceptions import ValidationError
 from django.core.management import call_command
 
-from mousetube_api.models import File, RecordingSession, Reference, Repository, Software
+from mousetube_api.models import File, RecordingSession, Repository
 from mousetube_api.utils.file_handler import link_to_local_path
 from mousetube_api.utils.repository import (
     delete_repository_file,
@@ -184,63 +184,9 @@ def publish_session_deposition(self, recording_session_id, repository_id, payloa
     doi = publish_repository_deposition(repository, rs, payload)
     self.update_state(state="STARTED", meta={"progress": 60})
 
+    # the deposit does not validate anything: the session was shared, so what it uses was
+    # validated by an administrator before
     RecordingSession.objects.filter(id=rs.id).update(status="published")
-    if rs.protocol:
-        rs.protocol.__class__.objects.filter(id=rs.protocol.id).update(
-            status="validated"
-        )
-    if rs.laboratory:
-        rs.laboratory.__class__.objects.filter(id=rs.laboratory.id).update(
-            status="validated"
-        )
-
-    rs.studies.update(status="validated")
-    rs.animal_profiles.update(status="validated")
-
-    strain_ids = rs.animal_profiles.exclude(strain__isnull=True).values_list(
-        "strain_id", flat=True
-    )
-    if strain_ids:
-        from .models import Strain
-
-        Strain.objects.filter(id__in=strain_ids).update(status="validated")
-
-    if rs.equipment_acquisition_software.exists():
-        Software.objects.filter(
-            versions__in=rs.equipment_acquisition_software.all()
-        ).update(status="validated")
-
-    if rs.equipment_acquisition_hardware_soundcards.exists():
-        rs.equipment_acquisition_hardware_soundcards.update(status="validated")
-
-    if rs.equipment_acquisition_hardware_speakers.exists():
-        rs.equipment_acquisition_hardware_speakers.update(status="validated")
-
-    if rs.equipment_acquisition_hardware_amplifiers.exists():
-        rs.equipment_acquisition_hardware_amplifiers.update(status="validated")
-
-    if rs.equipment_acquisition_hardware_microphones.exists():
-        rs.equipment_acquisition_hardware_microphones.update(status="validated")
-
-    # --- ✅ References linked via recording session references field ---
-    rs.references.all().update(status="validated")
-
-    # --- ✅ References linked to acquisition software ---
-    if rs.equipment_acquisition_software.exists():
-        Reference.objects.filter(
-            software__in=rs.equipment_acquisition_software.all()
-        ).update(status="validated")
-
-    # --- ✅ References linked to acquisition hardware ---
-    hardware_relations = [
-        rs.equipment_acquisition_hardware_soundcards,
-        rs.equipment_acquisition_hardware_speakers,
-        rs.equipment_acquisition_hardware_amplifiers,
-        rs.equipment_acquisition_hardware_microphones,
-    ]
-    for hw in hardware_relations:
-        if hw.exists():
-            Reference.objects.filter(hardware__in=hw.all()).update(status="validated")
 
     # update file is_valid_link attribut if status is "done"
     files.filter(status="done").update(is_valid_link=True)
