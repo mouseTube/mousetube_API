@@ -213,36 +213,22 @@ def get_or_create_term(field, curie):
     return term
 
 
-def sex_term(sex):
-    """The PATO term of "male" / "female", without any network call (None otherwise)."""
-    from mousetube_api.models import OntologyTerm
-
-    known = SEX_TERMS.get(sex)
-    if not known:
-        return None
-    curie, label = known
-    term, _ = OntologyTerm.objects.get_or_create(
-        curie=curie,
-        defaults={
-            "label": label,
-            "ontology": "pato",
-            "iri": f"http://purl.obolibrary.org/obo/{curie.replace(':', '_')}",
-        },
-    )
-    return term
-
-
 def known_term(curie, label):
     """The OntologyTerm of an identifier we already know, without any network call."""
     from mousetube_api.models import OntologyTerm
 
-    prefix = curie.split(":")[0]
     term, _ = OntologyTerm.objects.get_or_create(
         curie=curie,
         defaults={
             "label": label,
-            "ontology": prefix.lower(),
+            "ontology": curie.split(":")[0].lower(),
             "iri": f"http://purl.obolibrary.org/obo/{curie.replace(':', '_')}",
         },
     )
     return term
+
+
+def sex_term(sex):
+    """The PATO term of "male" / "female", without any network call (None otherwise)."""
+    known = SEX_TERMS.get(sex)
+    return known_term(*known) if known else None
