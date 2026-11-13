@@ -2385,3 +2385,119 @@ class CatalogFiltersTests(FreshCache, TestCase):
         mine.force_authenticate(self.me)
         self.assertEqual(self._names("/api/software/?favorites=1", mine), {"Used"})
         self.assertEqual(self._names("/api/software/?mine=1", mine), {"Documented"})
+
+
+@override_settings(CACHES=LOCMEM)
+class MySessionsListTests(FreshCache, TestCase):
+    """The list behind the "My vocalizations" tab: own sessions, with their files."""
+
+    def setUp(self):
+        super().setUp()
+        from mousetube_api.models import File
+
+        User = get_user_model()
+        self.me = User.objects.create_user("me", "me@igbmc.fr", "x")
+        self.other = User.objects.create_user("ot", "ot@igbmc.fr", "x")
+        self.repository = Repository.objects.create(name="Zenodo")
+
+        def session(name, owner, status):
+            return RecordingSession.objects.create(
+                name=name, is_multiple=True, status=status, created_by=owner
+            )
+
+        self.draft = session("draft one", self.me, "draft")
+        self.published = session("published one", self.me, "shared")
+        RecordingSession.objects.filter(pk=self.published.pk).update(status="published")
+        session("not mine", self.other, "shared")
+        File.objects.create(
+            name="a.wav",
+            recording_session=self.published,
+            repository=self.repository,
+            doi="10.5281/zenodo.1",
+            created_by=self.me,
+        )
+        File.objects.create(
+            name="b.wav", recording_session=self.published, created_by=self.me
+        )
+        self.client = APIClient()
+        self.client.force_authenticate(self.me)
+
+    def test_only_my_sessions_with_the_number_of_files_and_the_doi(self):
+        data = self.client.get("/api/recording-session/?ordering=-modified_at").json()
+        by_name = {s["name"]: s for s in data["results"]}
+        self.assertEqual(set(by_name), {"draft one", "published one"})
+        self.assertEqual(by_name["draft one"]["files_count"], 0)
+        self.assertIsNone(by_name["draft one"]["doi"])
+        self.assertEqual(by_name["published one"]["files_count"], 2)
+        self.assertEqual(by_name["published one"]["doi"], "10.5281/zenodo.1")
+
+    def test_the_list_can_be_sorted_from_a_to_z_and_back(self):
+        names = lambda q: [
+            s["name"]
+            for s in self.client.get(f"/api/recording-session/?{q}").json()["results"]
+        ]
+        self.assertEqual(names("ordering=name"), ["draft one", "published one"])
+        self.assertEqual(names("ordering=-name"), ["published one", "draft one"])
+
+    def test_the_list_can_be_narrowed_by_status(self):
+        data = self.client.get("/api/recording-session/?status=draft").json()
+        self.assertEqual([s["name"] for s in data["results"]], ["draft one"])
+
+
+@override_settings(CACHES=LOCMEM, ZENODO_TOKEN="t")
+class PublishSessionTests(FreshCache, TestCase):
+    """Publishing only concerns the files mouseTube sent and nobody published yet."""
+
+    def setUp(self):
+        super().setUp()
+        from mousetube_api.models import File
+
+        self.user = get_user_model().objects.create_user("pub", "pub@igbmc.fr", "x")
+        self.repository = Repository.objects.create(name="Zenodo")
+        self.session = RecordingSession.objects.create(
+            name="imported", is_multiple=True, status="shared", created_by=self.user
+        )
+        File.objects.create(
+            name="a.wav",
+            recording_session=self.session,
+            repository=self.repository,
+            doi="10.5281/zenodo.1",
+            external_id=20627872,
+            created_by=self.user,
+        )
+
+    def _publish(self):
+        from unittest import mock
+
+        from mousetube_api.tasks import publish_session_deposition
+
+        with (
+            mock.patch.object(publish_session_deposition, "update_state"),
+            mock.patch(
+                "mousetube_api.utils.zenodo.requests.post",
+                side_effect=AssertionError("nothing may be sent to the repository"),
+            ),
+        ):
+            return publish_session_deposition(self.session.id, self.repository.id)
+
+    def test_files_that_already_have_a_doi_are_not_sent_again(self):
+        result = self._publish()
+        self.assertEqual(result["progress"], 100)
+        self.session.refresh_from_db()
+        self.assertEqual(self.session.status, "published")
+
+    def test_the_list_says_what_is_left_to_deposit(self):
+        from mousetube_api.models import File
+
+        client = APIClient()
+        client.force_authenticate(self.user)
+
+        def left():
+            data = client.get("/api/recording-session/").json()
+            return data["results"][0]["files_to_deposit"]
+
+        self.assertEqual(left(), 0)
+        File.objects.create(
+            name="new.wav", recording_session=self.session, created_by=self.user
+        )
+        self.assertEqual(left(), 1)

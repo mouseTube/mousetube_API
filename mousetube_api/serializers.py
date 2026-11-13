@@ -945,10 +945,23 @@ class RecordingSessionSerializer(serializers.ModelSerializer):
 
     # what an administrator still has to validate before the session can be shared
     pending_entries = serializers.SerializerMethodField()
+    # only known in the list of one's own sessions (annotated there), None elsewhere
+    files_count = serializers.SerializerMethodField()
+    files_to_deposit = serializers.SerializerMethodField()
+    doi = serializers.SerializerMethodField()
 
     class Meta:
         model = RecordingSession
         fields = "__all__"
+
+    def get_files_count(self, obj):
+        return getattr(obj, "files_count", None)
+
+    def get_files_to_deposit(self, obj):
+        return getattr(obj, "files_to_deposit", None)
+
+    def get_doi(self, obj):
+        return getattr(obj, "first_doi", None) or None
 
     def get_pending_entries(self, obj):
         request = self.context.get("request")

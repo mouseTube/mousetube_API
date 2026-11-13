@@ -6,7 +6,7 @@ from urllib.parse import quote, unquote
 
 import requests
 from django.conf import settings
-from django.db.models import ForeignKey
+from django.db.models import ForeignKey, Q
 
 from mousetube_api.models import File, Repository
 from mousetube_api.utils.file_handler import (
@@ -489,7 +489,10 @@ def publish_deposition(recording_session, payload=None):
     Updates only files without a manually set DOI/link.
     """
     files = File.objects.filter(recording_session=recording_session)
-    first_file_with_id = files.filter(external_id__isnull=False).first()
+    # the files sent by mouseTube and not published yet (the others have their DOI already)
+    first_file_with_id = files.filter(
+        Q(doi__isnull=True) | Q(doi=""), external_id__isnull=False
+    ).first()
     if not first_file_with_id:
         raise UploadError("No file of this session was sent to the repository yet.")
     deposition_id = first_file_with_id.external_id

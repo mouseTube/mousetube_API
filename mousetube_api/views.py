@@ -26,6 +26,7 @@ from django.db.models import (
     Exists,
     F,
     IntegerField,
+    Max,
     OuterRef,
     Q,
     Sum,
@@ -1117,14 +1118,29 @@ class RecordingSessionViewSet(viewsets.ModelViewSet):
     ]
     search_fields = ["name", "description"]
     filterset_fields = ["is_multiple", "laboratory", "status", "protocol"]
-    ordering_fields = ["name", "date", "status", "protocol__name", "laboratory__name"]
+    ordering_fields = [
+        "name",
+        "date",
+        "status",
+        "protocol__name",
+        "laboratory__name",
+        "modified_at",
+    ]
     ordering = ["name"]
 
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
 
     def get_queryset(self):
-        return RecordingSession.objects.filter(created_by=self.request.user)
+        return RecordingSession.objects.filter(created_by=self.request.user).annotate(
+            files_count=Count("file", distinct=True),
+            first_doi=Max("file__doi"),
+            files_to_deposit=Count(
+                "file",
+                filter=Q(file__doi__isnull=True) | Q(file__doi=""),
+                distinct=True,
+            ),
+        )
 
 
 # The facets of the list of files that describe the animals: filter name -> lookup on the

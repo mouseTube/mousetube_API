@@ -5,6 +5,7 @@ import soundfile as sf
 from celery import shared_task
 from django.core.exceptions import ValidationError
 from django.core.management import call_command
+from django.db.models import Q
 
 from mousetube_api.models import File, RecordingSession, Repository
 from mousetube_api.utils.file_handler import (
@@ -195,6 +196,16 @@ def publish_session_deposition(self, recording_session_id, repository_id, payloa
 
     if not files.exists():
         raise UploadError("This session has no file to deposit.")
+
+    # a file that already has its DOI was deposited elsewhere (an import, a record of
+    # someone else): there is nothing to send for it, and nothing to publish
+    to_deposit = files.filter(Q(doi__isnull=True) | Q(doi=""))
+    if not to_deposit.exists():
+        RecordingSession.objects.filter(id=rs.id).update(status="published")
+        return {
+            "message": f"✅ Session {rs.id}: every file already has its DOI.",
+            "progress": 100,
+        }
 
     self.update_state(state="STARTED", meta={"progress": 20})
 
