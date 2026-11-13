@@ -150,9 +150,39 @@ class RecordingSessionAdmin(admin.ModelAdmin):
             [str(soft) for soft in obj.equipment_acquisition_software.all()]
         )
 
-    @admin.display(description="To validate")
+    @admin.display(description="New entries to validate")
     def to_validate(self, obj):
         return len(session_pending_entries(obj))
+
+    def get_form(self, request, obj=None, **kwargs):
+        form = super().get_form(request, obj, **kwargs)
+        if "status" in form.base_fields:
+            form.base_fields["status"].help_text = (
+                "A shared or published session is public, so everything it uses "
+                "(protocol, laboratory, animals, equipment, references...) is validated "
+                "with it when you save: set it to Shared to validate it all at once."
+            )
+        return form
+
+    def save_related(self, request, form, formsets, change):
+        """A public session only uses validated entries: saving one as shared (or edited
+        while shared) validates what it uses, which is only known once its links are saved."""
+        super().save_related(request, form, formsets, change)
+        session = form.instance
+        if session.status not in ("shared", "published"):
+            return
+        entries = session_pending_entries(session)
+        if not entries:
+            return
+        changed, _shared = approve_entries([obj for _kind, obj in entries])
+        self.message_user(
+            request,
+            f"The session is {session.status}: the {changed} entr"
+            f"{'y' if changed == 1 else 'ies'} it uses "
+            f"({', '.join(sorted({kind for kind, _ in entries}))}) "
+            f"{'was' if changed == 1 else 'were'} validated with it.",
+            messages.INFO,
+        )
 
     @admin.display(description="Entries nobody validated yet")
     def entries_to_validate(self, obj):
@@ -162,7 +192,8 @@ class RecordingSessionAdmin(admin.ModelAdmin):
         if not pending:
             return "Nothing: everything this session uses is validated."
         return format_html(
-            "<ul>{}</ul>",
+            "<p>Validating the session (the action, or the status set to Shared) validates "
+            "all of these with it.</p><ul>{}</ul>",
             format_html_join(
                 "",
                 '<li>{}: <a href="{}">{}</a> ({})</li>',

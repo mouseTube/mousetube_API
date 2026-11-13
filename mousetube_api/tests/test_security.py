@@ -2804,3 +2804,56 @@ class ReviewApiTests(FreshCache, TestCase):
             ).status_code,
             400,
         )
+
+
+class SessionEntriesFollowTheSessionTests(TestCase):
+    """A shared session only uses validated entries, whichever way it became shared."""
+
+    def setUp(self):
+        from mousetube_api.models import Hardware
+
+        self.admin = get_user_model().objects.create_superuser(
+            "root", "r@igbmc.fr", "x"
+        )
+        self.author = get_user_model().objects.create_user("auth", "a@igbmc.fr", "x")
+        self.mic = Hardware.objects.create(
+            name="Waiting mic",
+            type="microphone",
+            status="waiting validation",
+            created_by=self.author,
+        )
+        self.session = RecordingSession.objects.create(
+            name="s",
+            is_multiple=True,
+            status="waiting validation",
+            created_by=self.author,
+        )
+        self.session.equipment_acquisition_hardware_microphones.add(self.mic)
+
+    def _save_in_the_admin(self, status):
+        from unittest import mock
+
+        from django.contrib import admin
+        from django.test import RequestFactory
+
+        RecordingSession.objects.filter(pk=self.session.pk).update(status=status)
+        self.session.refresh_from_db()
+        model_admin = admin.site._registry[RecordingSession]
+        request = RequestFactory().post("/admin/")
+        request.user = self.admin
+        form = mock.Mock(instance=self.session)
+        with mock.patch.object(model_admin, "message_user") as message:
+            model_admin.save_related(request, form, [], True)
+        return message
+
+    def test_setting_the_status_to_shared_in_the_admin_validates_what_it_uses(self):
+        message = self._save_in_the_admin("shared")
+        self.mic.refresh_from_db()
+        self.assertEqual(self.mic.status, "validated")
+        self.assertIn("validated with it", message.call_args.args[1])
+
+    def test_a_session_that_is_not_public_leaves_its_entries_alone(self):
+        message = self._save_in_the_admin("waiting validation")
+        self.mic.refresh_from_db()
+        self.assertEqual(self.mic.status, "waiting validation")
+        message.assert_not_called()
