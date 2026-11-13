@@ -38,11 +38,10 @@ from .models import (
     UserProfile,
 )
 from .utils.moderation import (
-    notify_creator,
-    promote_ready_sessions,
+    approve_entries,
+    approve_sessions,
+    send_back,
     session_pending_entries,
-    validate_entries,
-    validate_session,
 )
 from .utils.registration import (
     email_is_verified,
@@ -62,15 +61,7 @@ class ModerationAdminMixin:
 
     @admin.action(description="Validate the selected entries")
     def validate_selected(self, request, queryset):
-        entries = [(None, obj) for obj in queryset.exclude(status="validated")]
-        changed = validate_entries(entries)
-        for _kind, obj in entries:
-            notify_creator(
-                obj,
-                f"[mouseTube] Your {obj._meta.verbose_name} '{obj}' was validated",
-                "An administrator validated it: it is now visible to everybody.",
-            )
-        shared = promote_ready_sessions()
+        changed, shared = approve_entries(queryset.exclude(status="validated"))
         message = f"{changed} entr{'y' if changed == 1 else 'ies'} validated."
         if shared:
             message += f" {len(shared)} session(s) shared as a result."
@@ -92,17 +83,7 @@ class ModerationAdminMixin:
                     "action": "send_back_to_draft",
                 },
             )
-        reason = request.POST.get("reason", "").strip()
-        sent = list(entries)
-        entries.update(status="draft")
-        for obj in sent:
-            notify_creator(
-                obj,
-                f"[mouseTube] Your {obj._meta.verbose_name} '{obj}' needs changes",
-                "An administrator sent it back to draft."
-                + (f"\n\nReason: {reason}" if reason else "")
-                + "\n\nChange it, then submit it again for review.",
-            )
+        sent = send_back(entries, request.POST.get("reason", "").strip())
         self.message_user(request, f"{len(sent)} sent back to draft.", messages.SUCCESS)
         return None
 
@@ -204,19 +185,10 @@ class RecordingSessionAdmin(admin.ModelAdmin):
         description="Validate the sessions and everything they use, then share"
     )
     def validate_sessions(self, request, queryset):
-        entries = 0
-        for session in queryset.exclude(status="published"):
-            done, session = validate_session(session)
-            entries += len(done)
-            notify_creator(
-                session,
-                f"[mouseTube] Your recording session '{session.name}' is shared",
-                "An administrator validated your session and what it uses. "
-                "It is now visible to everybody.",
-            )
+        shared, entries = approve_sessions(queryset.exclude(status="published"))
         self.message_user(
             request,
-            f"{queryset.count()} session(s) shared, {entries} entr"
+            f"{shared} session(s) shared, {entries} entr"
             f"{'y' if entries == 1 else 'ies'} validated.",
             messages.SUCCESS,
         )
@@ -237,17 +209,7 @@ class RecordingSessionAdmin(admin.ModelAdmin):
                     "action": "send_back_sessions",
                 },
             )
-        reason = request.POST.get("reason", "").strip()
-        sent = list(sessions)
-        sessions.update(status="draft")
-        for session in sent:
-            notify_creator(
-                session,
-                f"[mouseTube] Your recording session '{session.name}' needs changes",
-                "An administrator sent it back to draft."
-                + (f"\n\nReason: {reason}" if reason else "")
-                + "\n\nChange it, then share it again.",
-            )
+        sent = send_back(sessions, request.POST.get("reason", "").strip())
         self.message_user(
             request, f"{len(sent)} session(s) sent back to draft.", messages.SUCCESS
         )

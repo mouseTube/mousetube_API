@@ -34,6 +34,7 @@ from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 from rest_framework.routers import DefaultRouter
 
 from .account_views import CustomUserViewSet
+from .review import ReviewDecisionView, ReviewListView, ReviewSummaryView
 from .views import (
     AnimalProfileViewSet,
     ContactViewSet,
@@ -150,6 +151,13 @@ urlpatterns = [
         "api/personal-email-domains/",
         personal_email_domains,
         name="personal-email-domains",
+    ),
+    path("api/review/", ReviewSummaryView.as_view(), name="review-summary"),
+    path("api/review/<str:kind>/", ReviewListView.as_view(), name="review-list"),
+    path(
+        "api/review/<str:kind>/decision/",
+        ReviewDecisionView.as_view(),
+        name="review-decision",
     ),
     path("api/file/filters/", FileFilterOptionsView.as_view(), name="file-filters"),
     path(

@@ -108,6 +108,60 @@ def validate_session(session):
     return entries, session
 
 
+def approve_entries(objs):
+    """Validate catalog entries and tell their creators. Returns (changed, shared sessions):
+    validating the last missing entry of a session shares it."""
+    entries = [(None, obj) for obj in objs if obj.status != VALIDATED]
+    changed = validate_entries(entries)
+    for _kind, obj in entries:
+        notify_creator(
+            obj,
+            f"[mouseTube] Your {obj._meta.verbose_name} '{obj}' was validated",
+            "An administrator validated it: it is now visible to everybody.",
+        )
+    return changed, promote_ready_sessions()
+
+
+def approve_sessions(sessions):
+    """Validate sessions and everything they use, then share them. Returns
+    (number of sessions, number of entries validated)."""
+    shared = entries = 0
+    for session in sessions:
+        if session.status == "published":
+            continue
+        done, session = validate_session(session)
+        entries += len(done)
+        shared += 1
+        notify_creator(
+            session,
+            f"[mouseTube] Your recording session '{session.name}' is shared",
+            "An administrator validated your session and what it uses. "
+            "It is now visible to everybody.",
+        )
+    return shared, entries
+
+
+def send_back(objs, reason=""):
+    """Put entries or sessions back to draft and tell their creators why.
+    Returns the objects that were sent back."""
+    sent = [o for o in objs if o.status not in (DRAFT, "published")]
+    for obj in sent:
+        type(obj).objects.filter(pk=obj.pk).update(status=DRAFT)
+        what = (
+            "recording session"
+            if obj._meta.model_name == "recordingsession"
+            else obj._meta.verbose_name
+        )
+        notify_creator(
+            obj,
+            f"[mouseTube] Your {what} '{obj}' needs changes",
+            "An administrator sent it back to draft."
+            + (f"\n\nReason: {reason}" if reason else "")
+            + "\n\nChange it, then submit it again for review.",
+        )
+    return sent
+
+
 def promote_ready_sessions():
     """Share the sessions that wait for a review and now use only validated entries."""
     from mousetube_api.models import RecordingSession

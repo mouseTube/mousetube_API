@@ -230,6 +230,18 @@ study, strain, animal profile) goes through the same states:
   address), and the administrator is told when something is submitted.
 - A session shows the entries it still needs validated.
 
+### Review page (website, administrators only)
+
+`/review` on the website does the same decisions in one place: one tab per kind (account
+requests, sessions, software, hardware, laboratories, references, contacts, studies, strains,
+animal profiles) with the number waiting, the oldest first. Each item can be validated or
+sent back with a reason, one by one or several at once; an account request is activated or
+rejected (only a brand-new one can be rejected). A session is validated with everything it
+uses. The link, with the count, is in the *Add* menu of the header for administrators.
+It uses `GET /api/review/`, `GET /api/review/<kind>/` and
+`POST /api/review/<kind>/decision/` (`{"action": "validate" | "send_back", "ids": [...],
+"reason": "..."}`), which are for staff only.
+
 ## Vocabularies (ontologies)
 
 Some fields point to a term of a controlled vocabulary next to their free text. The term is

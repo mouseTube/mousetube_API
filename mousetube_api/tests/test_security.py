@@ -2639,3 +2639,168 @@ class PageViewStatisticsTests(TestCase):
                 html = report.read()
         self.assertNotIn("<script>alert(1)", html)
         self.assertIn("\\u003Cscript\\u003Ealert(1)", html)  # data, never markup
+
+
+@override_settings(CACHES=LOCMEM)
+class ReviewApiTests(FreshCache, TestCase):
+    """The review page of the administrators: who may use it, and what it decides."""
+
+    def setUp(self):
+        super().setUp()
+        from allauth.account.models import EmailAddress
+
+        from mousetube_api.models import Hardware, Software, SoftwareVersion
+
+        User = get_user_model()
+        self.admin = User.objects.create_user(
+            "boss", "boss@igbmc.fr", "x", is_staff=True
+        )
+        self.member = User.objects.create_user("member", "m@igbmc.fr", "x")
+        self.author = User.objects.create_user(
+            "author", "au@igbmc.fr", "x", first_name="Ada", last_name="Lovelace"
+        )
+        self.software = Software.objects.create(
+            name="Waiting soft",
+            type="acquisition",
+            status="waiting validation",
+            created_by=self.author,
+        )
+        self.validated = Software.objects.create(
+            name="Fine soft", status="validated", created_by=self.author
+        )
+        self.hardware = Hardware.objects.create(
+            name="Waiting mic",
+            type="microphone",
+            status="waiting validation",
+            created_by=self.author,
+        )
+        self.session = RecordingSession.objects.create(
+            name="Needs review",
+            is_multiple=True,
+            status="waiting validation",
+            created_by=self.author,
+        )
+        version = SoftwareVersion.objects.create(software=self.software, version="1")
+        self.session.equipment_acquisition_software.add(version)
+
+        self.applicant = User.objects.create_user(
+            "newbie", "newbie@igbmc.fr", "x", is_active=False
+        )
+        EmailAddress.objects.create(
+            user=self.applicant, email=self.applicant.email, verified=True, primary=True
+        )
+        self.client = APIClient()
+        self.client.force_authenticate(self.admin)
+
+    def _decide(self, kind, action, ids, **extra):
+        return self.client.post(
+            f"/api/review/{kind}/decision/",
+            {"action": action, "ids": ids, **extra},
+            format="json",
+        )
+
+    def test_only_staff_can_use_it(self):
+        for who, expected in ((None, 401), (self.member, 403), (self.admin, 200)):
+            client = APIClient()
+            if who:
+                client.force_authenticate(who)
+            self.assertEqual(client.get("/api/review/").status_code, expected, who)
+            self.assertEqual(
+                client.post(
+                    "/api/review/software/decision/",
+                    {"action": "validate", "ids": [self.software.pk]},
+                    format="json",
+                ).status_code,
+                expected if expected != 200 else 200,
+            )
+        self.software.refresh_from_db()
+        self.assertEqual(self.software.status, "validated")  # only the admin's call
+
+    def test_the_summary_counts_what_waits(self):
+        data = self.client.get("/api/review/").json()
+        per_kind = {k["kind"]: k["count"] for k in data["kinds"]}
+        self.assertEqual(per_kind["software"], 1)
+        self.assertEqual(per_kind["hardware"], 1)
+        self.assertEqual(per_kind["sessions"], 1)
+        self.assertEqual(per_kind["accounts"], 1)
+        self.assertEqual(per_kind["strains"], 0)
+        self.assertEqual(data["total"], 4)
+
+    def test_the_list_describes_each_item(self):
+        item = self.client.get("/api/review/software/").json()["results"][0]
+        self.assertEqual(item["title"], "Waiting soft")
+        self.assertEqual(item["created_by"]["name"], "Ada Lovelace")
+        self.assertIn("Type", [f["label"] for f in item["facts"]])
+        session = self.client.get("/api/review/sessions/").json()["results"][0]
+        self.assertEqual([p["kind"] for p in session["pending"]], ["software"])
+        account = self.client.get("/api/review/accounts/").json()["results"][0]
+        self.assertTrue(account["can_validate"])
+        self.assertEqual(self.client.get("/api/review/nothing/").status_code, 404)
+
+    def test_validating_an_entry_validates_it_and_tells_its_creator(self):
+        from django.core import mail
+
+        done = self._decide("hardware", "validate", [self.hardware.pk]).json()
+        self.assertEqual(done["done"], 1)
+        self.hardware.refresh_from_db()
+        self.assertEqual(self.hardware.status, "validated")
+        self.assertIn("validated", mail.outbox[-1].subject)
+        self.assertEqual(mail.outbox[-1].to, ["au@igbmc.fr"])
+
+    def test_sending_back_gives_the_reason(self):
+        from django.core import mail
+
+        self._decide(
+            "hardware", "send_back", [self.hardware.pk], reason="Add the maker"
+        )
+        self.hardware.refresh_from_db()
+        self.assertEqual(self.hardware.status, "draft")
+        self.assertIn("Add the maker", mail.outbox[-1].body)
+
+    def test_a_session_is_validated_with_everything_it_uses(self):
+        data = self._decide("sessions", "validate", [self.session.pk]).json()
+        self.assertEqual(data["done"], 1)
+        self.session.refresh_from_db()
+        self.software.refresh_from_db()
+        self.assertEqual(self.session.status, "shared")
+        self.assertEqual(self.software.status, "validated")
+
+    def test_only_what_waits_is_touched(self):
+        data = self._decide("software", "send_back", [self.validated.pk]).json()
+        self.assertEqual(data["done"], 0)
+        self.validated.refresh_from_db()
+        self.assertEqual(self.validated.status, "validated")
+
+    def test_accounts_are_activated_or_rejected_with_the_safeguards_of_the_admin(self):
+        from django.core import mail
+
+        done = self._decide("accounts", "validate", [self.applicant.pk]).json()
+        self.assertEqual(done["done"], 1)
+        self.applicant.refresh_from_db()
+        self.assertTrue(self.applicant.is_active)
+        self.assertEqual(mail.outbox[-1].to, ["newbie@igbmc.fr"])
+
+        from allauth.account.models import EmailAddress
+
+        User = get_user_model()
+        other = User.objects.create_user(
+            "other", "other@igbmc.fr", "x", is_active=False
+        )
+        EmailAddress.objects.create(user=other, email=other.email, verified=True)
+        used = User.objects.create_user("used", "used@igbmc.fr", "x", is_active=False)
+        EmailAddress.objects.create(user=used, email=used.email, verified=True)
+        User.objects.filter(pk=used.pk).update(last_login="2026-01-01T00:00:00Z")
+        result = self._decide("accounts", "send_back", [other.pk, used.pk]).json()
+        self.assertEqual(result["done"], 1)  # the request is rejected and deleted
+        self.assertEqual([s["id"] for s in result["skipped"]], [used.pk])
+        self.assertFalse(User.objects.filter(pk=other.pk).exists())
+        self.assertTrue(User.objects.filter(pk=used.pk).exists())
+
+    def test_a_malformed_decision_is_refused(self):
+        self.assertEqual(self._decide("software", "explode", [1]).status_code, 400)
+        self.assertEqual(
+            self.client.post(
+                "/api/review/software/decision/", {"action": "validate"}, format="json"
+            ).status_code,
+            400,
+        )
