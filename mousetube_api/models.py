@@ -264,6 +264,14 @@ class Strain(models.Model):
     name = models.CharField(max_length=255, unique=True)
     background = models.CharField(max_length=255)
     species = models.ForeignKey(Species, on_delete=models.CASCADE)
+    ontology_term = models.ForeignKey(
+        OntologyTerm,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="strains",
+        help_text="Experimental Factor Ontology (EFO) term of the strain.",
+    )
     bibliography = models.TextField(blank=True, null=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="draft")
     created_at = models.DateTimeField(auto_now_add=True, null=True)

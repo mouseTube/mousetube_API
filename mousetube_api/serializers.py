@@ -538,6 +538,7 @@ class StrainSerializer(ModerationMixin, serializers.ModelSerializer):
     species_id = serializers.PrimaryKeyRelatedField(
         queryset=Species.objects.all(), write_only=True, source="species"
     )
+    ontology_term = OntologyTermField("strain")  # checked at its source (EFO)
 
     class Meta:
         model = Strain

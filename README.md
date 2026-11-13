@@ -250,8 +250,9 @@ checked at its source (EBI Ontology Lookup Service, ROR registry) before it is s
 | Field | Vocabulary |
 |---|---|
 | Species | NCBI Taxonomy |
+| Strain | Experimental Factor Ontology (EFO) for mice, e.g. C57BL/6J `EFO:0000606`; Rat Strain Ontology (RS) for rats (`&ontology=rs` in the search) |
 | Sex of an animal profile | PATO (filled from male / female) |
-| Developmental stage | Mouse Developmental Stages (MmusDv) |
+| Developmental stage | Mouse Developmental Stages (MmusDv) for mice; generic stages of Uberon for other species (filled from pup / juvenile / adult) |
 | Treatment compound | ChEBI |
 | Behaviors of a session | Neuro Behavior Ontology (NBO) |
 | Organization of a laboratory | ROR registry |

@@ -270,7 +270,11 @@ class OntologySearchView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
         try:
-            terms = ontologies.search(field, request.query_params.get("q", ""))
+            terms = ontologies.search(
+                field,
+                request.query_params.get("q", ""),
+                ontology=request.query_params.get("ontology"),
+            )
         except ontologies.OntologyError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
         return Response(
@@ -1320,6 +1324,7 @@ class FileAPIView(GenericAPIView):
             "created_by__user_profile",
         ).prefetch_related(
             "subjects__animal_profile__strain__species",
+            "subjects__animal_profile__strain__ontology_term",
             "subjects__animal_profile__sex_term",
             "subjects__animal_profile__age_term",
             "subjects__animal_profile__treatment_term",
@@ -1327,6 +1332,7 @@ class FileAPIView(GenericAPIView):
             "recording_session__studies",
             "recording_session__references",
             "recording_session__animal_profiles__strain__species",
+            "recording_session__animal_profiles__strain__ontology_term",
             "recording_session__animal_profiles__sex_term",
             "recording_session__animal_profiles__age_term",
             "recording_session__animal_profiles__treatment_term",

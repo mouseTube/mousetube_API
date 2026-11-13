@@ -21,10 +21,19 @@ CACHE_SECONDS = 24 * 3600
 # The fields that have a vocabulary, and where it comes from.
 FIELDS = {
     "species": {"source": "ols", "ontologies": ["ncbitaxon"], "name": "NCBI Taxonomy"},
+    # mouse and rat strains: the Experimental Factor Ontology, and the Rat Strain Ontology
+    "strain": {
+        "source": "ols",
+        "ontologies": ["efo", "rs"],
+        "suggest": ["efo"],  # what is searched when no vocabulary is asked for
+        "name": "Experimental Factor Ontology (EFO) or Rat Strain Ontology (RS)",
+    },
     "sex": {"source": "ols", "ontologies": ["pato"], "name": "PATO"},
     "age": {
         "source": "ols",
-        "ontologies": ["mmusdv"],
+        # the stages of the mouse; Uberon for the other species (generic stages)
+        "ontologies": ["mmusdv", "uberon"],
+        "suggest": ["mmusdv"],
         "name": "Mouse Developmental Stages",
     },
     "treatment": {"source": "ols", "ontologies": ["chebi"], "name": "ChEBI"},
@@ -51,6 +60,12 @@ AGE_TERMS = {
     "juvenile": ("MmusDv:0000178", "juvenile stage"),
     "adult": ("MmusDv:0000110", "mature stage"),
 }
+# The same classes for the other species (rat...): the generic stages of Uberon
+GENERIC_AGE_TERMS = {
+    "pup": ("UBERON:0034920", "infant stage"),
+    "juvenile": ("UBERON:0034919", "juvenile stage"),
+    "adult": ("UBERON:0000113", "post-juvenile adult stage"),
+}
 MOUSE = "mus musculus"
 
 # Species whose NCBI Taxonomy term is known (checked in the Ontology Lookup Service)
@@ -73,6 +88,9 @@ PREFIXES = {
     "pato": "PATO",
     "mmusdv": "MmusDv",
     "chebi": "CHEBI",
+    "efo": "EFO",
+    "rs": "RS",
+    "uberon": "UBERON",
     "nbo": "NBO",
 }
 
@@ -119,8 +137,12 @@ def _ror_place(item):
     return ", ".join(x for x in (place.get("name"), place.get("country_name")) if x)
 
 
-def search(field, text, rows=10):
-    """Terms of the vocabulary of `field` that match `text`: [{curie, label, ...}]."""
+def search(field, text, rows=10, ontology=None):
+    """Terms of the vocabulary of `field` that match `text`: [{curie, label, ...}].
+
+    `ontology` narrows the search to one of the vocabularies of the field (the strains of a
+    rat come from the Rat Strain Ontology, those of a mouse from EFO).
+    """
     spec = FIELDS[field]
     text = (text or "").strip()
     if len(text) < 2:
@@ -137,15 +159,30 @@ def search(field, text, rows=10):
             }
             for item in (data.get("items") or [])[:rows]
         ]
-    data = _get(
-        f"{OLS}/search",
-        q=text,
-        ontology=",".join(spec["ontologies"]),
-        type="class",
-        rows=rows,
-        fieldList="iri,label,obo_id,ontology_name",
+    chosen = (
+        [ontology]
+        if ontology in spec["ontologies"]
+        else spec.get("suggest", spec["ontologies"])
     )
-    docs = (data.get("response") or {}).get("docs") or []
+    # the service does not find "C57BL/6J" but finds "C57BL6J": ask both ways
+    questions = [text] + ([text.replace("/", "")] if "/" in text else [])
+    docs = []
+    for question in questions:
+        data = _get(
+            f"{OLS}/search",
+            q=question,
+            ontology=",".join(chosen),
+            type="class",
+            rows=rows,
+            fieldList="iri,label,obo_id,ontology_name",
+        )
+        docs += (data.get("response") or {}).get("docs") or []
+    # an ontology also lists the terms it imports from others (BTO, NCBITaxon...): only its own
+    own = set(chosen)
+    seen = set()
+    docs = [
+        d for d in docs if not (d.get("obo_id") in seen or seen.add(d.get("obo_id")))
+    ]
     return [
         {
             "curie": doc["obo_id"],
@@ -155,7 +192,9 @@ def search(field, text, rows=10):
             "detail": "",
         }
         for doc in docs
-        if doc.get("obo_id") and doc.get("label")
+        if doc.get("obo_id")
+        and doc.get("label")
+        and doc["obo_id"].split(":")[0].lower() in own
     ][:rows]
 
 
@@ -255,11 +294,16 @@ def session_terms(session):
     behaviors), each once, in a stable order."""
     terms = []
     for profile in session.animal_profiles.select_related(
-        "strain__species__ontology_term", "sex_term", "age_term", "treatment_term"
+        "strain__ontology_term",
+        "strain__species__ontology_term",
+        "sex_term",
+        "age_term",
+        "treatment_term",
     ):
         species = profile.strain.species if profile.strain else None
         terms += [
             species and species.ontology_term,
+            profile.strain and profile.strain.ontology_term,
             profile.sex_term,
             profile.age_term,
             profile.treatment_term,
@@ -298,6 +342,8 @@ def match_organization(text):
 
 def age_term(age, species_name):
     """The stage of a mouse age class ("pup", "juvenile", "adult"), or None."""
-    known = AGE_TERMS.get(age)
-    is_mouse = (species_name or "").strip().lower() == MOUSE
-    return known_term(*known) if known and is_mouse else None
+    name = (species_name or "").strip().lower()
+    if not name:
+        return None
+    known = (AGE_TERMS if name == MOUSE else GENERIC_AGE_TERMS).get(age)
+    return known_term(*known) if known else None

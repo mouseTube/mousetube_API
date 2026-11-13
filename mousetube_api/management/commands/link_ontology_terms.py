@@ -1,6 +1,6 @@
 from django.core.management.base import BaseCommand
 
-from mousetube_api.models import AnimalProfile, Laboratory, Species
+from mousetube_api.models import AnimalProfile, Laboratory, Species, Strain
 from mousetube_api.utils import ontologies
 from mousetube_api.utils.ontologies import (
     OntologyError,
@@ -13,6 +13,7 @@ from mousetube_api.utils.ontologies import (
 # exactly the text written there
 LABEL_MATCHES = [
     (Species, "name", "ontology_term", "species"),
+    (Strain, "name", "ontology_term", "strain"),
     (AnimalProfile, "age", "age_term", "age"),
     (AnimalProfile, "treatment", "treatment_term", "treatment"),
 ]

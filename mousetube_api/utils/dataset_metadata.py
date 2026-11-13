@@ -62,6 +62,7 @@ def _strain(s):
     return {
         "name": s.name,
         "background": s.background,
+        "ontology_term": term_ref(s.ontology_term),
         "species": {
             "name": s.species.name,
             "ontology_term": term_ref(s.species.ontology_term),

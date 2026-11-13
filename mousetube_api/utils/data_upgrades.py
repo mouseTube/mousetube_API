@@ -20,6 +20,7 @@ from mousetube_api.models import (
 )
 from mousetube_api.utils.ontologies import (
     AGE_TERMS,
+    GENERIC_AGE_TERMS,
     MOUSE,
     SEX_TERMS,
     SPECIES_TERMS,
@@ -67,6 +68,13 @@ def link_known_terms():
             age_term__isnull=True,
             strain__species__name__iexact=MOUSE,
         ).update(age_term=known_term(curie, label))
+    # the other species (rat...): the generic stage of the same name
+    for age, (curie, label) in GENERIC_AGE_TERMS.items():
+        linked += (
+            AnimalProfile.objects.filter(age=age, age_term__isnull=True)
+            .exclude(strain__species__name__iexact=MOUSE)
+            .update(age_term=known_term(curie, label))
+        )
     return linked
 
 

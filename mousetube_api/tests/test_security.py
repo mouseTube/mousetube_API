@@ -1520,6 +1520,8 @@ def _fake_vocabularies(url, params=None, **kwargs):
             "MmusDv:0000092": ("postnatal stage", "mmusdv"),
             "NBO:0000037": ("vocalization behavior", "nbo"),
             "CHEBI:27732": ("caffeine", "chebi"),
+            "EFO:0022397": ("C57BL/6", "efo"),
+            "RS:0000681": ("SD", "rs"),
         }
         known = terms.get(params.get("obo_id"))
         if not known:
@@ -1695,7 +1697,7 @@ class OntologyTests(FreshCache, TestCase):
             created = self._profile(age="adult", age_term={"curie": "MmusDv:0000151"})
         self.assertEqual(created.json()["age_term"]["curie"], "MmusDv:0000151")
 
-    def test_another_species_keeps_its_age_class_without_a_mouse_stage(self):
+    def test_another_species_gets_the_generic_stage_of_uberon_not_a_mouse_one(self):
         from mousetube_api.models import Species, Strain
 
         rat = Strain.objects.create(
@@ -1716,7 +1718,7 @@ class OntologyTests(FreshCache, TestCase):
             format="json",
         )
         self.assertEqual(created.status_code, 201, created.content)
-        self.assertIsNone(created.json()["age_term"])
+        self.assertEqual(created.json()["age_term"]["curie"], "UBERON:0000113")
 
     def test_a_term_is_checked_at_its_source_then_stored_once(self):
         from unittest import mock
@@ -1732,6 +1734,126 @@ class OntologyTests(FreshCache, TestCase):
             self._profile(name="AP2", age_term="MmusDv:0000092")
             self.assertEqual(get.call_count, calls)
         self.assertEqual(OntologyTerm.objects.filter(curie="MmusDv:0000092").count(), 1)
+
+    def test_a_strain_can_point_to_its_term_of_the_experimental_factor_ontology(self):
+        from unittest import mock
+
+        from mousetube_api.models import Species
+
+        species = Species.objects.get(name="Mus musculus")
+        with mock.patch(self.PATCH, side_effect=_fake_vocabularies):
+            created = self.client_u.post(
+                "/api/strain/",
+                {
+                    "name": "C57BL/6J-test",
+                    "background": "C57BL/6",
+                    "species_id": species.id,
+                    "ontology_term": {"curie": "EFO:0022397"},
+                },
+                format="json",
+            )
+            self.assertEqual(created.status_code, 201, created.content)
+            self.assertEqual(created.json()["ontology_term"]["label"], "C57BL/6")
+            # a term of another vocabulary is refused
+            wrong = self.client_u.post(
+                "/api/strain/",
+                {
+                    "name": "other",
+                    "background": "x",
+                    "species_id": species.id,
+                    "ontology_term": {"curie": "PATO:0000384"},
+                },
+                format="json",
+            )
+        self.assertEqual(wrong.status_code, 400)
+
+    def test_a_rat_strain_comes_from_the_rat_strain_ontology(self):
+        from unittest import mock
+
+        from mousetube_api.models import Species
+
+        rat = Species.objects.create(name="Rattus norvegicus")
+        with mock.patch(self.PATCH, side_effect=_fake_vocabularies):
+            created = self.client_u.post(
+                "/api/strain/",
+                {
+                    "name": "Sprague Dawley",
+                    "background": "SD",
+                    "species_id": rat.id,
+                    "ontology_term": {"curie": "RS:0000681"},
+                },
+                format="json",
+            )
+        self.assertEqual(created.status_code, 201, created.content)
+        self.assertEqual(created.json()["ontology_term"]["ontology"], "rs")
+
+    def test_a_search_with_a_slash_also_asks_without_it(self):
+        from unittest import mock
+
+        from mousetube_api.utils import ontologies
+
+        asked = []
+
+        def fake(url, **params):
+            asked.append(params.get("q"))
+            docs = (
+                [
+                    {
+                        "obo_id": "EFO:0000606",
+                        "label": "C57BL/6J",
+                        "ontology_name": "efo",
+                        "iri": "http://www.ebi.ac.uk/efo/EFO_0000606",
+                    }
+                ]
+                if params.get("q") == "C57BL6J"
+                else []
+            )
+            return {"response": {"docs": docs}}
+
+        with mock.patch.object(ontologies, "_get", side_effect=fake):
+            found = ontologies.search("strain", "C57BL/6J")
+        self.assertEqual(asked, ["C57BL/6J", "C57BL6J"])
+        self.assertEqual([t["curie"] for t in found], ["EFO:0000606"])
+
+    def test_the_vocabulary_can_be_chosen_for_the_search(self):
+        from unittest import mock
+
+        from mousetube_api.utils import ontologies
+
+        with mock.patch.object(
+            ontologies, "_get", return_value={"response": {"docs": []}}
+        ) as get:
+            ontologies.search("strain", "sprague", ontology="rs")
+            ontologies.search("strain", "sprague")
+        self.assertEqual(get.call_args_list[0].kwargs["ontology"], "rs")
+        self.assertEqual(get.call_args_list[1].kwargs["ontology"], "efo")
+
+    def test_only_the_terms_of_the_vocabulary_itself_are_offered(self):
+        from unittest import mock
+
+        from mousetube_api.utils import ontologies
+
+        reply = _fake_vocabularies("https://x/ols4/api/search", {})
+        docs = reply.json()["response"]["docs"]
+        docs.append(
+            {
+                "obo_id": "BTO:0001093",
+                "label": "WEHI-231 cell",
+                "ontology_name": "efo",
+                "iri": "http://purl.obolibrary.org/obo/BTO_0001093",
+            }
+        )
+        docs.append(
+            {
+                "obo_id": "EFO:0000602",
+                "label": "BALB/c",
+                "ontology_name": "efo",
+                "iri": "http://www.ebi.ac.uk/efo/EFO_0000602",
+            }
+        )
+        with mock.patch.object(ontologies, "_get", return_value=reply.json()):
+            found = ontologies.search("strain", "balb")
+        self.assertEqual([t["curie"] for t in found], ["EFO:0000602"])
 
     def test_a_wrong_term_is_refused_with_a_400(self):
         from unittest import mock
