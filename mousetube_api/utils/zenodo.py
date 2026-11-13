@@ -445,11 +445,10 @@ def publish_deposition(recording_session, payload=None):
             f.link = f"{base_url}/records/{deposition_id}/files/{f.name}?download=1"
             f.external_url = f"{base_url}/records/{deposition_id}"
             f.save(update_fields=["doi", "link", "external_url"])
-        elif f.doi and f.link:
-            if not f.link.startswith(base_url):
-                # Remove repository link if DOI/link point elsewhere
-                f.repository = None
-                f.save(update_fields=["repository"])
+        elif f.doi and f.link and not f.link.startswith(base_url):
+            # Remove repository link if DOI/link point elsewhere
+            f.repository = None
+            f.save(update_fields=["repository"])
     return zenodo_doi
 
 

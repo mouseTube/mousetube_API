@@ -296,11 +296,7 @@ def _datetime(value):
         return None
     if not isinstance(value, dt.datetime):
         value = dt.datetime.combine(value, dt.time.min)
-    return (
-        timezone.make_aware(value, dt.timezone.utc)
-        if timezone.is_naive(value)
-        else value
-    )
+    return timezone.make_aware(value, dt.UTC) if timezone.is_naive(value) else value
 
 
 MAX_IMAGE_BYTES = 20 * 1024 * 1024
