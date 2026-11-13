@@ -1,10 +1,27 @@
 {% extends "admin/base.html" %}
+{% load static %}
 
-{% block branding %}
-    <h1 style="text-shadow: 4px 4px 4px rgba(0, 0, 0, 0.5);">MOUSETUBE ADMIN</h1>
+{% block extrastyle %}
+    {{ block.super }}
+    <link rel="stylesheet" href="{% static 'mousetube_api/admin.css' %}">
 {% endblock %}
 
-{% block usertools %}
-    <a href="{% url 'admin-stats' %}" target="_blank" class="button">Show Stats</a>
-    {{ block.super }}
+{% block title %}{% if subtitle %}{{ subtitle }} | {% endif %}{{ title }} | mouseTube admin{% endblock %}
+
+{% block branding %}
+    <h1 id="site-name"><a href="{% url 'admin:index' %}">Mouse<span class="mt-tube">Tube</span><span class="mt-admin-tag">Admin</span></a></h1>
+{% endblock %}
+
+{% block welcome-msg %}<strong>{% firstof user.get_short_name user.get_username %}</strong>{% endblock %}
+
+{% block userlinks %}
+    {% if FRONT_URL %}<a href="{{ FRONT_URL }}/review" class="mt-top-button" title="The review page of the website">Review</a>{% endif %}
+    <a href="{% url 'admin-stats' %}" target="_blank">Statistics</a>
+    {% if site_url %}<a href="{{ site_url }}">View site</a>{% endif %}
+    {% if user.has_usable_password %}<a href="{% url 'admin:password_change' %}">Change password</a>{% endif %}
+    <form id="logout-form" method="post" action="{% url 'admin:logout' %}">
+        {% csrf_token %}
+        <button type="submit">Log out</button>
+    </form>
+    {% include "admin/color_theme_toggle.html" %}
 {% endblock %}

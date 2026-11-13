@@ -1377,8 +1377,11 @@ class ModerationTests(FreshCache, TestCase):
         )
         admin_client = self._admin()
         index = admin_client.get("/admin/").content.decode()
-        self.assertIn("To review (1)", index)
-        self.assertIn("1 waiting", index)
+        self.assertIn("1 thing waiting for your decision", index)
+        self.assertIn(
+            "together with everything it uses", index
+        )  # the rule is explained
+        self.assertIn("status__exact=waiting+validation", index)
         listing = admin_client.get(
             "/admin/mousetube_api/hardware/?status__exact=waiting+validation"
         ).content.decode()
