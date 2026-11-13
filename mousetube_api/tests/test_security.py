@@ -2860,3 +2860,85 @@ class SessionEntriesFollowTheSessionTests(TestCase):
         self.mic.refresh_from_db()
         self.assertEqual(self.mic.status, "waiting validation")
         message.assert_not_called()
+
+
+class ZenodoDescriptionTests(TestCase):
+    """The description of a Zenodo record: readable, without repeating what Zenodo shows, and
+    never markup of a user."""
+
+    def setUp(self):
+        from mousetube_api.models import File, Hardware, Reference
+
+        self.user = get_user_model().objects.create_user(
+            "dep", "dep@igbmc.fr", "x", first_name="Ada", last_name="Lovelace"
+        )
+        self.session = RecordingSession.objects.create(
+            name='Pups <script>alert("x")</script>',
+            is_multiple=True,
+            description="line one\nline two",
+            status="shared",
+            created_by=self.user,
+        )
+        self.mic = Hardware.objects.create(
+            name="Mic & co", type="microphone", status="validated", created_by=self.user
+        )
+        self.mic_doc = Reference.objects.create(
+            name="Mic manual", url="https://example.org/mic", status="validated"
+        )
+        self.mic.references.add(self.mic_doc)
+        self.session.equipment_acquisition_hardware_microphones.add(self.mic)
+        # one reference of the session that is the documentation of the microphone, one that is not
+        self.other_doc = Reference.objects.create(
+            name="Method paper", url="https://example.org/paper", status="validated"
+        )
+        self.session.references.add(self.mic_doc, self.other_doc)
+        self.file = File.objects.create(
+            name="a.wav",
+            format="WAV",
+            recording_session=self.session,
+            created_by=self.user,
+        )
+
+    def _payload(self):
+        from mousetube_api.utils.zenodo import build_metadata_payload
+
+        return build_metadata_payload(self.session, [self.file])
+
+    def test_the_description_follows_the_layout_of_the_other_records(self):
+        text = self._payload()["description"]
+        self.assertIn(
+            "Submitted via mouseTube on behalf of:</strong> Ada Lovelace", text
+        )
+        for heading in (
+            "Recording session",
+            "Equipment",
+            "Keywords",
+            "Publication year",
+        ):
+            self.assertIn(heading, text)
+        self.assertIn("line one<br>line two", text)
+
+    def test_the_files_are_not_repeated_Zenodo_lists_them(self):
+        text = self._payload()["description"]
+        self.assertNotIn("a.wav", text)
+        self.assertNotIn("Files", text)
+
+    def test_the_equipment_links_to_its_own_documentation(self):
+        text = self._payload()["description"]
+        self.assertIn('<a href="https://example.org/mic">Mic &amp; co</a>', text)
+
+    def test_a_reference_already_behind_the_equipment_is_not_listed_again(self):
+        text = self._payload()["description"]
+        self.assertEqual(text.count("https://example.org/mic"), 1)
+        self.assertIn('<a href="https://example.org/paper">Method paper</a>', text)
+        self.assertIn("Related references", text)
+
+    def test_what_users_wrote_is_escaped(self):
+        text = self._payload()["description"]
+        self.assertNotIn("<script>", text)
+        self.assertIn("&lt;script&gt;", text)
+
+    def test_keywords_and_the_community_are_in_the_metadata(self):
+        payload = self._payload()
+        self.assertIn("mouseTube", payload["keywords"])
+        self.assertEqual(payload["communities"], [{"identifier": "mousetube"}])
