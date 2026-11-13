@@ -2501,3 +2501,78 @@ class PublishSessionTests(FreshCache, TestCase):
             name="new.wav", recording_session=self.session, created_by=self.user
         )
         self.assertEqual(left(), 1)
+
+
+class MergeImportedDuplicatesTests(TestCase):
+    """A recording imported in a dataset and with its session is kept once."""
+
+    def setUp(self):
+        from mousetube_api.models import Dataset, File, Subject
+
+        User = get_user_model()
+        self.admin = User.objects.create_user("admin", "ad@igbmc.fr", "x")
+        self.author = User.objects.create_user("mt05-4", "au@igbmc.fr", "x")
+
+        def session(name, owner):
+            return RecordingSession.objects.create(
+                name=name, is_multiple=True, status="shared", created_by=owner
+            )
+
+        dataset_session = session("one file", self.admin)
+        original_session = session("whole experiment", self.author)
+        self.keep = File.objects.create(
+            name="a.wav",
+            recording_session=dataset_session,
+            created_by=self.admin,
+            downloads=5,
+            duration=10,
+        )
+        self.drop = File.objects.create(
+            name="a.wav",
+            recording_session=original_session,
+            created_by=self.author,
+            downloads=9,
+        )
+        self.other = File.objects.create(
+            name="b.wav", recording_session=original_session, created_by=self.author
+        )
+        self.subject = Subject.objects.create(name="animal 1")
+        self.drop.subjects.add(self.subject)
+        dataset = Dataset.objects.create(name="Mouse dataset", created_by=self.admin)
+        dataset.recording_session_list.add(dataset_session)
+        self.dataset_session = dataset_session
+
+    def _run(self, *args):
+        from io import StringIO
+
+        from django.core.management import call_command
+
+        out = StringIO()
+        call_command("merge_imported_duplicates", *args, stdout=out)
+        return out.getvalue()
+
+    def test_nothing_changes_without_apply(self):
+        from mousetube_api.models import File
+
+        self.assertIn("would be merged", self._run())
+        self.assertEqual(File.objects.filter(name="a.wav").count(), 2)
+
+    def test_the_dataset_copy_is_kept_with_the_owner_and_the_animals_of_the_original(
+        self,
+    ):
+        from mousetube_api.models import File
+
+        self._run("--apply")
+        copies = File.objects.filter(name="a.wav")
+        self.assertEqual(copies.count(), 1)
+        kept = copies.get()
+        self.assertEqual(kept.pk, self.keep.pk)
+        self.assertEqual(kept.duration, 10)  # what the dataset copy knew
+        self.assertEqual(kept.downloads, 9)
+        self.assertEqual(kept.created_by, self.author)
+        self.assertEqual(list(kept.subjects.all()), [self.subject])
+        self.dataset_session.refresh_from_db()
+        self.assertEqual(self.dataset_session.created_by, self.author)
+        # the rest of the original session is untouched
+        self.assertTrue(File.objects.filter(name="b.wav").exists())
+        self.assertIn("0 would be merged", self._run().replace("0 would", "0 would"))
