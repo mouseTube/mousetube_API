@@ -338,7 +338,7 @@ DJOSER = {
 }
 
 SIMPLE_JWT = {
-    "TOKEN_OBTAIN_SERIALIZER": "mousetube_api.serializers.PendingAwareTokenObtainPairSerializer",
+    "TOKEN_OBTAIN_SERIALIZER": "mousetube_api.serializers.PendingAwareTokenObtainPairSerializer",  # nosec B105 - dotted path of a class, not a secret
     # Short-lived: the frontend renews it with the refresh token (plugins/axios-refresh.ts).
     "ACCESS_TOKEN_LIFETIME": timedelta(hours=1),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=7),

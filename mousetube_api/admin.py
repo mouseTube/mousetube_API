@@ -12,6 +12,7 @@ from django.contrib import admin, messages
 from django.contrib.admin import helpers
 from django.contrib.auth import get_user_model
 from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
+from django.contrib.auth.hashers import UNUSABLE_PASSWORD_PREFIX
 from django.db.models import Count, Exists, OuterRef
 from django.template.response import TemplateResponse
 from django.urls import reverse
@@ -444,7 +445,7 @@ class AccountRequestFilter(admin.SimpleListFilter):
             # accounts without a usable password are the authors imported from mouseTube
             # 0.5 (they only carry a name): nobody is waiting for them
             return queryset.filter(is_active=False, _email_confirmed=False).exclude(
-                password__startswith="!"
+                password__startswith=UNUSABLE_PASSWORD_PREFIX
             )
         return queryset
 
