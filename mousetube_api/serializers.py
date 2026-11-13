@@ -31,6 +31,7 @@ from mousetube_api.utils.moderation import (
 )
 from mousetube_api.utils.ontologies import (
     OntologyError,
+    age_term,
     get_or_create_term,
     sex_term,
 )
@@ -613,6 +614,13 @@ class AnimalProfileSerializer(ModerationMixin, serializers.ModelSerializer):
         sex = data.get("sex")
         if sex and not data.get("sex_term") and "sex_term" not in data:
             data["sex_term"] = sex_term(sex)
+        # a mouse age class is a stage of the developmental ontology, unless a more
+        # precise stage was chosen
+        age = data.get("age")
+        if age and not data.get("age_term"):
+            strain = data.get("strain") or (self.instance and self.instance.strain)
+            species = strain and strain.species
+            data["age_term"] = age_term(age, species and species.name)
         return data
 
 

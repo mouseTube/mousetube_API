@@ -42,6 +42,17 @@ SEX_TERMS = {
     "female": ("PATO:0000383", "female"),
 }
 
+# The age classes of the forms, as stages of the Mouse Developmental Stages ontology
+# (checked in the Ontology Lookup Service: infant = nursing until weaning at 22 days,
+# juvenile = weaned and sexually immature, mature = sexually mature, over 6 weeks).
+# They describe the mouse only: another species keeps its age class without a term.
+AGE_TERMS = {
+    "pup": ("MmusDv:0000177", "infant stage"),
+    "juvenile": ("MmusDv:0000178", "juvenile stage"),
+    "adult": ("MmusDv:0000110", "mature stage"),
+}
+MOUSE = "mus musculus"
+
 # Species whose NCBI Taxonomy term is known (checked in the Ontology Lookup Service)
 SPECIES_TERMS = {
     "mus musculus": ("NCBITaxon:10090", "Mus musculus"),
@@ -232,3 +243,61 @@ def sex_term(sex):
     """The PATO term of "male" / "female", without any network call (None otherwise)."""
     known = SEX_TERMS.get(sex)
     return known_term(*known) if known else None
+
+
+def term_ref(term):
+    """A term as it is written in exports: {curie, label, iri}, or None."""
+    return {"curie": term.curie, "label": term.label, "iri": term.iri} if term else None
+
+
+def session_terms(session):
+    """The vocabulary terms a recording session points to (species, sex, stage, treatment,
+    behaviors), each once, in a stable order."""
+    terms = []
+    for profile in session.animal_profiles.select_related(
+        "strain__species__ontology_term", "sex_term", "age_term", "treatment_term"
+    ):
+        species = profile.strain.species if profile.strain else None
+        terms += [
+            species and species.ontology_term,
+            profile.sex_term,
+            profile.age_term,
+            profile.treatment_term,
+        ]
+    terms += list(session.behavior_terms.all())
+    seen, kept = set(), []
+    for term in terms:
+        if term and term.curie not in seen:
+            seen.add(term.curie)
+            kept.append(term)
+    return kept
+
+
+def match_label(field, text):
+    """The term of `field` whose label is exactly `text` (any case), or None."""
+    wanted = (text or "").strip().lower()
+    for term in search(field, wanted, rows=20) if wanted else []:
+        if term["label"].strip().lower() == wanted:
+            return term
+    return None
+
+
+def match_organization(text):
+    """The ROR organization the registry itself is sure about for an affiliation text
+    (its `chosen` match), or None: a doubtful match is worse than none."""
+    if not (text or "").strip():
+        return None
+    for item in _get(ROR, affiliation=text.strip()).get("items") or []:
+        if item.get("chosen"):
+            return {
+                "curie": "ROR:" + item["organization"]["id"].rsplit("/", 1)[-1],
+                "label": _ror_label(item["organization"]),
+            }
+    return None
+
+
+def age_term(age, species_name):
+    """The stage of a mouse age class ("pup", "juvenile", "adult"), or None."""
+    known = AGE_TERMS.get(age)
+    is_mouse = (species_name or "").strip().lower() == MOUSE
+    return known_term(*known) if known and is_mouse else None

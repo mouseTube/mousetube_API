@@ -35,6 +35,7 @@ from mousetube_api.models import (
     Study,
     Subject,
 )
+from mousetube_api.utils.ontologies import term_ref
 
 HARDWARE_FIELDS = {
     "equipment_acquisition_hardware_soundcards": "soundcard",
@@ -61,7 +62,10 @@ def _strain(s):
     return {
         "name": s.name,
         "background": s.background,
-        "species": {"name": s.species.name},
+        "species": {
+            "name": s.species.name,
+            "ontology_term": term_ref(s.species.ontology_term),
+        },
         "bibliography": s.bibliography,
         "status": s.status,
     }
@@ -76,6 +80,9 @@ def _animal_profile(a):
         "age": a.age,
         "genotype": a.genotype,
         "treatment": a.treatment,
+        "sex_term": term_ref(a.sex_term),
+        "age_term": term_ref(a.age_term),
+        "treatment_term": term_ref(a.treatment_term),
         "status": a.status,
     }
 
@@ -192,9 +199,11 @@ def _session(rs):
             "unit": lab.unit,
             "address": lab.address,
             "country": countries.name(lab.country) if lab.country else None,
+            "organization": term_ref(lab.organization),
             "status": lab.status,
         },
         "animal_profiles": [_animal_profile(a) for a in rs.animal_profiles.all()],
+        "behavior_terms": [term_ref(t) for t in rs.behavior_terms.all()],
         "context_temperature_value": rs.context_temperature_value,
         "context_temperature_unit": rs.context_temperature_unit,
         "context_brightness": rs.context_brightness,

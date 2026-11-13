@@ -15,7 +15,13 @@ from mousetube_api.models import (
     Strain,
     UserProfile,
 )
-from mousetube_api.utils.ontologies import SEX_TERMS, SPECIES_TERMS, known_term
+from mousetube_api.utils.ontologies import (
+    AGE_TERMS,
+    MOUSE,
+    SEX_TERMS,
+    SPECIES_TERMS,
+    known_term,
+)
 
 
 def normalize_statuses():
@@ -40,7 +46,8 @@ def create_missing_profiles():
 
 
 def link_known_terms():
-    """Species and the sex of animal profiles get their ontology term (no network call)."""
+    """Species, the sex and the age class (of mice) of animal profiles get their ontology
+    term (no network call)."""
     linked = 0
     for name, (curie, label) in SPECIES_TERMS.items():
         linked += Species.objects.filter(
@@ -50,6 +57,12 @@ def link_known_terms():
         linked += AnimalProfile.objects.filter(sex=sex, sex_term__isnull=True).update(
             sex_term=known_term(curie, label)
         )
+    for age, (curie, label) in AGE_TERMS.items():
+        linked += AnimalProfile.objects.filter(
+            age=age,
+            age_term__isnull=True,
+            strain__species__name__iexact=MOUSE,
+        ).update(age_term=known_term(curie, label))
     return linked
 
 

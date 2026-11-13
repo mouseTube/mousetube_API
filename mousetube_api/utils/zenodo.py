@@ -1,3 +1,4 @@
+import html
 import json
 import os
 import re
@@ -15,6 +16,7 @@ from mousetube_api.utils.file_handler import (
     is_temp_path,
     link_to_local_path,
 )
+from mousetube_api.utils.ontologies import session_terms
 
 ZENODO_API = getattr(settings, "ZENODO_API", "https://sandbox.zenodo.org/api/")
 
@@ -235,6 +237,17 @@ def _build_session_description(recording_session, files):
                 f"Sex: {ap.sex} | Genotype: {ap.genotype} | Treatment: {ap.treatment}"
             )
 
+    # === VOCABULARY TERMS (linked to their definition) ===
+    terms = session_terms(recording_session)
+    if terms:
+        lines.append("<br>")
+        lines.append("================= 🏷️ ONTOLOGY TERMS =================")
+        for term in terms:
+            lines.append(
+                f'<a href="{html.escape(term.iri)}">{html.escape(term.label)}</a> '
+                f"({html.escape(term.curie)})"
+            )
+
     # # === FILES ===
     # if files:
     #     lines.append("<br>")
@@ -290,6 +303,15 @@ def build_metadata_payload(recording_session, files):
         "communities": [{"identifier": "mousetube"}],
         "license": "CC-BY-NC-4.0",
     }
+
+    # the terms also go in the structured subjects, so that Zenodo can index them
+    subjects = [
+        {"term": t.label, "identifier": t.iri, "scheme": "url"}
+        for t in session_terms(recording_session)
+        if t.iri
+    ]
+    if subjects:
+        metadata_payload["subjects"] = subjects
 
     return metadata_payload
 

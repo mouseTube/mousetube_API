@@ -1656,6 +1656,65 @@ class OntologyTests(FreshCache, TestCase):
         self.assertEqual(created.json()["sex_term"]["curie"], "PATO:0000384")
         self.assertEqual(created.json()["sex_term"]["label"], "male")
 
+    def test_the_age_class_of_a_mouse_gets_its_developmental_stage(self):
+        from unittest import mock
+
+        expected = {
+            "pup": "MmusDv:0000177",
+            "juvenile": "MmusDv:0000178",
+            "adult": "MmusDv:0000110",
+        }
+        with mock.patch(self.PATCH, side_effect=AssertionError("no network call")):
+            for age, curie in expected.items():
+                created = self._profile(age=age, name=f"AP {age}")
+                self.assertEqual(created.status_code, 201, created.content)
+                self.assertEqual(created.json()["age_term"]["curie"], curie)
+
+            # the age changes: so does the stage
+            profile = self._profile(age="pup", name="AP changing").json()
+            changed = self.client_u.patch(
+                f"/api/animalprofile/{profile['id']}/", {"age": "adult"}, format="json"
+            )
+            self.assertEqual(changed.json()["age_term"]["curie"], "MmusDv:0000110")
+
+    def test_a_precise_stage_chosen_by_the_user_is_kept(self):
+        from unittest import mock
+
+        from mousetube_api.models import OntologyTerm
+
+        OntologyTerm.objects.create(
+            curie="MmusDv:0000151",
+            label="6-week-old stage",
+            ontology="mmusdv",
+            iri="http://purl.obolibrary.org/obo/MmusDv_0000151",
+        )
+        with mock.patch(self.PATCH, side_effect=AssertionError("no network call")):
+            created = self._profile(age="adult", age_term={"curie": "MmusDv:0000151"})
+        self.assertEqual(created.json()["age_term"]["curie"], "MmusDv:0000151")
+
+    def test_another_species_keeps_its_age_class_without_a_mouse_stage(self):
+        from mousetube_api.models import Species, Strain
+
+        rat = Strain.objects.create(
+            name="Wistar",
+            background="w",
+            species=Species.objects.create(name="Rattus norvegicus"),
+            status="validated",
+        )
+        created = self.client_u.post(
+            "/api/animalprofile/",
+            {
+                "name": "rat",
+                "strain_id": rat.id,
+                "sex": "male",
+                "age": "adult",
+                "genotype": "+/+",
+            },
+            format="json",
+        )
+        self.assertEqual(created.status_code, 201, created.content)
+        self.assertIsNone(created.json()["age_term"])
+
     def test_a_term_is_checked_at_its_source_then_stored_once(self):
         from unittest import mock
 
@@ -1736,6 +1795,45 @@ class OntologyTests(FreshCache, TestCase):
             )
             self.assertEqual(bad.status_code, 400)
 
+    def test_the_terms_of_a_session_reach_zenodo_and_the_dataset_export(self):
+        from mousetube_api.models import OntologyTerm, RecordingSession
+        from mousetube_api.utils import zenodo
+        from mousetube_api.utils.dataset_metadata import _session
+
+        self._profile()  # male: sex_term is set without any network call
+        from mousetube_api.models import AnimalProfile
+
+        profile = AnimalProfile.objects.get()
+        behavior = OntologyTerm.objects.create(
+            curie="NBO:0000001",
+            label="grooming",
+            ontology="nbo",
+            iri="http://purl.obolibrary.org/obo/NBO_0000001",
+        )
+        session = RecordingSession.objects.create(
+            name="s", is_multiple=True, created_by=self.user
+        )
+        session.animal_profiles.add(profile)
+        session.behavior_terms.add(behavior)
+
+        files = [SimpleNamespace(created_by=None)]
+        payload = zenodo.build_metadata_payload(session, files)
+        subjects = {s["term"]: s["identifier"] for s in payload["subjects"]}
+        self.assertEqual(
+            subjects["male"], "http://purl.obolibrary.org/obo/PATO_0000384"
+        )
+        self.assertEqual(subjects["grooming"], behavior.iri)
+        self.assertIn(
+            '<a href="http://purl.obolibrary.org/obo/PATO_0000384">male</a>',
+            payload["description"],
+        )
+
+        exported = _session(session)
+        self.assertEqual(
+            exported["animal_profiles"][0]["sex_term"]["curie"], "PATO:0000384"
+        )
+        self.assertEqual(exported["behavior_terms"][0]["label"], "grooming")
+
     def test_units_and_known_terms_are_documented(self):
         from mousetube_api.utils.ontologies import UNITS
 
@@ -1806,19 +1904,21 @@ class DataUpgradeCommandTests(TestCase):
             name="B6", background="b", species=species, status="validated"
         )
         profile = AnimalProfile.objects.create(
-            name="AP", strain=strain, sex="female", genotype="+/+"
+            name="AP", strain=strain, sex="female", genotype="+/+", age="adult"
         )
+        profile_stage = "MmusDv:0000110"
         with mock.patch(
             "mousetube_api.utils.ontologies.requests.get",
             side_effect=AssertionError("no network call"),
         ):
             out = StringIO()
             call_command("normalize_data", stdout=out)
-            self.assertIn("terms linked: 2", out.getvalue())
+            self.assertIn("terms linked: 3", out.getvalue())  # species, sex, stage
             species.refresh_from_db()
             profile.refresh_from_db()
             self.assertEqual(species.ontology_term.curie, "NCBITaxon:10090")
             self.assertEqual(profile.sex_term.curie, "PATO:0000383")
+            self.assertEqual(profile.age_term.curie, profile_stage)
             again = StringIO()
             call_command("normalize_data", stdout=again)
             self.assertIn("terms linked: 0", again.getvalue())
@@ -2041,3 +2141,64 @@ class UploadCleanupTests(FreshCache, TestCase):
                     "/api/recording-session/get_task_status?task_id=x"
                 )
             self.assertEqual(data.json()["error"], shown)
+
+
+class LinkOntologyTermsCommandTests(TestCase):
+    """Existing data is linked to vocabularies only when the match is certain."""
+
+    def setUp(self):
+        from mousetube_api.models import Laboratory, Species
+
+        self.pasteur = Laboratory.objects.create(
+            name="Genetics", institution="Institut Pasteur"
+        )
+        self.unknown = Laboratory.objects.create(name="London lab")
+        self.species = Species.objects.create(name="Peromyscus maniculatus")
+
+    def _run(self, *args):
+        from io import StringIO
+        from unittest import mock
+
+        from django.core.management import call_command
+
+        from mousetube_api.utils.ontologies import known_term
+
+        cmd = "mousetube_api.management.commands.link_ontology_terms"
+        organizations = {
+            "Institut Pasteur, Genetics": {
+                "curie": "ROR:0495fxg12",
+                "label": "Institut Pasteur",
+            }
+        }
+        with (
+            mock.patch(
+                f"{cmd}.match_organization", side_effect=lambda t: organizations.get(t)
+            ),
+            mock.patch(
+                f"{cmd}.match_label",
+                side_effect=lambda v, t: (
+                    {"curie": "NCBITaxon:10042", "label": t} if v == "species" else None
+                ),
+            ),
+            mock.patch(
+                f"{cmd}.get_or_create_term",
+                side_effect=lambda v, c: known_term(c, "x"),
+            ),
+        ):
+            out = StringIO()
+            call_command("link_ontology_terms", *args, stdout=out)
+        return out.getvalue()
+
+    def test_nothing_is_written_without_apply(self):
+        output = self._run()
+        self.pasteur.refresh_from_db()
+        self.assertIsNone(self.pasteur.organization)
+        self.assertIn("would be linked", output)
+
+    def test_apply_links_what_is_certain_and_leaves_the_rest(self):
+        self._run("--apply")
+        for obj in (self.pasteur, self.unknown, self.species):
+            obj.refresh_from_db()
+        self.assertEqual(self.pasteur.organization.curie, "ROR:0495fxg12")
+        self.assertIsNone(self.unknown.organization)
+        self.assertEqual(self.species.ontology_term.curie, "NCBITaxon:10042")
