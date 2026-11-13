@@ -2576,3 +2576,66 @@ class MergeImportedDuplicatesTests(TestCase):
         # the rest of the original session is untouched
         self.assertTrue(File.objects.filter(name="b.wav").exists())
         self.assertIn("0 would be merged", self._run().replace("0 would", "0 would"))
+
+
+class PageViewStatisticsTests(TestCase):
+    """The statistics report must not become a way in, nor store one-time secrets."""
+
+    def _track(self, path):
+        return APIClient().post("/api/track-page/", {"path": path}, format="json")
+
+    def test_a_secret_in_the_address_is_not_stored(self):
+        from mousetube_api.models import PageView
+
+        self.assertEqual(
+            self._track("/activate/MTA/dhmj4d-secrettoken").status_code, 200
+        )
+        self.assertEqual(self._track("/password/reset/xx/yy").status_code, 200)
+        self.assertEqual(
+            set(PageView.objects.values_list("path", flat=True)),
+            {"/activate", "/password"},
+        )
+
+    def test_old_rows_are_folded_into_one_page_a_day(self):
+        from mousetube_api.models import PageView
+        from mousetube_api.utils.data_upgrades import merge_page_view_paths
+
+        PageView.objects.create(path="/activate/a/b", count=2)
+        PageView.objects.create(path="/activate/c/d", count=3)
+        PageView.objects.create(path="/software", count=1)
+        # another day: the date is set by the model on creation, so put it back by hand
+        old_day = PageView.objects.create(path="/activate/e/f", count=4)
+        PageView.objects.filter(pk=old_day.pk).update(date="2026-03-01")
+        self.assertEqual(merge_page_view_paths(), 3)
+        self.assertEqual(PageView.objects.filter(path="/activate").count(), 2)
+        self.assertEqual(
+            sum(
+                PageView.objects.filter(path="/activate").values_list(
+                    "count", flat=True
+                )
+            ),
+            9,
+        )
+        self.assertEqual(
+            PageView.objects.get(path="/activate", date="2026-03-01").count, 4
+        )
+        self.assertEqual(PageView.objects.count(), 3)
+        self.assertEqual(merge_page_view_paths(), 0)
+
+    def test_a_hostile_address_cannot_inject_markup_in_the_report(self):
+        import os
+        import tempfile
+        from unittest import mock
+
+        from django.core.management import call_command
+
+        self._track('/"><script>alert(1)</script>')
+        with tempfile.TemporaryDirectory() as logs:
+            with mock.patch(
+                "mousetube_api.management.commands.export_page_view.LOGS_DIR", logs
+            ):
+                call_command("export_page_view", verbosity=0)
+            with open(os.path.join(logs, "latest.html")) as report:
+                html = report.read()
+        self.assertNotIn("<script>alert(1)", html)
+        self.assertIn("\\u003Cscript\\u003Ealert(1)", html)  # data, never markup

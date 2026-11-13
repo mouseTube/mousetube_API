@@ -36,6 +36,7 @@ from mousetube_api.utils.ontologies import (
     sex_term,
 )
 from mousetube_api.utils.orcid_proof import read_orcid_proof
+from mousetube_api.utils.page_views import normalize_page_path
 from mousetube_api.utils.registration import email_is_verified
 from mousetube_api.utils.validators import (
     validate_doi,
@@ -1388,4 +1389,4 @@ class TrackPageSerializer(serializers.Serializer):
         value = value.split("?")[0].split("#")[0]
         if not value.startswith("/") or any(c.isspace() or ord(c) < 32 for c in value):
             raise serializers.ValidationError("Invalid path.")
-        return value
+        return normalize_page_path(value)

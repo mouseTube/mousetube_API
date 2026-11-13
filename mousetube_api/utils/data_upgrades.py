@@ -7,10 +7,13 @@ that still need it: running it again changes nothing.
 """
 
 from django.contrib.auth import get_user_model
+from django.db import transaction
+from django.db.models import F
 
 from mousetube_api.models import (
     AnimalProfile,
     Contact,
+    PageView,
     Species,
     Strain,
     UserProfile,
@@ -22,6 +25,7 @@ from mousetube_api.utils.ontologies import (
     SPECIES_TERMS,
     known_term,
 )
+from mousetube_api.utils.page_views import normalize_page_path
 
 
 def normalize_statuses():
@@ -66,9 +70,29 @@ def link_known_terms():
     return linked
 
 
+@transaction.atomic
+def merge_page_view_paths():
+    """Rows kept before the secret was dropped from the path: fold them into one page a day."""
+    merged = 0
+    for view in PageView.objects.order_by("pk"):
+        clean = normalize_page_path(view.path)
+        if clean == view.path:
+            continue
+        target = PageView.objects.filter(path=clean, date=view.date).first()
+        if target:
+            PageView.objects.filter(pk=target.pk).update(count=F("count") + view.count)
+            view.delete()
+        else:
+            # renamed in place: `date` is set by the model on creation, so no new row
+            PageView.objects.filter(pk=view.pk).update(path=clean)
+        merged += 1
+    return merged
+
+
 def run_all():
     return {
         "statuses renamed": normalize_statuses(),
         "profiles created": create_missing_profiles(),
         "terms linked": link_known_terms(),
+        "page views merged": merge_page_view_paths(),
     }
