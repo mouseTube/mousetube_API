@@ -2202,3 +2202,186 @@ class LinkOntologyTermsCommandTests(TestCase):
         self.assertEqual(self.pasteur.organization.curie, "ROR:0495fxg12")
         self.assertIsNone(self.unknown.organization)
         self.assertEqual(self.species.ontology_term.curie, "NCBITaxon:10042")
+
+
+@override_settings(CACHES=LOCMEM)
+class FileFiltersAndDownloadsTests(FreshCache, TestCase):
+    """The facets of the list of files, and the download counter."""
+
+    def setUp(self):
+        super().setUp()
+        from mousetube_api.models import (
+            AnimalProfile,
+            File,
+            Species,
+            Strain,
+        )
+
+        self.owner = get_user_model().objects.create_user("o", "o@igbmc.fr", "x")
+        self.repository = Repository.objects.create(name="Zenodo")
+
+        def make(species, sex, age, fmt, status):
+            sp, _ = Species.objects.get_or_create(name=species)
+            strain, _ = Strain.objects.get_or_create(
+                name=f"strain {species}",
+                defaults={"background": "b", "species": sp, "status": "validated"},
+            )
+            profile = AnimalProfile.objects.create(
+                name=f"p {species}{sex}{age}",
+                strain=strain,
+                sex=sex,
+                age=age,
+                genotype="+/+",
+                status="validated",
+            )
+            session = RecordingSession.objects.create(
+                name=f"s {species}{sex}{age}",
+                is_multiple=True,
+                status=status,
+                created_by=self.owner,
+            )
+            session.animal_profiles.add(profile)
+            return File.objects.create(
+                name=f"{species}-{sex}-{age}.{fmt.lower()}",
+                format=fmt,
+                recording_session=session,
+                repository=self.repository,
+                created_by=self.owner,
+            )
+
+        self.mouse = make("Mus musculus", "male", "pup", "WAV", "shared")
+        self.rat = make("Rattus norvegicus", "female", "adult", "MP3", "shared")
+        self.secret = make("Mus musculus", "male", "adult", "WAV", "draft")
+        self.client = APIClient()
+
+    def _names(self, query):
+        data = self.client.get(f"/api/file/?{query}").json()
+        return {f["name"] for f in data["results"]}
+
+    def test_species_sex_age_format_and_repository_narrow_the_list(self):
+        both = {self.mouse.name, self.rat.name}
+        self.assertEqual(self._names(""), both)
+        self.assertEqual(self._names("species=Mus musculus"), {self.mouse.name})
+        self.assertEqual(self._names("species=Rattus norvegicus"), {self.rat.name})
+        self.assertEqual(self._names("sex=female"), {self.rat.name})
+        self.assertEqual(self._names("age=pup"), {self.mouse.name})
+        self.assertEqual(self._names("file_format=mp3"), {self.rat.name})
+        self.assertEqual(self._names("repository=Zenodo"), both)
+        self.assertEqual(self._names("repository=Figshare"), set())
+
+    def test_values_of_one_facet_are_alternatives_and_facets_add_up(self):
+        both = {self.mouse.name, self.rat.name}
+        self.assertEqual(self._names("species=Mus musculus,Rattus norvegicus"), both)
+        self.assertEqual(self._names("species=Mus musculus&sex=female"), set())
+
+    def test_filters_never_reveal_a_draft(self):
+        self.assertNotIn(self.secret.name, self._names("species=Mus musculus"))
+        options = self.client.get("/api/file/filters/").json()
+        self.assertEqual(options["species"], ["Mus musculus", "Rattus norvegicus"])
+        self.assertEqual(options["format"], ["MP3", "WAV"])
+        self.assertEqual(options["sex"], ["female", "male"])
+        self.assertEqual(options["age"], ["adult", "pup"])
+        self.assertEqual(options["repository"], ["Zenodo"])
+
+    def test_a_visitor_download_is_counted_once_per_hour(self):
+        url = f"/api/file/{self.mouse.pk}/download/"
+        first = self.client.post(url).json()
+        self.assertEqual((first["downloads"], first["counted"]), (1, True))
+        again = self.client.post(url).json()
+        self.assertEqual((again["downloads"], again["counted"]), (1, False))
+        self.assertEqual(
+            self.client.get(f"/api/file/{self.mouse.pk}/").json()["downloads"], 1
+        )
+
+    def test_a_draft_cannot_be_downloaded_by_a_visitor(self):
+        self.assertEqual(
+            self.client.post(f"/api/file/{self.secret.pk}/download/").status_code, 404
+        )
+
+
+@override_settings(CACHES=LOCMEM)
+class CatalogFiltersTests(FreshCache, TestCase):
+    """Software and hardware lists: type, used, documented, favorites, mine."""
+
+    def setUp(self):
+        super().setUp()
+        from mousetube_api.models import (
+            Favorite,
+            Hardware,
+            Reference,
+            Software,
+            SoftwareVersion,
+        )
+
+        User = get_user_model()
+        self.me = User.objects.create_user("me", "me@igbmc.fr", "x")
+        self.other = User.objects.create_user("other", "ot@igbmc.fr", "x")
+        ref = Reference.objects.create(name="manual", status="validated")
+
+        def hw(name, kind, **extra):
+            return Hardware.objects.create(
+                name=name, type=kind, status="validated", created_by=self.other, **extra
+            )
+
+        self.mic = hw("Mic", "microphone")
+        self.card = hw("Card", "soundcard")
+        self.mic.references.add(ref)
+        session = RecordingSession.objects.create(
+            name="s", is_multiple=True, status="shared", created_by=self.other
+        )
+        session.equipment_acquisition_hardware_microphones.add(self.mic)
+
+        self.soft_used = Software.objects.create(
+            name="Used", type="acquisition", status="validated", created_by=self.other
+        )
+        self.soft_doc = Software.objects.create(
+            name="Documented", type="analysis", status="validated", created_by=self.me
+        )
+        self.soft_doc.references.add(ref)
+        version = SoftwareVersion.objects.create(software=self.soft_used, version="1")
+        session.equipment_acquisition_software.add(version)
+
+        from django.contrib.contenttypes.models import ContentType
+
+        Favorite.objects.create(
+            user=self.me,
+            content_type=ContentType.objects.get_for_model(Software),
+            object_id=self.soft_used.pk,
+        )
+        self.client = APIClient()
+
+    def _names(self, url, client=None):
+        data = (client or self.client).get(url).json()
+        return {item["name"] for item in data["results"]}
+
+    def test_hardware_by_type_use_and_documentation(self):
+        self.assertEqual(self._names("/api/hardware/"), {"Mic", "Card"})
+        self.assertEqual(self._names("/api/hardware/?type=microphone"), {"Mic"})
+        self.assertEqual(
+            self._names("/api/hardware/?type=microphone,soundcard"), {"Mic", "Card"}
+        )
+        self.assertEqual(self._names("/api/hardware/?used=1"), {"Mic"})
+        self.assertEqual(self._names("/api/hardware/?documented=1"), {"Mic"})
+        self.assertEqual(
+            self._names("/api/hardware/?documented=1&type=soundcard"), set()
+        )
+
+    def test_software_by_type_use_and_documentation(self):
+        self.assertEqual(self._names("/api/software/?type=analysis"), {"Documented"})
+        self.assertEqual(self._names("/api/software/?used=1"), {"Used"})
+        self.assertEqual(self._names("/api/software/?documented=1"), {"Documented"})
+
+    def test_use_only_counts_shared_sessions(self):
+        from mousetube_api.models import RecordingSession
+
+        RecordingSession.objects.update(status="draft")
+        self.assertEqual(self._names("/api/hardware/?used=1"), set())
+
+    def test_favorites_and_mine_need_an_account(self):
+        self.assertEqual(
+            self._names("/api/software/?favorites=1"), {"Used", "Documented"}
+        )  # a visitor has none: the filter is ignored
+        mine = APIClient()
+        mine.force_authenticate(self.me)
+        self.assertEqual(self._names("/api/software/?favorites=1", mine), {"Used"})
+        self.assertEqual(self._names("/api/software/?mine=1", mine), {"Documented"})

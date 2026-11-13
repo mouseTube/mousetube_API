@@ -42,6 +42,8 @@ from .views import (
     FavoriteViewSet,
     FileAPIView,
     FileDetailAPIView,
+    FileDownloadView,
+    FileFilterOptionsView,
     FileUploadAsyncView,
     HardwareAPIView,
     HardwareDetailAPIView,
@@ -148,6 +150,10 @@ urlpatterns = [
         "api/personal-email-domains/",
         personal_email_domains,
         name="personal-email-domains",
+    ),
+    path("api/file/filters/", FileFilterOptionsView.as_view(), name="file-filters"),
+    path(
+        "api/file/<int:pk>/download/", FileDownloadView.as_view(), name="file-download"
     ),
     path("api/file/<int:pk>/", FileDetailAPIView.as_view(), name="file-detail"),
     path("api/track-page/", TrackPageView.as_view(), name="track-page"),

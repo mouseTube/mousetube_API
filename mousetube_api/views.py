@@ -7,6 +7,7 @@ PHENOMIN, CNRS UMR7104, INSERM U964, Université de Strasbourg
 Code under GPL v3.0 licence
 """
 
+import hashlib
 import json
 import os
 import uuid
@@ -53,7 +54,7 @@ from rest_framework.permissions import (
     IsAuthenticated,
 )
 from rest_framework.response import Response
-from rest_framework.throttling import ScopedRateThrottle
+from rest_framework.throttling import BaseThrottle, ScopedRateThrottle
 from rest_framework.views import APIView
 
 from mousetube_api.tasks import (
@@ -641,6 +642,34 @@ class UserProfileDetailAPIView(GenericAPIView):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
+def filter_catalog(qs, request, used_in):
+    """The filters the catalog lists (software, hardware) share, from the query string:
+    `type` (comma separated), `used` (in a shared or published session), `documented`
+    (has references) and, when signed in, `favorites` and `mine`."""
+    get = request.GET
+    types = [v.strip() for v in get.get("type", "").split(",") if v.strip()]
+    if types:
+        qs = qs.filter(type__in=types)
+    if get.get("used") == "1":
+        used = Q()
+        for path in used_in:
+            used |= Q(**{f"{path}__status__in": SESSION_PUBLIC})
+        qs = qs.filter(used)
+    if get.get("documented") == "1":
+        qs = qs.filter(references__isnull=False)
+    if request.user.is_authenticated:
+        if get.get("favorites") == "1":
+            qs = qs.filter(
+                id__in=Favorite.objects.filter(
+                    user=request.user,
+                    content_type=ContentType.objects.get_for_model(qs.model),
+                ).values_list("object_id", flat=True)
+            )
+        if get.get("mine") == "1":
+            qs = qs.filter(created_by=request.user)
+    return qs.distinct()
+
+
 # ----------------------------
 # Hardware
 # ----------------------------
@@ -704,6 +733,16 @@ class HardwareAPIView(GenericAPIView):
 
         if filter_query and filter_query in ALLOWED_FILTERS:
             hardware = hardware.filter(type=filter_query)
+        hardware = filter_catalog(
+            hardware,
+            request,
+            [
+                "recording_sessions_as_soundcard",
+                "recording_sessions_as_speaker",
+                "recording_sessions_as_amplifier",
+                "recording_sessions_as_microphone",
+            ],
+        )
 
         if request.user.is_authenticated:
             favorite_ids = Favorite.objects.filter(
@@ -1088,6 +1127,26 @@ class RecordingSessionViewSet(viewsets.ModelViewSet):
         return RecordingSession.objects.filter(created_by=self.request.user)
 
 
+# The facets of the list of files that describe the animals: filter name -> lookup on the
+# animal profile (the animals of a file are those of its subjects or of its session)
+ANIMAL_FACETS = {
+    "species": "strain__species__name",
+    "sex": "sex",
+    "age": "age",
+}
+
+
+def visible_files(user):
+    """The files `user` may see: those of a shared or published session, and their own."""
+    files = File.objects.all()
+    if user.is_staff:
+        return files
+    visible = Q(recording_session__status__in=SESSION_PUBLIC)
+    if user.is_authenticated:
+        visible |= Q(created_by=user) | Q(recording_session__created_by=user)
+    return files.filter(visible)
+
+
 # ----------------------------
 # File
 # ----------------------------
@@ -1106,17 +1165,9 @@ class FileAPIView(GenericAPIView):
     # Dynamic queryset
     # -----------------------------
     def get_queryset(self):
-        files = File.objects.all()
         request = self.request
-
         # --- Visibility: files of a draft session are private to their owner ---
-        if not request.user.is_staff:
-            visible = Q(recording_session__status__in=SESSION_PUBLIC)
-            if request.user.is_authenticated:
-                visible |= Q(created_by=request.user) | Q(
-                    recording_session__created_by=request.user
-                )
-            files = files.filter(visible)
+        files = visible_files(request.user)
 
         # --- Filter by RecordingSession ---
         recording_session_id = request.GET.get("recording_session")
@@ -1222,6 +1273,26 @@ class FileAPIView(GenericAPIView):
             for filter_name in filter_query.split(","):
                 if filter_name in ALLOWED_FILTERS and filter_name == "is_valid_link":
                     files = files.filter(is_valid_link=True)
+
+        # --- Facets: a comma separated list per name, one of the values must match ---
+        def values(name):
+            return [
+                v.strip() for v in request.GET.get(name, "").split(",") if v.strip()
+            ]
+
+        for name, lookup in ANIMAL_FACETS.items():
+            chosen = values(name)
+            if chosen:
+                files = files.filter(
+                    Q(**{f"subjects__animal_profile__{lookup}__in": chosen})
+                    | Q(**{f"recording_session__animal_profiles__{lookup}__in": chosen})
+                )
+        # not "format": DRF reads ?format= as the wanted rendering (json, api...)
+        if values("file_format"):
+            files = files.filter(format__in=[v.upper() for v in values("file_format")])
+        if values("repository"):
+            files = files.filter(repository__name__in=values("repository"))
+        files = files.distinct()
 
         # a page of files is serialized with its session, animals and equipment: load
         # them in a few queries instead of a few per row
@@ -1567,31 +1638,6 @@ class FileDetailAPIView(GenericAPIView):
             return Response(self.serializer_class(file).data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-    @extend_schema(exclude=True)
-    def patch(self, request, *args, **kwargs):
-        try:
-            file = File.objects.get(pk=kwargs["pk"])
-        except File.DoesNotExist:
-            return Response(
-                {"detail": "File not found"}, status=status.HTTP_404_NOT_FOUND
-            )
-
-        if "downloads" in request.data and request.data["downloads"] == "increment":
-            updated = File.objects.filter(pk=kwargs["pk"]).update(
-                downloads=F("downloads") + 1
-            )
-            if updated == 0:
-                return Response(
-                    {"detail": "File not found or update failed"},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-            file.refresh_from_db()
-            return Response({"downloads": file.downloads}, status=status.HTTP_200_OK)
-
-        return Response(
-            {"detail": "Invalid request body"}, status=status.HTTP_400_BAD_REQUEST
-        )
-
     def delete(self, request, *args, **kwargs):
         file = self.get_object(kwargs["pk"])
         if not file:
@@ -1627,6 +1673,55 @@ class FileDetailAPIView(GenericAPIView):
         return Response(
             {"detail": "File deletion scheduled.", "celery_task_id": task.id},
             status=status.HTTP_202_ACCEPTED,
+        )
+
+
+class FileDownloadView(APIView):
+    """Counts a download. Open to everybody (visitors download too), once per visitor
+    and file per hour so that reloading or clicking twice does not inflate the number."""
+
+    permission_classes = [AllowAny]
+    authentication_classes = []  # a stale token must not turn a visitor into a 401
+
+    @extend_schema(exclude=True)
+    def post(self, request, pk):
+        file = get_object_or_404(visible_files(request.user), pk=pk)
+        visitor = hashlib.sha256(BaseThrottle().get_ident(request).encode()).hexdigest()
+        counted = cache.add(f"download:{file.pk}:{visitor}", 1, 3600)
+        if counted:
+            File.objects.filter(pk=file.pk).update(downloads=F("downloads") + 1)
+            file.refresh_from_db(fields=["downloads"])
+        return Response({"downloads": file.downloads, "counted": counted})
+
+
+class FileFilterOptionsView(APIView):
+    """What the filters of the list of files can offer: the values that exist among the
+    files the user may see."""
+
+    permission_classes = [AllowAny]
+
+    @extend_schema(exclude=True)
+    def get(self, request):
+        files = visible_files(request.user)
+
+        def distinct(*paths):
+            found = set()
+            for path in paths:
+                found |= set(files.values_list(path, flat=True))
+            return sorted(v for v in found if v)
+
+        return Response(
+            {
+                name: distinct(
+                    f"subjects__animal_profile__{lookup}",
+                    f"recording_session__animal_profiles__{lookup}",
+                )
+                for name, lookup in ANIMAL_FACETS.items()
+            }
+            | {
+                "format": distinct("format"),
+                "repository": distinct("repository__name"),
+            }
         )
 
 
@@ -1771,6 +1866,9 @@ class SoftwareViewSet(viewsets.ModelViewSet):
         ALLOWED_FILTERS = ["acquisition", "analysis", "acquisition and analysis"]
         if filter_query in ALLOWED_FILTERS:
             qs = qs.filter(type=filter_query)
+        qs = filter_catalog(
+            qs, self.request, ["versions__recording_sessions_as_software"]
+        )
 
         if self.action == "retrieve":
             qs = SoftwareSerializer.annotate_queryset(
