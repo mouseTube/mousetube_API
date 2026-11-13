@@ -384,6 +384,11 @@ CACHES = {
 ZENODO_API = env("ZENODO_API", default="https://sandbox.zenodo.org/api/")
 ZENODO_TOKEN = env("ZENODO_TOKEN", default="")
 
+# Largest file a user may upload (bytes). Keep nginx `client_max_body_size` in step with it.
+# Files are streamed to the repository, so this only has to fit the disk and the repository
+# (Zenodo accepts 50 GB per record).
+MAX_UPLOAD_SIZE = env.int("MAX_UPLOAD_SIZE", default=5 * 1024**3)
+
 LOGS_DIR = Path(BASE_DIR) / "logs"
 LOGS_DIR.mkdir(exist_ok=True)
 

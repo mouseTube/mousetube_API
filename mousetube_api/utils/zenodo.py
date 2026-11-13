@@ -1,14 +1,20 @@
 import json
 import os
 import re
-from urllib.parse import unquote
+from urllib.parse import quote, unquote
 
 import requests
 from django.conf import settings
 from django.db.models import ForeignKey
 
 from mousetube_api.models import File, Repository
-from mousetube_api.utils.file_handler import is_temp_path, link_to_local_path
+from mousetube_api.utils.file_handler import (
+    ProgressReader,
+    UploadError,
+    explain,
+    is_temp_path,
+    link_to_local_path,
+)
 
 ZENODO_API = getattr(settings, "ZENODO_API", "https://sandbox.zenodo.org/api/")
 
@@ -319,15 +325,13 @@ def prepare_deposition_for_session(recording_session, new_file=None):
     auth = _auth_headers()
     headers = {**auth, "Content-Type": "application/json"}
 
+    failed = []  # (file name, reason for the user) of the files that did not reach Zenodo
     try:
         # 🔹 Check for existing deposition
         existing_file = next((f for f in files if f.repository and f.external_id), None)
         if existing_file:
             deposition_id = existing_file.external_id
             repo = existing_file.repository
-            print(
-                f"ℹ️ Using existing {repo.name} repository with deposition ID {deposition_id}"
-            )
         else:
             # Create new zenodo repo
             r = requests.post(
@@ -341,7 +345,15 @@ def prepare_deposition_for_session(recording_session, new_file=None):
 
             repo, _ = Repository.objects.get_or_create(name="Zenodo")
 
-        # 🔹 Upload files
+        # 🔹 Upload files: streamed to the bucket of the deposition, never loaded in memory
+        r = requests.get(
+            f"{ZENODO_API}/deposit/depositions/{deposition_id}",
+            headers=auth,
+            timeout=60,
+        )
+        r.raise_for_status()
+        bucket = r.json()["links"]["bucket"]
+
         for file_instance in files:
             if file_instance.external_id == deposition_id:
                 continue  # already uploaded
@@ -351,27 +363,30 @@ def prepare_deposition_for_session(recording_session, new_file=None):
             except ValueError:
                 local_path = ""
             if not os.path.exists(local_path) or os.path.getsize(local_path) == 0:
-                print(
-                    f"⚠️ Skipping file {file_instance.id}, not found or empty: {local_path}"
-                )
                 file_instance.status = "error"
                 file_instance.save(update_fields=["status"])
+                failed.append(
+                    (
+                        file_instance.name,
+                        "The file is no longer on the server or is empty. Upload it again.",
+                    )
+                )
                 continue
 
             filename = re.sub(r"[^a-zA-Z0-9._-]", "_", os.path.basename(local_path))
-            upload_url = f"{ZENODO_API + '/deposit/depositions'}/{deposition_id}/files"
-
             try:
-                with open(local_path, "rb") as file_obj:
-                    files_payload = {"file": (filename, file_obj)}
-                    r = requests.post(
-                        upload_url, headers=auth, files=files_payload, timeout=60
+                with ProgressReader(local_path, file_instance.id) as reader:
+                    r = requests.put(
+                        f"{bucket}/{quote(filename)}",
+                        data=reader,
+                        headers={**auth, "Content-Type": "application/octet-stream"},
+                        timeout=(30, 3600),
                     )
-                    r.raise_for_status()
-            except requests.exceptions.HTTPError as e:
-                print(f"❌ Failed to upload file {file_instance.id}: {e}")
+                r.raise_for_status()
+            except requests.exceptions.RequestException as e:
                 file_instance.status = "error"
                 file_instance.save(update_fields=["status"])
+                failed.append((file_instance.name, explain(e)))
                 continue
 
             # Update file after upload
@@ -388,6 +403,10 @@ def prepare_deposition_for_session(recording_session, new_file=None):
                 continue
             if is_temp_path(local_path) and os.path.exists(local_path):
                 os.remove(local_path)
+
+    if failed:
+        # the task must not end as "done" when a file did not arrive
+        raise UploadError(" ".join(f"{name}: {why}" for name, why in failed))
 
     # 🔹 update zenodo metadata
     metadata_payload = build_metadata_payload(recording_session, files)
@@ -450,7 +469,7 @@ def publish_deposition(recording_session, payload=None):
     files = File.objects.filter(recording_session=recording_session)
     first_file_with_id = files.filter(external_id__isnull=False).first()
     if not first_file_with_id:
-        raise ValueError("No Zenodo deposition_id found for this file/session.")
+        raise UploadError("No file of this session was sent to the repository yet.")
     deposition_id = first_file_with_id.external_id
 
     auth = _auth_headers()
@@ -474,13 +493,12 @@ def publish_deposition(recording_session, payload=None):
             timeout=60,
         )
         r.raise_for_status()
-    except requests.HTTPError as e:
-        content = getattr(e.response, "text", str(e))
-        raise ValueError(f"Zenodo publish failed: {content}")
+    except requests.RequestException as e:
+        raise UploadError(f"Publishing failed. {explain(e)}") from e
 
     zenodo_doi = r.json().get("doi")
     if not zenodo_doi:
-        raise ValueError("Zenodo did not return a DOI after publishing.")
+        raise UploadError("The repository did not return a DOI. Try again later.")
 
     base_url = ZENODO_API.split("/api")[0]
 

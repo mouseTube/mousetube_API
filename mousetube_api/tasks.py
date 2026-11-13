@@ -7,7 +7,13 @@ from django.core.exceptions import ValidationError
 from django.core.management import call_command
 
 from mousetube_api.models import File, RecordingSession, Repository
-from mousetube_api.utils.file_handler import link_to_local_path
+from mousetube_api.utils.file_handler import (
+    UploadError,
+    explain,
+    link_to_local_path,
+    remove_temp,
+    set_progress,
+)
 from mousetube_api.utils.repository import (
     delete_repository_file,
     prepare_repository_deposition_for_session,
@@ -73,7 +79,11 @@ def extract_metadata(file_instance, local_path):
                     updated_fields.append("bit_depth")
 
     except RuntimeError as e:
-        raise ValidationError(f"Cannot read audio file: {e}")
+        logger.warning("Unreadable audio %s: %s", local_path, e)
+        raise ValidationError(
+            "This file could not be read as audio: it may be corrupted or not the "
+            "format its extension says."
+        )
 
     # --- Save only updated fields ---
     if updated_fields:
@@ -100,7 +110,9 @@ def process_file(self, file_id, repository_id):
 
     try:
         file_instance.status = "processing"
-        file_instance.save(update_fields=["status"])
+        file_instance.error_message = ""
+        file_instance.save(update_fields=["status", "error_message"])
+        set_progress(file_instance.id, 0)
 
         local_path = link_to_local_path(file_instance)
         extract_metadata(file_instance, local_path)
@@ -120,10 +132,15 @@ def process_file(self, file_id, repository_id):
 
         return f"✅ File {file_instance.id} processed successfully on {repository.name}, deposition {deposition_id}."
 
-    except Exception:
+    except Exception as exc:
         file_instance.status = "error"
-        file_instance.save(update_fields=["status"])
+        file_instance.error_message = explain(exc)[:500]
+        file_instance.save(update_fields=["status", "error_message"])
         logger.exception(f"Error processing file {file_instance.id}")
+        try:
+            remove_temp(link_to_local_path(file_instance))  # no orphan upload
+        except ValueError:
+            pass
         raise
 
 
@@ -177,11 +194,17 @@ def publish_session_deposition(self, recording_session_id, repository_id, payloa
     files = File.objects.filter(recording_session=rs)
 
     if not files.exists():
-        raise ValueError("No files found for this recording session.")
+        raise UploadError("This session has no file to deposit.")
 
     self.update_state(state="STARTED", meta={"progress": 20})
 
-    doi = publish_repository_deposition(repository, rs, payload)
+    try:
+        doi = publish_repository_deposition(repository, rs, payload)
+    except UploadError:
+        raise
+    except Exception as exc:
+        logger.exception("Deposit of session %s failed", rs.id)
+        raise UploadError(explain(exc)) from exc
     self.update_state(state="STARTED", meta={"progress": 60})
 
     # the deposit does not validate anything: the session was shared, so what it uses was

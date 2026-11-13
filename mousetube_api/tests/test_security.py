@@ -2,6 +2,7 @@ import tempfile
 from types import SimpleNamespace
 
 from django.contrib.auth import get_user_model
+from django.core.exceptions import ValidationError
 from django.test import SimpleTestCase, TestCase, override_settings
 from rest_framework.test import APIClient
 
@@ -1821,3 +1822,222 @@ class DataUpgradeCommandTests(TestCase):
             again = StringIO()
             call_command("normalize_data", stdout=again)
             self.assertIn("terms linked: 0", again.getvalue())
+
+
+@override_settings(CACHES=LOCMEM, ZENODO_TOKEN="t")
+class UploadCleanupTests(FreshCache, TestCase):
+    """An upload must never leave a file on the server when something goes wrong."""
+
+    def setUp(self):
+        super().setUp()
+        import os
+
+        self.media = tempfile.mkdtemp()
+        self.temp = os.path.join(self.media, "temp")
+        os.makedirs(self.temp)
+        override = override_settings(MEDIA_ROOT=self.media)
+        override.enable()
+        self.addCleanup(override.disable)
+        self.user = get_user_model().objects.create_user("up", "up@igbmc.fr", "x")
+        self.client = APIClient()
+        self.client.force_authenticate(self.user)
+        self.repository = Repository.objects.create(name="Zenodo")
+
+    def _upload(self, name="a.csv", content=b"a,b\n1,2\n"):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        return self.client.post(
+            "/api/file/upload_async/",
+            {"file": SimpleUploadedFile(name, content)},
+            format="multipart",
+        )
+
+    def _stored(self):
+        import os
+
+        return os.listdir(self.temp)
+
+    def _file_in_temp(self, name="b.csv", content=b"a,b\n1,2\n"):
+        import os
+
+        from mousetube_api.models import File
+
+        with open(os.path.join(self.temp, name), "wb") as out:
+            out.write(content)
+        session = RecordingSession.objects.create(
+            name="s", is_multiple=True, created_by=self.user
+        )
+        return File.objects.create(
+            name=name,
+            link=f"/media/temp/{name}",
+            repository=self.repository,
+            recording_session=session,
+            created_by=self.user,
+        )
+
+    def test_a_valid_upload_is_stored_in_temp(self):
+        self.assertEqual(self._upload().status_code, 200)
+        self.assertEqual(len(self._stored()), 1)
+
+    @override_settings(MAX_UPLOAD_SIZE=5)
+    def test_too_large_is_refused_and_nothing_is_stored(self):
+        self.assertEqual(self._upload().status_code, 413)
+        self.assertEqual(self._stored(), [])
+
+    def test_unsupported_type_is_refused_and_nothing_is_stored(self):
+        self.assertEqual(self._upload("virus.exe").status_code, 400)
+        self.assertEqual(self._stored(), [])
+
+    def test_old_uploads_are_purged_and_recent_ones_kept(self):
+        import os
+        import time
+
+        from mousetube_api.utils.file_handler import purge_temp_files
+
+        old = os.path.join(self.temp, "old.wav")
+        new = os.path.join(self.temp, "new.wav")
+        for path in (old, new):
+            open(path, "wb").close()
+        past = time.time() - 3 * 24 * 3600
+        os.utime(old, (past, past))
+        self.assertEqual(purge_temp_files(), 1)
+        self.assertEqual(self._stored(), ["new.wav"])
+
+    def test_the_next_upload_purges_the_abandoned_ones(self):
+        import os
+        import time
+
+        old = os.path.join(self.temp, "abandoned.wav")
+        open(old, "wb").close()
+        past = time.time() - 3 * 24 * 3600
+        os.utime(old, (past, past))
+        self._upload()
+        self.assertNotIn("abandoned.wav", self._stored())
+
+    def test_a_file_that_cannot_be_read_does_not_stay_on_the_server(self):
+        from mousetube_api.tasks import process_file
+
+        f = self._file_in_temp("broken.wav", b"this is not audio")
+        with self.assertRaises(ValidationError):
+            process_file(f.id, self.repository.id)
+        f.refresh_from_db()
+        self.assertEqual(f.status, "error")
+        self.assertEqual(self._stored(), [])
+
+    def _zenodo(self, put):
+        from unittest import mock
+
+        created = mock.Mock(**{"json.return_value": {"id": 7}})
+        deposition = mock.Mock(
+            **{"json.return_value": {"links": {"bucket": "https://z.test/files/b"}}}
+        )
+        return (
+            mock.patch(
+                "mousetube_api.utils.zenodo.requests.post", return_value=created
+            ),
+            mock.patch(
+                "mousetube_api.utils.zenodo.requests.get", return_value=deposition
+            ),
+            mock.patch("mousetube_api.utils.zenodo.requests.put", side_effect=put),
+        )
+
+    def test_a_failed_zenodo_upload_fails_the_task_and_says_why(self):
+        import requests
+
+        from mousetube_api.tasks import process_file
+        from mousetube_api.utils.file_handler import UploadError
+
+        def put(*args, **kwargs):
+            raise requests.ConnectionError("down https://z.test/?access_token=SECRET")
+
+        f = self._file_in_temp()
+        post, get, put_patch = self._zenodo(put)
+        with post, get, put_patch, self.assertRaises(UploadError):
+            process_file(f.id, self.repository.id)
+        f.refresh_from_db()
+        self.assertEqual(f.status, "error")  # used to end as "done"
+        self.assertIn("did not answer", f.error_message)
+        self.assertNotIn("SECRET", f.error_message)
+        self.assertEqual(self._stored(), [])
+
+    def test_the_file_is_streamed_with_its_progress_and_the_upload_removed(self):
+        from unittest import mock
+
+        from mousetube_api.tasks import process_file
+        from mousetube_api.utils.file_handler import get_progress
+
+        seen = {}
+
+        def put(url, data=None, **kwargs):
+            if hasattr(data, "read"):  # the file, not the metadata
+                seen["length"] = len(data)
+                seen["url"] = url
+                while data.read(4):
+                    pass
+            return mock.Mock()
+
+        f = self._file_in_temp()
+        post, get, put_patch = self._zenodo(put)
+        with post, get, put_patch:
+            process_file(f.id, self.repository.id)
+        f.refresh_from_db()
+        self.assertEqual(f.status, "done")
+        self.assertEqual(f.external_id, "7")
+        self.assertEqual(seen["length"], len(b"a,b\n1,2\n"))
+        self.assertEqual(seen["url"], "https://z.test/files/b/b.csv")
+        self.assertEqual(get_progress(f.id), 100)
+        self.assertEqual(self._stored(), [])
+
+    def test_the_status_endpoint_gives_progress_and_the_readable_error(self):
+        from mousetube_api.utils.file_handler import set_progress
+
+        f = self._file_in_temp()
+        f.celery_task_id = "none"
+        f.status = "processing"
+        f.save()
+        set_progress(f.id, 42)
+        data = self.client.get(f"/api/file/{f.id}/status/").json()
+        self.assertEqual(data["progress"], 42)
+        f.status, f.error_message = "error", "The repository is busy."
+        f.save()
+        self.assertEqual(
+            self.client.get(f"/api/file/{f.id}/status/").json()["error_message"],
+            "The repository is busy.",
+        )
+
+    def test_error_messages_never_carry_urls_or_tokens(self):
+        import requests
+
+        from mousetube_api.utils.file_handler import explain
+
+        response = SimpleNamespace(status_code=403, text="token=SECRET")
+        text = explain(
+            requests.HTTPError(
+                "403 for https://z/?access_token=SECRET", response=response
+            )
+        )
+        self.assertIn("credentials", text)
+        self.assertNotIn("SECRET", text)
+        self.assertNotIn(
+            "https", explain(RuntimeError("boom https://x?access_token=SECRET"))
+        )
+
+    def test_the_publish_error_written_for_the_user_reaches_everybody_else_stays_hidden(
+        self,
+    ):
+        from unittest import mock
+
+        from mousetube_api.utils.file_handler import UploadError
+
+        for error, shown in (
+            (UploadError("The repository is busy."), "The repository is busy."),
+            (RuntimeError("https://z/?access_token=SECRET"), None),
+        ):
+            result = mock.Mock(state="FAILURE", result=error, info=None)
+            result.failed.return_value = True
+            result.successful.return_value = False
+            with mock.patch("mousetube_api.views.AsyncResult", return_value=result):
+                data = self.client.get(
+                    "/api/recording-session/get_task_status?task_id=x"
+                )
+            self.assertEqual(data.json()["error"], shown)

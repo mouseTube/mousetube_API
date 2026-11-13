@@ -1204,6 +1204,8 @@ class File(models.Model):
         default="pending",
     )
     celery_task_id = models.CharField(max_length=255, blank=True, null=True)
+    # what went wrong, in words the user understands (set when status is "error")
+    error_message = models.CharField(max_length=500, blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True, null=True)
     modified_at = models.DateTimeField(auto_now=True, null=True)
     created_by = models.ForeignKey(

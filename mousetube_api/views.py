@@ -65,6 +65,12 @@ from mousetube_api.tasks import (
 from mousetube_api.utils import ontologies
 from mousetube_api.utils.dataset_metadata import build_dataset_metadata
 from mousetube_api.utils.email_domains import PERSONAL_EMAIL_DOMAINS
+from mousetube_api.utils.file_handler import (
+    UploadError,
+    get_progress,
+    purge_temp_files,
+    remove_temp,
+)
 from mousetube_api.utils.moderation import SESSION_LOCKED, SESSION_PUBLIC
 from mousetube_api.utils.orcid_proof import read_orcid_proof
 from mousetube_api.utils.repository import (
@@ -1360,10 +1366,15 @@ def file_task_status(request, file_id):
         "id": file.id,
         "task_state": result.state,  # PENDING, STARTED, SUCCESS, FAILURE
         "status": file.status,
+        "progress": get_progress(file.id) if file.status == "processing" else 0,
+        "error_message": file.error_message,
     }
 
-    # error text can contain the Zenodo URL with its access_token: staff only
-    if result.failed() and request.user.is_staff:
+    # error text can contain the Zenodo URL with its access_token: staff only,
+    # unless it was written for the user (UploadError)
+    if result.failed() and isinstance(result.result, UploadError):
+        response["task_error"] = str(result.result)
+    elif result.failed() and request.user.is_staff:
         response["task_error"] = str(result.result)
         response["task_traceback"] = result.traceback
 
@@ -1390,14 +1401,37 @@ class FileUploadAsyncView(APIView):
         if not uploaded_file:
             return Response({"error": "No file provided"}, status=400)
 
+        # refuse now what the processing would refuse later, so nothing useless is stored
+        if uploaded_file.size > settings.MAX_UPLOAD_SIZE:
+            return Response(
+                {
+                    "error": f"File too large: the limit is "
+                    f"{settings.MAX_UPLOAD_SIZE // 1024**2} MB."
+                },
+                status=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            )
+        extension = os.path.splitext(uploaded_file.name)[1].lstrip(".").upper()
+        if extension not in {choice[0].upper() for choice in File.FORMAT_CHOICES}:
+            return Response(
+                {"error": f"Unsupported file type: .{extension.lower()}"}, status=400
+            )
+
         temp_dir = os.path.join(settings.MEDIA_ROOT, "temp")
         os.makedirs(temp_dir, exist_ok=True)
+        purge_temp_files()  # uploads nobody took over within a day
 
         # unique prefix: two users uploading "a.wav" must not overwrite each other
         safe_name = f"{uuid.uuid4().hex}_{get_valid_filename(uploaded_file.name)}"
         temp_path = os.path.join(temp_dir, safe_name)
-        with open(temp_path, "wb+") as dest:
-            dest.writelines(uploaded_file.chunks())
+        try:
+            with open(temp_path, "wb+") as dest:
+                dest.writelines(uploaded_file.chunks())
+        except OSError:
+            remove_temp(temp_path)  # no half-written file left behind (disk full...)
+            return Response(
+                {"error": "The file could not be stored."},
+                status=status.HTTP_507_INSUFFICIENT_STORAGE,
+            )
 
         return Response({"temp_path": f"/media/temp/{safe_name}"})
 
@@ -1474,7 +1508,8 @@ def get_task_status(request):
         "state": result.state,  # PENDING, STARTED, SUCCESS, FAILURE
         "success": result.successful(),
         "error": str(result.result)
-        if result.failed() and request.user.is_staff
+        if result.failed()
+        and (request.user.is_staff or isinstance(result.result, UploadError))
         else None,
         "progress": 0,
     }
