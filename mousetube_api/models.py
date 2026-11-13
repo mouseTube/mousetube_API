@@ -913,6 +913,20 @@ class RecordingSession(models.Model):
         choices=STATUS,
         default="draft",
     )
+
+    # what the repository says about the published record of this session: the DOI that stays
+    # the same across versions, and whether the record follows the edits made here
+    ZENODO_STATES = [
+        ("synced", "up to date"),
+        ("pending", "update in progress"),
+        ("blocked", "waits for the validation of new entries"),
+        ("failed", "update failed"),
+    ]
+    concept_doi = models.CharField(max_length=255, blank=True, default="")
+    zenodo_state = models.CharField(
+        max_length=16, choices=ZENODO_STATES, blank=True, default=""
+    )
+    zenodo_message = models.CharField(max_length=500, blank=True, default="")
     duration = models.PositiveIntegerField(
         blank=True, null=True, help_text="Duration in seconds"
     )
@@ -1105,6 +1119,28 @@ class Repository(models.Model):
     class Meta:
         verbose_name = "Repository"
         verbose_name_plural = "Repositories"
+
+
+class PublicationVersion(models.Model):
+    """A version of the record of a session in a repository: each one has its own DOI."""
+
+    recording_session = models.ForeignKey(
+        RecordingSession, on_delete=models.CASCADE, related_name="publication_versions"
+    )
+    number = models.PositiveIntegerField()
+    doi = models.CharField(max_length=255)
+    record_id = models.CharField(
+        max_length=64
+    )  # the deposition / record in the repository
+    url = models.URLField(max_length=255, blank=True, default="")
+    published_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ("recording_session", "number")
+        ordering = ["number"]
+
+    def __str__(self):
+        return f"{self.recording_session} v{self.number} ({self.doi})"
 
 
 class File(models.Model):

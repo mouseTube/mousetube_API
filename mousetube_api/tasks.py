@@ -230,6 +230,25 @@ def publish_session_deposition(self, recording_session_id, repository_id, payloa
     return {"message": f"✅ Session {rs.id} published with DOI {doi}.", "progress": 100}
 
 
+@shared_task(bind=True)
+def update_published_record(self, recording_session_id):
+    """The published record follows the edits of its session (description, keywords...)."""
+    from mousetube_api.utils.zenodo import update_published_metadata
+
+    session = RecordingSession.objects.get(id=recording_session_id)
+    try:
+        update_published_metadata(session)
+        RecordingSession.objects.filter(id=session.id).update(
+            zenodo_state="synced", zenodo_message=""
+        )
+    except Exception as exc:
+        logger.exception("Update of the record of session %s failed", session.id)
+        RecordingSession.objects.filter(id=session.id).update(
+            zenodo_state="failed", zenodo_message=explain(exc)[:500]
+        )
+        raise
+
+
 @shared_task
 def export_page_views():
     """Regenerate the static page-view report (was run inside a web request)."""

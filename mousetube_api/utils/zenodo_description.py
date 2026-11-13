@@ -82,7 +82,14 @@ def _animal(profile):
                     if species
                     else "",
                 ),
-                ("Strain", esc(strain.name) if strain else ""),
+                (
+                    "Strain",
+                    term(strain.ontology_term)
+                    if strain and strain.ontology_term
+                    else esc(strain.name)
+                    if strain
+                    else "",
+                ),
                 (
                     "Sex",
                     term(profile.sex_term) if profile.sex_term else esc(profile.sex),

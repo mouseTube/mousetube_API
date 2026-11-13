@@ -36,7 +36,11 @@ SESSION_LOCKED = (
     "waiting validation",
     "shared",
     "published",
-)  # no more edits by the owner
+)  # not deleted by the owner
+SESSION_FROZEN = (
+    "waiting validation",
+    "shared",
+)  # not edited by the owner: a published session can be, its record follows
 
 
 def _unique(entries):
@@ -119,6 +123,9 @@ def approve_entries(objs):
             f"[mouseTube] Your {obj._meta.verbose_name} '{obj}' was validated",
             "An administrator validated it: it is now visible to everybody.",
         )
+    from mousetube_api.utils.publication import retry_blocked
+
+    retry_blocked()  # published sessions that waited for this validation follow their edits
     return changed, promote_ready_sessions()
 
 
@@ -138,6 +145,9 @@ def approve_sessions(sessions):
             "An administrator validated your session and what it uses. "
             "It is now visible to everybody.",
         )
+    from mousetube_api.utils.publication import retry_blocked
+
+    retry_blocked()
     return shared, entries
 
 

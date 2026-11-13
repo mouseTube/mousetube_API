@@ -3064,3 +3064,317 @@ class ZenodoDescriptionTests(TestCase):
         payload = self._payload()
         self.assertIn("mouseTube", payload["keywords"])
         self.assertEqual(payload["communities"], [{"identifier": "mousetube"}])
+
+
+class FakeZenodo:
+    """Answers the calls of mousetube_api.utils.zenodo and remembers them."""
+
+    def __init__(self):
+        self.calls = []
+
+    def _answer(self, method, url, **kwargs):
+        from unittest import mock
+
+        self.calls.append((method, url, kwargs))
+        response = mock.Mock(status_code=200)
+        response.raise_for_status = lambda: None
+        data = {}
+        if url.endswith("/actions/newversion"):
+            data = {
+                "links": {"latest_draft": "https://z.test/api/deposit/depositions/99"}
+            }
+        elif url.endswith("/actions/publish"):
+            data = {"doi": "10.5072/zenodo.99", "conceptdoi": "10.5072/zenodo.1"}
+        elif url.endswith("/depositions") and method == "POST":
+            data = {"id": 7}
+        elif "/deposit/depositions/" in url and method == "GET":
+            deposit = url.rsplit("/", 1)[-1]
+            data = {
+                "id": int(deposit),
+                "links": {"bucket": f"https://z.test/files/{deposit}"},
+            }
+        response.json.return_value = data
+        return response
+
+    def patch(self):
+        from unittest import mock
+
+        return mock.patch.multiple(
+            "mousetube_api.utils.zenodo.requests",
+            get=lambda url, **kw: self._answer("GET", url, **kw),
+            post=lambda url, **kw: self._answer("POST", url, **kw),
+            put=lambda url, **kw: self._answer("PUT", url, **kw),
+        )
+
+    def urls(self, method):
+        return [url for m, url, _ in self.calls if m == method]
+
+
+@override_settings(CACHES=LOCMEM, ZENODO_TOKEN="t")
+class PublishedSessionKeepsLivingTests(FreshCache, TestCase):
+    """A published session can be edited (its record follows) and gets new versions."""
+
+    def setUp(self):
+        super().setUp()
+        import os
+        import tempfile
+
+        from mousetube_api.models import File, Hardware, PublicationVersion
+
+        User = get_user_model()
+        self.owner = User.objects.create_user("owner", "ow@igbmc.fr", "x")
+        self.admin = User.objects.create_user("adm", "adm@igbmc.fr", "x", is_staff=True)
+        self.repository = Repository.objects.create(name="Zenodo")
+        from mousetube_api.models import Protocol
+
+        protocol = Protocol.objects.create(
+            animals_sex="male(s)",
+            animals_age="pup",
+            animals_housing="grouped",
+            context_number_of_animals="2",
+            context_duration="short term (<1h)",
+            context_cage="unfamiliar test cage",
+            context_bedding="bedding",
+            context_light_cycle="day",
+            created_by=self.owner,
+        )
+        self.session = RecordingSession.objects.create(
+            name="published",
+            is_multiple=True,
+            status="shared",
+            protocol=protocol,
+            created_by=self.owner,
+        )
+        RecordingSession.objects.filter(pk=self.session.pk).update(status="published")
+        self.session.refresh_from_db()
+        PublicationVersion.objects.create(
+            recording_session=self.session,
+            number=1,
+            doi="10.5072/zenodo.50",
+            record_id="50",
+        )
+        self.old_file = File.objects.create(
+            name="old.wav",
+            recording_session=self.session,
+            repository=self.repository,
+            doi="10.5072/zenodo.50",
+            external_id=50,
+            status="done",
+            created_by=self.owner,
+        )
+        self.client = APIClient()
+        self.client.force_authenticate(self.owner)
+        self.mic = Hardware.objects.create(
+            name="New mic",
+            type="microphone",
+            status="draft",
+            created_by=self.owner,
+        )
+        self.media = tempfile.mkdtemp()
+        override = override_settings(MEDIA_ROOT=self.media)
+        override.enable()
+        self.addCleanup(override.disable)
+        os.makedirs(os.path.join(self.media, "temp"))
+
+    def _edit(self, **data):
+        return self.client.patch(
+            f"/api/recording-session/{self.session.pk}/", data, format="json"
+        )
+
+    def test_the_owner_edits_a_published_session_and_the_record_follows(self):
+        from unittest import mock
+
+        with (
+            mock.patch("mousetube_api.tasks.update_published_record.delay") as delay,
+            self.captureOnCommitCallbacks(execute=True),
+        ):
+            response = self._edit(description="better words")
+        self.assertEqual(response.status_code, 200, response.content)
+        self.session.refresh_from_db()
+        self.assertEqual(self.session.description, "better words")
+        self.assertEqual(self.session.status, "published")
+        self.assertEqual(self.session.zenodo_state, "pending")
+        delay.assert_called_once_with(self.session.pk)
+
+    def test_the_form_sends_the_unchanged_status_and_it_is_accepted(self):
+        response = self._edit(status="published", description="again")
+        self.assertEqual(response.status_code, 200, response.content)
+
+    def test_the_owner_cannot_unpublish_a_session(self):
+        self._edit(status="draft")
+        self.session.refresh_from_db()
+        self.assertEqual(self.session.status, "published")
+
+    def test_a_new_unvalidated_entry_holds_the_update_until_it_is_validated(self):
+        from unittest import mock
+
+        from mousetube_api.utils.moderation import approve_entries
+
+        with (
+            mock.patch("mousetube_api.tasks.update_published_record.delay") as delay,
+            self.captureOnCommitCallbacks(execute=True),
+        ):
+            self._edit(equipment_acquisition_hardware_microphone_ids=[self.mic.pk])
+            self.session.refresh_from_db()
+            self.assertEqual(self.session.zenodo_state, "blocked")
+            self.assertIn("New mic", self.session.zenodo_message)
+            delay.assert_not_called()
+            approve_entries([self.mic])  # an administrator validates it
+        self.session.refresh_from_db()
+        self.assertEqual(self.session.zenodo_state, "pending")
+        delay.assert_called_once_with(self.session.pk)
+
+    def test_updating_the_record_edits_and_publishes_it_again_without_a_new_version(
+        self,
+    ):
+        from mousetube_api.tasks import update_published_record
+
+        zenodo = FakeZenodo()
+        with zenodo.patch():
+            update_published_record(self.session.pk)
+        self.assertTrue(zenodo.urls("POST")[0].endswith("/depositions/50/actions/edit"))
+        put = next(kw for m, u, kw in zenodo.calls if m == "PUT")
+        self.assertIn("mouseTube", put["data"])  # the description is rebuilt
+        self.assertTrue(
+            zenodo.urls("POST")[-1].endswith("/depositions/50/actions/publish")
+        )
+        self.assertFalse(any("newversion" in u for u in zenodo.urls("POST")))
+        self.session.refresh_from_db()
+        self.assertEqual(self.session.zenodo_state, "synced")
+
+    def test_a_file_added_after_publication_goes_in_a_new_version(self):
+        import os
+
+        from mousetube_api.models import File
+        from mousetube_api.tasks import process_file
+
+        with open(os.path.join(self.media, "temp", "new.csv"), "wb") as out:
+            out.write(b"a,b\n1,2\n")
+        new = File.objects.create(
+            name="new.csv",
+            link="/media/temp/new.csv",
+            recording_session=self.session,
+            repository=self.repository,
+            created_by=self.owner,
+        )
+        zenodo = FakeZenodo()
+        with zenodo.patch():
+            process_file(new.pk, self.repository.pk)
+        self.assertTrue(
+            any(u.endswith("/50/actions/newversion") for u in zenodo.urls("POST"))
+        )
+        self.assertFalse(
+            any(u.endswith("/deposit/depositions") for u in zenodo.urls("POST")),
+            "a new record must not be created: it is a version of the published one",
+        )
+        new.refresh_from_db()
+        self.assertEqual(new.external_id, "99")  # the draft of the new version
+        self.assertEqual(new.status, "done")
+        self.assertFalse(new.doi)
+
+    def test_publishing_the_new_version_gives_it_its_own_doi(self):
+        from unittest import mock
+
+        from mousetube_api.models import File
+        from mousetube_api.tasks import publish_session_deposition
+
+        File.objects.create(
+            name="new.csv",
+            recording_session=self.session,
+            repository=self.repository,
+            external_id=99,
+            status="done",
+            created_by=self.owner,
+        )
+        zenodo = FakeZenodo()
+        with (
+            zenodo.patch(),
+            mock.patch.object(publish_session_deposition, "update_state"),
+        ):
+            publish_session_deposition(self.session.pk, self.repository.pk, None)
+        self.session.refresh_from_db()
+        versions = list(self.session.publication_versions.values_list("number", "doi"))
+        self.assertEqual(versions, [(1, "10.5072/zenodo.50"), (2, "10.5072/zenodo.99")])
+        self.assertEqual(self.session.concept_doi, "10.5072/zenodo.1")
+        self.assertEqual(self.session.status, "published")
+        self.assertEqual(File.objects.get(name="new.csv").doi, "10.5072/zenodo.99")
+
+    def test_the_publish_endpoint_wants_something_new_for_a_published_session(self):
+        from unittest import mock
+
+        from mousetube_api.models import File
+
+        body = {
+            "recording_session_id": self.session.pk,
+            "repository_id": self.repository.pk,
+        }
+        nothing = self.client.post("/api/file/publish_session/", body, format="json")
+        self.assertEqual(nothing.status_code, 409)
+        File.objects.create(
+            name="new.csv",
+            recording_session=self.session,
+            repository=self.repository,
+            external_id=99,
+            status="done",
+            created_by=self.owner,
+        )
+        with mock.patch(
+            "mousetube_api.views.publish_session_deposition.delay"
+        ) as delay:
+            delay.return_value.id = "task"
+            ok = self.client.post("/api/file/publish_session/", body, format="json")
+        self.assertEqual(ok.status_code, 202, ok.content)
+
+    def test_a_file_of_a_published_version_cannot_be_removed_but_a_waiting_one_can(
+        self,
+    ):
+        from mousetube_api.models import File
+
+        self.assertEqual(
+            self.client.delete(f"/api/file/{self.old_file.pk}/").status_code, 409
+        )
+        waiting = File.objects.create(
+            name="new.csv",
+            recording_session=self.session,
+            repository=self.repository,
+            status="done",
+            created_by=self.owner,
+        )
+        self.assertEqual(
+            self.client.delete(f"/api/file/{waiting.pk}/").status_code, 204
+        )
+
+    def test_the_first_publication_is_version_one_with_the_doi_of_the_whole(self):
+        from unittest import mock
+
+        from mousetube_api.models import File
+        from mousetube_api.tasks import publish_session_deposition
+
+        fresh = RecordingSession.objects.create(
+            name="fresh",
+            is_multiple=True,
+            status="shared",
+            protocol=self.session.protocol,
+            created_by=self.owner,
+        )
+        File.objects.create(
+            name="x.wav",
+            recording_session=fresh,
+            repository=self.repository,
+            external_id=77,
+            status="done",
+            created_by=self.owner,
+        )
+        zenodo = FakeZenodo()
+        with (
+            zenodo.patch(),
+            mock.patch.object(publish_session_deposition, "update_state"),
+        ):
+            publish_session_deposition(fresh.pk, self.repository.pk, None)
+        fresh.refresh_from_db()
+        self.assertEqual(fresh.status, "published")
+        self.assertEqual(
+            list(fresh.publication_versions.values_list("number", "record_id")),
+            [(1, "77")],
+        )
+        self.assertEqual(fresh.concept_doi, "10.5072/zenodo.1")

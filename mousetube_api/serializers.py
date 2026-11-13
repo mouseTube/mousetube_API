@@ -23,7 +23,7 @@ from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
 from mousetube_api.utils.email_domains import is_personal_email
 from mousetube_api.utils.moderation import (
-    SESSION_LOCKED,
+    SESSION_FROZEN,
     VALIDATED,
     WAITING,
     notify_admin_review,
@@ -37,6 +37,7 @@ from mousetube_api.utils.ontologies import (
 )
 from mousetube_api.utils.orcid_proof import read_orcid_proof
 from mousetube_api.utils.page_views import normalize_page_path
+from mousetube_api.utils.publication import schedule_sync
 from mousetube_api.utils.registration import email_is_verified
 from mousetube_api.utils.validators import (
     validate_doi,
@@ -951,10 +952,23 @@ class RecordingSessionSerializer(serializers.ModelSerializer):
     files_count = serializers.SerializerMethodField()
     files_to_deposit = serializers.SerializerMethodField()
     doi = serializers.SerializerMethodField()
+    publication_versions = serializers.SerializerMethodField()
 
     class Meta:
         model = RecordingSession
         fields = "__all__"
+        read_only_fields = ("concept_doi", "zenodo_state", "zenodo_message")
+
+    def get_publication_versions(self, obj):
+        return [
+            {
+                "number": v.number,
+                "doi": v.doi,
+                "url": v.url,
+                "published_at": v.published_at,
+            }
+            for v in obj.publication_versions.all()
+        ]
 
     def get_files_count(self, obj):
         return getattr(obj, "files_count", None)
@@ -980,7 +994,7 @@ class RecordingSessionSerializer(serializers.ModelSerializer):
             "update",
             "partial_update",
         )
-        if not (mine and detail) or obj.status in ("shared", "published"):
+        if not (mine and detail) or obj.status == "shared":
             return []
         return [
             {"kind": kind, "id": entry.pk, "name": str(entry), "status": entry.status}
@@ -1058,7 +1072,10 @@ class RecordingSessionSerializer(serializers.ModelSerializer):
     # ---- Status ----
     def validate_status(self, value):
         user = self.context["request"].user
-        if value == "published" and not user.is_staff:
+        already_published = (
+            self.instance is not None and self.instance.status == "published"
+        )
+        if value == "published" and not user.is_staff and not already_published:
             raise serializers.ValidationError(
                 "A session becomes published through the deposit in a repository."
             )
@@ -1114,11 +1131,13 @@ class RecordingSessionSerializer(serializers.ModelSerializer):
             and not validated_data
             and not self.initial_data.keys() - {"status"}
         )
-        if not is_staff and before in SESSION_LOCKED and not withdraws:
+        if not is_staff and before in SESSION_FROZEN and not withdraws:
             raise PermissionDenied(
                 "This session is waiting for a review or already shared: "
                 "it can no longer be edited."
             )
+        if before == "published" and not is_staff:
+            requested = None  # a published session stays published: its record follows
 
         m2m_fields = self._extract_m2m(validated_data)
         for attr, value in validated_data.items():
@@ -1139,6 +1158,8 @@ class RecordingSessionSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(_django_errors(exc)) from None
         if instance.status == WAITING and before != WAITING:
             notify_admin_review(instance)
+        if before == "published":
+            schedule_sync(instance)  # the record in the repository follows the edit
         return instance
 
 

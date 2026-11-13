@@ -171,6 +171,10 @@ class RecordingSessionAdmin(admin.ModelAdmin):
         session = form.instance
         if session.status not in ("shared", "published"):
             return
+        if session.status == "published":
+            from .utils.publication import schedule_sync
+
+            schedule_sync(session)  # its record follows, once what it uses is validated
         entries = session_pending_entries(session)
         if not entries:
             return

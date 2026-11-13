@@ -7,7 +7,7 @@ import requests
 from django.conf import settings
 from django.db.models import Q
 
-from mousetube_api.models import File, Repository
+from mousetube_api.models import File, PublicationVersion, RecordingSession, Repository
 from mousetube_api.utils.file_handler import (
     ProgressReader,
     UploadError,
@@ -16,6 +16,7 @@ from mousetube_api.utils.file_handler import (
     link_to_local_path,
 )
 from mousetube_api.utils.ontologies import session_terms
+from mousetube_api.utils.publication import latest_version
 from mousetube_api.utils.zenodo_description import description, keywords
 
 ZENODO_API = getattr(settings, "ZENODO_API", "https://sandbox.zenodo.org/api/")
@@ -184,6 +185,27 @@ def build_metadata_payload(recording_session, files):
     return metadata_payload
 
 
+def _new_version(record_id, auth):
+    """The draft of a new version of the published record `record_id`: it holds the files of
+    the version before, and takes the new ones."""
+    try:
+        r = requests.post(
+            f"{ZENODO_API}/deposit/depositions/{record_id}/actions/newversion",
+            headers=auth,
+            timeout=120,
+        )
+        r.raise_for_status()
+        draft = requests.get(
+            r.json()["links"]["latest_draft"], headers=auth, timeout=60
+        )
+        draft.raise_for_status()
+        return draft.json()["id"]
+    except requests.exceptions.RequestException as exc:
+        raise UploadError(
+            "A new version of the published record could not be made. " + explain(exc)
+        ) from exc
+
+
 def prepare_deposition_for_session(recording_session, new_file=None):
     """
     Prepare a Zenodo deposition for all files in a recording session.
@@ -219,9 +241,14 @@ def prepare_deposition_for_session(recording_session, new_file=None):
     try:
         # 🔹 Check for existing deposition
         existing_file = next((f for f in files if f.repository and f.external_id), None)
+        latest = latest_version(recording_session)
         if existing_file:
-            deposition_id = existing_file.external_id
+            deposition_id = existing_file.external_id  # a draft already holds files
             repo = existing_file.repository
+        elif latest:
+            # the session is published: new files make a new version of its record
+            deposition_id = _new_version(latest.record_id, auth)
+            repo, _ = Repository.objects.get_or_create(name="Zenodo")
         else:
             # Create new zenodo repo
             r = requests.post(
@@ -395,6 +422,21 @@ def publish_deposition(recording_session, payload=None):
 
     base_url = ZENODO_API.split("/api")[0]
 
+    # the record has one more version, with its own DOI; the DOI of the whole stays the same
+    last = latest_version(recording_session)
+    PublicationVersion.objects.create(
+        recording_session=recording_session,
+        number=(last.number if last else 0) + 1,
+        doi=zenodo_doi,
+        record_id=str(deposition_id),
+        url=f"{base_url}/records/{deposition_id}",
+    )
+    RecordingSession.objects.filter(pk=recording_session.pk).update(
+        concept_doi=r.json().get("conceptdoi") or recording_session.concept_doi,
+        zenodo_state="synced",
+        zenodo_message="",
+    )
+
     # Update files from session
     for f in files:
         # Update only files without DOI and matching deposition_id
@@ -409,3 +451,48 @@ def publish_deposition(recording_session, payload=None):
                 f.repository = None
                 f.save(update_fields=["repository"])
     return zenodo_doi
+
+
+def update_published_metadata(recording_session):
+    """Make the published record say what the session says now (no new version, same DOI):
+    unlock it, change its metadata, publish it again."""
+    last = latest_version(recording_session)
+    if not last:
+        raise UploadError("This session has no published record to update.")
+    files = list(
+        File.objects.filter(recording_session=recording_session).order_by("id")
+    )
+    if not files:
+        raise UploadError("This session has no file.")
+    auth = _auth_headers()
+    headers = {**auth, "Content-Type": "application/json"}
+    payload = build_metadata_payload(recording_session, files)
+    deposit = f"{ZENODO_API}/deposit/depositions/{last.record_id}"
+    try:
+        r = requests.post(f"{deposit}/actions/edit", headers=auth, timeout=60)
+        if r.status_code >= 400 and r.status_code not in (400, 409):
+            r.raise_for_status()  # 400 / 409: it is already open for edition
+        r = requests.put(
+            deposit,
+            data=json.dumps({"metadata": payload}),
+            headers=headers,
+            timeout=120,
+        )
+        r.raise_for_status()
+        r = requests.post(f"{deposit}/actions/publish", headers=auth, timeout=120)
+        r.raise_for_status()
+    except requests.RequestException as exc:
+        raise UploadError(f"The record could not be updated. {explain(exc)}") from exc
+
+    # the draft of the next version, if files wait for it, tells the same
+    waiting = next((f.external_id for f in files if f.external_id and not f.doi), None)
+    if waiting:
+        try:
+            requests.put(
+                f"{ZENODO_API}/deposit/depositions/{waiting}",
+                data=json.dumps({"metadata": payload}),
+                headers=headers,
+                timeout=120,
+            )
+        except requests.RequestException:
+            pass  # it is rebuilt from the session when the version is published

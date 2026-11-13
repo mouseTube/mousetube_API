@@ -73,7 +73,11 @@ from mousetube_api.utils.file_handler import (
     purge_temp_files,
     remove_temp,
 )
-from mousetube_api.utils.moderation import SESSION_LOCKED, SESSION_PUBLIC
+from mousetube_api.utils.moderation import (
+    SESSION_LOCKED,
+    SESSION_PUBLIC,
+    session_pending_entries,
+)
 from mousetube_api.utils.orcid_proof import read_orcid_proof
 from mousetube_api.utils.repository import (
     build_repository_metadata_payload,
@@ -1136,14 +1140,18 @@ class RecordingSessionViewSet(viewsets.ModelViewSet):
         serializer.save(created_by=self.request.user)
 
     def get_queryset(self):
-        return RecordingSession.objects.filter(created_by=self.request.user).annotate(
-            files_count=Count("file", distinct=True),
-            first_doi=Max("file__doi"),
-            files_to_deposit=Count(
-                "file",
-                filter=Q(file__doi__isnull=True) | Q(file__doi=""),
-                distinct=True,
-            ),
+        return (
+            RecordingSession.objects.filter(created_by=self.request.user)
+            .prefetch_related("publication_versions")
+            .annotate(
+                files_count=Count("file", distinct=True),
+                first_doi=Max("file__doi"),
+                files_to_deposit=Count(
+                    "file",
+                    filter=Q(file__doi__isnull=True) | Q(file__doi=""),
+                    distinct=True,
+                ),
+            )
         )
 
 
@@ -1561,11 +1569,28 @@ class PublishSessionView(APIView):
                 {"detail": "Not authorized."}, status=status.HTTP_403_FORBIDDEN
             )
         if session.status == "published":
-            return Response(
-                {"detail": "Session already published."},
-                status=status.HTTP_409_CONFLICT,
-            )
-        if session.status != "shared" and not request.user.is_staff:
+            # a published session has a new version to publish when files were added since
+            waiting = File.objects.filter(
+                recording_session=session, external_id__isnull=False, status="done"
+            ).filter(Q(doi__isnull=True) | Q(doi=""))
+            if not waiting.exists():
+                return Response(
+                    {
+                        "detail": "Nothing new to publish: add a file to make a new "
+                        "version of the record."
+                    },
+                    status=status.HTTP_409_CONFLICT,
+                )
+            if session_pending_entries(session):
+                return Response(
+                    {
+                        "detail": "The session now uses entries that wait for an "
+                        "administrator: the new version can be published once they "
+                        "are validated."
+                    },
+                    status=status.HTTP_409_CONFLICT,
+                )
+        elif session.status != "shared" and not request.user.is_staff:
             return Response(
                 {
                     "detail": "Share the session first: an administrator has to validate "
@@ -1671,6 +1696,21 @@ class FileDetailAPIView(GenericAPIView):
             return Response(
                 {"detail": "Only the creator of a file can delete it."},
                 status=status.HTTP_403_FORBIDDEN,
+            )
+        session = file.recording_session
+        if (
+            file.doi
+            and file.external_id
+            and session is not None
+            and session.publication_versions.exists()
+            and not request.user.is_staff
+        ):
+            return Response(
+                {
+                    "detail": "This file is part of a published version of the record: "
+                    "it cannot be removed."
+                },
+                status=status.HTTP_409_CONFLICT,
             )
 
         # 🔹 Start async deletion
