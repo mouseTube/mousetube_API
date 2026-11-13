@@ -34,6 +34,11 @@ if [ -z "$DB_NAME" ] || [ -z "$DB_USER" ] || [ -z "$DB_PASSWORD" ]; then
     exit 1
 fi
 
+if [ "$RESET_DB" = "true" ] && [ "$(echo "$DEBUG" | tr '[:upper:]' '[:lower:]')" = "false" ]; then
+    echo "❌ RESET_DB=true is refused when DEBUG=false (it would drop the production database)."
+    exit 1
+fi
+
 if [ "$RESET_DB" = "true" ]; then
     echo "🚀 RESET_DB=true → Recreating the database..."
     mariadb -h db -u root -p"$DB_ROOT_PASS" <<EOF
@@ -55,6 +60,11 @@ python3 manage.py makemigrations mousetube_api --noinput
 
 echo "📦 Applying migrations..."
 python3 manage.py migrate --noinput
+
+# migrations are generated here and not versioned, so they only change the structure:
+# the conversions of existing rows are done by this command (safe to run every time)
+echo "🔧 Upgrading existing data..."
+python3 manage.py normalize_data
 
 # 🚨 Explicit check of critical tables before loading data
 echo "🔍 Verifying that all required tables exist before loading fixtures..."
@@ -86,11 +96,12 @@ else
     echo "⚠️ Fixture file not found or not defined. Skipping fixture loading."
 fi
 
+# ✅ Always collect static files so nginx can serve /static/ (admin CSS, DRF browsable API)
+echo "🧪 Collecting static files..."
+python3 manage.py collectstatic --noinput
+
 # ✅ Starting the server
 if [ "$(echo "$DEBUG" | tr '[:upper:]' '[:lower:]')" = "false" ]; then
-    echo "🧪 Collecting static files..."
-    python3 manage.py collectstatic --noinput
-
     echo "🚀 Starting Gunicorn server..."
     exec gunicorn mousetube_api.asgi:application --bind 0.0.0.0:8000 --timeout 420 -k uvicorn.workers.UvicornWorker
 else

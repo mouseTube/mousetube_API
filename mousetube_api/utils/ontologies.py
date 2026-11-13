@@ -1,0 +1,349 @@
+"""Controlled vocabularies for some fields, checked at their source.
+
+Terms come from the EBI Ontology Lookup Service (OLS) and, for organizations, from the ROR
+registry. The server only talks to these two fixed hosts, with a short timeout, and keeps
+the answers for a day. A term is never stored on the word of the browser: it is looked up
+at its source first (or already known from a previous lookup).
+"""
+
+import hashlib
+import re
+from urllib.parse import quote
+
+import requests
+from django.core.cache import cache
+
+OLS = "https://www.ebi.ac.uk/ols4/api"
+ROR = "https://api.ror.org/v2/organizations"
+TIMEOUT = 5  # seconds
+CACHE_SECONDS = 24 * 3600
+
+# The fields that have a vocabulary, and where it comes from.
+FIELDS = {
+    "species": {"source": "ols", "ontologies": ["ncbitaxon"], "name": "NCBI Taxonomy"},
+    # mouse and rat strains: the Experimental Factor Ontology, and the Rat Strain Ontology
+    "strain": {
+        "source": "ols",
+        "ontologies": ["efo", "rs"],
+        "suggest": ["efo"],  # what is searched when no vocabulary is asked for
+        "name": "Experimental Factor Ontology (EFO) or Rat Strain Ontology (RS)",
+    },
+    "sex": {"source": "ols", "ontologies": ["pato"], "name": "PATO"},
+    "age": {
+        "source": "ols",
+        # the stages of the mouse; Uberon for the other species (generic stages)
+        "ontologies": ["mmusdv", "uberon"],
+        "suggest": ["mmusdv"],
+        "name": "Mouse Developmental Stages",
+    },
+    "treatment": {"source": "ols", "ontologies": ["chebi"], "name": "ChEBI"},
+    "behavior": {
+        "source": "ols",
+        "ontologies": ["nbo"],
+        "name": "Neuro Behavior Ontology",
+    },
+    "organization": {"source": "ror", "ontologies": ["ror"], "name": "ROR registry"},
+}
+
+# What sex_term is set to when only the sex ("male" / "female") is given
+SEX_TERMS = {
+    "male": ("PATO:0000384", "male"),
+    "female": ("PATO:0000383", "female"),
+}
+
+# The age classes of the forms, as stages of the Mouse Developmental Stages ontology
+# (checked in the Ontology Lookup Service: infant = nursing until weaning at 22 days,
+# juvenile = weaned and sexually immature, mature = sexually mature, over 6 weeks).
+# They describe the mouse only: another species keeps its age class without a term.
+AGE_TERMS = {
+    "pup": ("MmusDv:0000177", "infant stage"),
+    "juvenile": ("MmusDv:0000178", "juvenile stage"),
+    "adult": ("MmusDv:0000110", "mature stage"),
+}
+# The same classes for the other species (rat...): the generic stages of Uberon
+GENERIC_AGE_TERMS = {
+    "pup": ("UBERON:0034920", "infant stage"),
+    "juvenile": ("UBERON:0034919", "juvenile stage"),
+    "adult": ("UBERON:0000113", "post-juvenile adult stage"),
+}
+MOUSE = "mus musculus"
+
+# Species whose NCBI Taxonomy term is known (checked in the Ontology Lookup Service)
+SPECIES_TERMS = {
+    "mus musculus": ("NCBITaxon:10090", "Mus musculus"),
+    "rattus norvegicus": ("NCBITaxon:10116", "Rattus norvegicus"),
+}
+
+# The units of the numeric fields (Units Ontology), for the documentation of the API
+UNITS = {
+    "sampling_rate": {"unit": "hertz", "curie": "UO:0000106"},
+    "duration": {"unit": "second", "curie": "UO:0000010"},
+    "context_temperature": {"unit": "degree Celsius", "curie": "UO:0000027"},
+    "context_brightness": {"unit": "lux", "curie": "UO:0000116"},
+}
+
+# The prefix as the sources write it: OLS looks identifiers up with the exact case
+PREFIXES = {
+    "ncbitaxon": "NCBITaxon",
+    "pato": "PATO",
+    "mmusdv": "MmusDv",
+    "chebi": "CHEBI",
+    "efo": "EFO",
+    "rs": "RS",
+    "uberon": "UBERON",
+    "nbo": "NBO",
+}
+
+CURIE = re.compile(r"^([A-Za-z][A-Za-z0-9]*):([A-Za-z0-9_.-]+)$")
+
+
+class OntologyError(Exception):
+    """The vocabulary could not answer, or the term does not exist."""
+
+
+def _get(url, **params):
+    key = (
+        "onto:" + hashlib.sha256(f"{url}|{sorted(params.items())}".encode()).hexdigest()
+    )
+    cached = cache.get(key)
+    if cached is not None:
+        return cached
+    try:
+        response = requests.get(
+            url,
+            params=params,
+            timeout=TIMEOUT,
+            headers={"User-Agent": "mouseTube", "Accept": "application/json"},
+        )
+        response.raise_for_status()
+        data = response.json()
+    except (requests.RequestException, ValueError) as exc:
+        raise OntologyError("The vocabulary service did not answer.") from exc
+    cache.set(key, data, CACHE_SECONDS)
+    return data
+
+
+def _ror_label(item):
+    names = item.get("names") or []
+    for kind in ("ror_display", "label"):
+        for name in names:
+            if kind in (name.get("types") or []):
+                return name["value"]
+    return names[0]["value"] if names else item["id"].rsplit("/", 1)[-1]
+
+
+def _ror_place(item):
+    place = ((item.get("locations") or [{}])[0]).get("geonames_details") or {}
+    return ", ".join(x for x in (place.get("name"), place.get("country_name")) if x)
+
+
+def search(field, text, rows=10, ontology=None):
+    """Terms of the vocabulary of `field` that match `text`: [{curie, label, ...}].
+
+    `ontology` narrows the search to one of the vocabularies of the field (the strains of a
+    rat come from the Rat Strain Ontology, those of a mouse from EFO).
+    """
+    spec = FIELDS[field]
+    text = (text or "").strip()
+    if len(text) < 2:
+        return []
+    if spec["source"] == "ror":
+        data = _get(ROR, query=text)
+        return [
+            {
+                "curie": "ROR:" + item["id"].rsplit("/", 1)[-1],
+                "label": _ror_label(item),
+                "ontology": "ror",
+                "iri": item["id"],
+                "detail": _ror_place(item),
+            }
+            for item in (data.get("items") or [])[:rows]
+        ]
+    chosen = (
+        [ontology]
+        if ontology in spec["ontologies"]
+        else spec.get("suggest", spec["ontologies"])
+    )
+    # the service does not find "C57BL/6J" but finds "C57BL6J": ask both ways
+    questions = [text] + ([text.replace("/", "")] if "/" in text else [])
+    docs = []
+    for question in questions:
+        data = _get(
+            f"{OLS}/search",
+            q=question,
+            ontology=",".join(chosen),
+            type="class",
+            rows=rows,
+            fieldList="iri,label,obo_id,ontology_name",
+        )
+        docs += (data.get("response") or {}).get("docs") or []
+    # an ontology also lists the terms it imports from others (BTO, NCBITaxon...): only its own
+    own = set(chosen)
+    seen = set()
+    docs = [
+        d for d in docs if not (d.get("obo_id") in seen or seen.add(d.get("obo_id")))
+    ]
+    return [
+        {
+            "curie": doc["obo_id"],
+            "label": doc["label"],
+            "ontology": doc["ontology_name"],
+            "iri": doc["iri"],
+            "detail": "",
+        }
+        for doc in docs
+        if doc.get("obo_id")
+        and doc.get("label")
+        and doc["obo_id"].split(":")[0].lower() in own
+    ][:rows]
+
+
+def lookup(field, curie):
+    """The term `curie` as its source describes it, or an OntologyError.
+
+    The identifier must belong to one of the vocabularies of `field`.
+    """
+    spec = FIELDS[field]
+    match = CURIE.match(curie or "")
+    if not match:
+        raise OntologyError(f"'{curie}' is not a term identifier like PATO:0000384.")
+    prefix, local = match.group(1).lower(), match.group(2)
+    if prefix not in spec["ontologies"]:
+        raise OntologyError(
+            f"A term of {spec['name']} is expected here, not '{curie}'."
+        )
+    if spec["source"] == "ror":
+        data = _get(f"{ROR}/{quote(local, safe='')}")
+        if not data.get("id"):
+            raise OntologyError(f"'{curie}' is not in the ROR registry.")
+        return {
+            "curie": f"ROR:{local}",
+            "label": _ror_label(data),
+            "ontology": "ror",
+            "iri": data["id"],
+        }
+    data = _get(
+        f"{OLS}/ontologies/{prefix}/terms",
+        obo_id=f"{PREFIXES.get(prefix, prefix)}:{local}",
+    )
+    terms = (data.get("_embedded") or {}).get("terms") or []
+    terms = [t for t in terms if not t.get("is_obsolete")]
+    if not terms:
+        raise OntologyError(f"'{curie}' is not a current term of {spec['name']}.")
+    term = terms[0]
+    return {
+        "curie": term["obo_id"],
+        "label": term["label"],
+        "ontology": term["ontology_name"],
+        "iri": term["iri"],
+    }
+
+
+def get_or_create_term(field, curie):
+    """The stored OntologyTerm for `curie`: known already, or checked at its source."""
+    from mousetube_api.models import OntologyTerm
+
+    spec = FIELDS[field]
+    match = CURIE.match(curie or "")
+    if match and match.group(1).lower() in spec["ontologies"]:
+        known = OntologyTerm.objects.filter(
+            curie__iexact=f"{match.group(1)}:{match.group(2)}"
+        ).first()
+        if known:
+            return known
+    found = lookup(field, curie)
+    term, _ = OntologyTerm.objects.get_or_create(
+        curie=found["curie"],
+        defaults={
+            "label": found["label"],
+            "ontology": found["ontology"],
+            "iri": found["iri"],
+        },
+    )
+    return term
+
+
+def known_term(curie, label):
+    """The OntologyTerm of an identifier we already know, without any network call."""
+    from mousetube_api.models import OntologyTerm
+
+    term, _ = OntologyTerm.objects.get_or_create(
+        curie=curie,
+        defaults={
+            "label": label,
+            "ontology": curie.split(":")[0].lower(),
+            "iri": f"http://purl.obolibrary.org/obo/{curie.replace(':', '_')}",
+        },
+    )
+    return term
+
+
+def sex_term(sex):
+    """The PATO term of "male" / "female", without any network call (None otherwise)."""
+    known = SEX_TERMS.get(sex)
+    return known_term(*known) if known else None
+
+
+def term_ref(term):
+    """A term as it is written in exports: {curie, label, iri}, or None."""
+    return {"curie": term.curie, "label": term.label, "iri": term.iri} if term else None
+
+
+def session_terms(session):
+    """The vocabulary terms a recording session points to (species, sex, stage, treatment,
+    behaviors), each once, in a stable order."""
+    terms = []
+    for profile in session.animal_profiles.select_related(
+        "strain__ontology_term",
+        "strain__species__ontology_term",
+        "sex_term",
+        "age_term",
+        "treatment_term",
+    ):
+        species = profile.strain.species if profile.strain else None
+        terms += [
+            species and species.ontology_term,
+            profile.strain and profile.strain.ontology_term,
+            profile.sex_term,
+            profile.age_term,
+            profile.treatment_term,
+        ]
+    terms += list(session.behavior_terms.all())
+    seen, kept = set(), []
+    for term in terms:
+        if term and term.curie not in seen:
+            seen.add(term.curie)
+            kept.append(term)
+    return kept
+
+
+def match_label(field, text):
+    """The term of `field` whose label is exactly `text` (any case), or None."""
+    wanted = (text or "").strip().lower()
+    for term in search(field, wanted, rows=20) if wanted else []:
+        if term["label"].strip().lower() == wanted:
+            return term
+    return None
+
+
+def match_organization(text):
+    """The ROR organization the registry itself is sure about for an affiliation text
+    (its `chosen` match), or None: a doubtful match is worse than none."""
+    if not (text or "").strip():
+        return None
+    for item in _get(ROR, affiliation=text.strip()).get("items") or []:
+        if item.get("chosen"):
+            return {
+                "curie": "ROR:" + item["organization"]["id"].rsplit("/", 1)[-1],
+                "label": _ror_label(item["organization"]),
+            }
+    return None
+
+
+def age_term(age, species_name):
+    """The stage of a mouse age class ("pup", "juvenile", "adult"), or None."""
+    name = (species_name or "").strip().lower()
+    if not name:
+        return None
+    known = (AGE_TERMS if name == MOUSE else GENERIC_AGE_TERMS).get(age)
+    return known_term(*known) if known else None

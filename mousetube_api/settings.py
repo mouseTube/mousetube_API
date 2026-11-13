@@ -15,6 +15,7 @@ from datetime import timedelta
 from pathlib import Path
 
 import environ
+from django.core.exceptions import ImproperlyConfigured
 from django.core.management.utils import get_random_secret_key
 
 # Add two custom countries to django_countries
@@ -47,13 +48,17 @@ for env_path in env_files:
         break
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = env("DEBUG", default=True)
+DEBUG = env.bool("DEBUG", default=False)
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = (
-    env("SECRET_KEY") if env("SECRET_KEY", default=None) else get_random_secret_key()
-)
+SECRET_KEY = env("SECRET_KEY", default=None)
+if not SECRET_KEY:
+    if not DEBUG:
+        # A random key per process would break JWT/session validation across
+        # gunicorn workers and restarts, so refuse to start instead.
+        raise ImproperlyConfigured("SECRET_KEY must be set when DEBUG is false.")
+    SECRET_KEY = get_random_secret_key()
 
-ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=["localhost,127.0.0.1"])
+ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=["localhost", "127.0.0.1"])
 # CORS_ORIGIN_ALLOW_ALL = True
 
 CORS_ALLOWED_ORIGINS = env.list(
@@ -74,11 +79,12 @@ CSRF_TRUSTED_ORIGINS = env.list(
     ],
 )
 CORS_ALLOW_CREDENTIALS = True
-X_FRAME_OPTIONS = "ALLOW-FROM http://127.0.0.1:8001"
+X_FRAME_OPTIONS = "DENY"  # "ALLOW-FROM" is obsolete and ignored by browsers
 
 SECURE_SSL_REDIRECT = not DEBUG
-SESSION_COOKIE_SECURE = not DEBUG
-CSRF_COOKIE_SECURE = not DEBUG
+SECURE_HSTS_SECONDS = 0 if DEBUG else env.int("SECURE_HSTS_SECONDS", default=31536000)
+SECURE_HSTS_INCLUDE_SUBDOMAINS = not DEBUG
+SECURE_CONTENT_TYPE_NOSNIFF = True
 
 USE_X_FORWARDED_HOST = env.bool("USE_X_FORWARDED_HOST", default=False)
 SECURE_PROXY_SSL_HEADER = env.tuple(
@@ -138,6 +144,7 @@ TEMPLATES = [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
+                "mousetube_api.context_processors.site_urls",
             ],
         },
     },
@@ -233,10 +240,19 @@ REST_FRAMEWORK = {
         # "rest_framework.authentication.TokenAuthentication",
         "rest_framework_simplejwt.authentication.JWTAuthentication",
     ],
+    # Only brute-forceable auth endpoints are throttled (see mousetube_api/throttles.py).
+    "DEFAULT_THROTTLE_CLASSES": ["mousetube_api.throttles.AuthEndpointsThrottle"],
+    "DEFAULT_THROTTLE_RATES": {
+        "auth": "10/min",
+        "register": "20/hour",
+        "ontology": "60/min",
+    },
+    # Number of reverse proxies in front of Django (HAProxy + nginx = 2). With the
+    # default 0 the client IP is REMOTE_ADDR, which is never spoofable.
+    "NUM_PROXIES": env.int("DRF_NUM_PROXIES", default=0),
     "DEFAULT_PERMISSION_CLASSES": [
-        # 'rest_framework.permissions.IsAuthenticated',
-        # 'rest_framework.permissions.DjangoModelPermissionsOrAnonReadOnly',
-        "rest_framework.permissions.AllowAny",
+        # Safe default: views that must accept anonymous writes opt in explicitly.
+        "rest_framework.permissions.IsAuthenticatedOrReadOnly",
     ],
 }
 
@@ -252,12 +268,18 @@ SPECTACULAR_SETTINGS = {
 
 SITE_ID = 1
 
+# Registration is refused for personal addresses (gmail, outlook...), see utils/email_domains.py.
+# Set to false in local development if you only have a personal address.
+REQUIRE_INSTITUTIONAL_EMAIL = env.bool("REQUIRE_INSTITUTIONAL_EMAIL", default=True)
+
 SOCIALACCOUNT_PROVIDERS = {
     "orcid": {
         "APP": {
             "client_id": env("CLIENT_ID", default=""),
             "secret": env("CLIENT_SECRET", default=""),
         },
+        # "sandbox.orcid.org" to test with a sandbox ORCID application
+        "BASE_DOMAIN": env("ORCID_BASE_DOMAIN", default="orcid.org"),
         "LOGIN_URL": "/accounts/orcid/login/",
         "SCOPE": ["/authenticate"],
         "AUTH_PARAMS": {"access_type": "online"},
@@ -281,6 +303,8 @@ ACCOUNT_SESSION_REMEMBER = None
 ACCOUNT_LOGOUT_ON_GET = False
 SOCIALACCOUNT_EMAIL_VERIFICATION = "none"
 ACCOUNT_CONFIRM_EMAIL_ON_GET = False
+# The SPA is on another origin (localhost:3000 in dev), so cookies must be cross-site.
+# "None" requires Secure; browsers accept Secure cookies on http://localhost.
 SESSION_COOKIE_SECURE = True
 SESSION_COOKIE_SAMESITE = "None"
 CSRF_COOKIE_SECURE = True
@@ -288,7 +312,8 @@ CSRF_COOKIE_SAMESITE = "None"
 
 # Djoser settings
 DJOSER = {
-    "SEND_ACTIVATION_EMAIL": env.bool("DJOSER_SEND_ACTIVATION_EMAIL", default=False),
+    # The link only confirms the address; an admin then activates the account.
+    "SEND_ACTIVATION_EMAIL": env.bool("DJOSER_SEND_ACTIVATION_EMAIL", default=True),
     "ACTIVATION_URL": "activate/{uid}/{token}",
     "SERIALIZERS": {
         "user": "mousetube_api.serializers.CustomUserSerializer",
@@ -301,7 +326,7 @@ DJOSER = {
         "password",
         "first_name",
         "last_name",
-        "orcid",
+        "orcid_proof",
     ],
     "EMAIL": {
         "activation": "mousetube_api.utils.email_activation.CustomActivationEmail",
@@ -313,21 +338,25 @@ DJOSER = {
 }
 
 SIMPLE_JWT = {
-    "ACCESS_TOKEN_LIFETIME": timedelta(hours=12),
+    "TOKEN_OBTAIN_SERIALIZER": "mousetube_api.serializers.PendingAwareTokenObtainPairSerializer",  # nosec B105 - dotted path of a class, not a secret
+    # Short-lived: the frontend renews it with the refresh token (plugins/axios-refresh.ts).
+    "ACCESS_TOKEN_LIFETIME": timedelta(hours=1),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
 }
 
 # --------------------------------
 # Emails
 # --------------------------------
-# EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
-# EMAIL_HOST = env("EMAIL_HOST")
-# EMAIL_PORT = env.int("EMAIL_PORT")
-# EMAIL_USE_TLS = env.bool("EMAIL_USE_TLS", default=True)
-# EMAIL_HOST_USER = env("EMAIL_USER")
-# EMAIL_HOST_PASSWORD = env("EMAIL_PASSWORD")
-
-EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+EMAIL_HOST = env("EMAIL_HOST", default="")
+if EMAIL_HOST:
+    EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+    EMAIL_PORT = env.int("EMAIL_PORT", default=587)
+    EMAIL_USE_TLS = env.bool("EMAIL_USE_TLS", default=True)
+    EMAIL_HOST_USER = env("EMAIL_USER", default="")
+    EMAIL_HOST_PASSWORD = env("EMAIL_PASSWORD", default="")
+else:
+    # No SMTP server configured: e-mails are printed in the logs (development).
+    EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="no-reply@mousetube.com")
 DEFAULT_ADMIN_EMAIL = env("DEFAULT_ADMIN_EMAIL", default="mousetube@igbmc.fr")
 
@@ -340,15 +369,35 @@ CELERY_TIMEZONE = "Europe/Paris"
 # CELERY_IMPORTS = "mousetube_api.tasks"
 CELERY_IMPORTS = ["mousetube_api.tasks"]
 CELERY_RESULT_BACKEND = "django-db"
-CACHE_BACKEND = "memcached://127.0.0.1:11211/"
+
+# Shared cache (throttling, daily-export flag): the default per-process LocMemCache
+# would give every gunicorn worker its own counters.
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        "LOCATION": env(
+            "CACHE_URL", default=CELERY_BROKER_URL.rsplit("/", 1)[0] + "/1"
+        ),
+    }
+}
 
 ZENODO_API = env("ZENODO_API", default="https://sandbox.zenodo.org/api/")
 ZENODO_TOKEN = env("ZENODO_TOKEN", default="")
+
+# Largest file a user may upload (bytes). Keep nginx `client_max_body_size` in step with it.
+# Files are streamed to the repository, so this only has to fit the disk and the repository
+# (Zenodo accepts 50 GB per record).
+MAX_UPLOAD_SIZE = env.int("MAX_UPLOAD_SIZE", default=5 * 1024**3)
 
 LOGS_DIR = Path(BASE_DIR) / "logs"
 LOGS_DIR.mkdir(exist_ok=True)
 
 FRONT_DOMAIN = env("FRONT_DOMAIN", default="localhost:3000")
+FRONT_URL = f"{'http' if DEBUG else 'https'}://{FRONT_DOMAIN}"
+# Where admins open the Django admin from the e-mail they receive.
+ADMIN_BASE_URL = env(
+    "ADMIN_BASE_URL", default="http://localhost:8000" if DEBUG else FRONT_URL
+)
 
 LOGGING = {
     "version": 1,

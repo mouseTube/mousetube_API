@@ -33,6 +33,8 @@ from django.views.static import serve
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 from rest_framework.routers import DefaultRouter
 
+from .account_views import CustomUserViewSet
+from .review import ReviewDecisionView, ReviewListView, ReviewSummaryView
 from .views import (
     AnimalProfileViewSet,
     ContactViewSet,
@@ -41,11 +43,14 @@ from .views import (
     FavoriteViewSet,
     FileAPIView,
     FileDetailAPIView,
+    FileDownloadView,
+    FileFilterOptionsView,
     FileUploadAsyncView,
     HardwareAPIView,
     HardwareDetailAPIView,
     LaboratoryAPIView,
     LinkOrcidView,
+    OntologySearchView,
     ProtocolViewSet,
     PublishSessionView,
     RecordingSessionViewSet,
@@ -64,11 +69,14 @@ from .views import (
     UserProfileListAPIView,
     file_task_status,
     get_task_status,
+    personal_email_domains,
     repository_metadata_payload,
     repository_metadata_schema,
 )
 
 router = DefaultRouter()
+auth_router = DefaultRouter()  # same routes as djoser.urls, with our activation step
+auth_router.register("users", CustomUserViewSet, basename="user")
 router.register(r"protocol", ProtocolViewSet, basename="protocol")
 router.register(
     r"recording-session", RecordingSessionViewSet, basename="recording-session"
@@ -138,6 +146,23 @@ urlpatterns = [
         name="hardware-detail",
     ),
     path("api/country/", CountryAPIView.as_view(), name="country"),
+    path("api/ontology/search/", OntologySearchView.as_view(), name="ontology-search"),
+    path(
+        "api/personal-email-domains/",
+        personal_email_domains,
+        name="personal-email-domains",
+    ),
+    path("api/review/", ReviewSummaryView.as_view(), name="review-summary"),
+    path("api/review/<str:kind>/", ReviewListView.as_view(), name="review-list"),
+    path(
+        "api/review/<str:kind>/decision/",
+        ReviewDecisionView.as_view(),
+        name="review-decision",
+    ),
+    path("api/file/filters/", FileFilterOptionsView.as_view(), name="file-filters"),
+    path(
+        "api/file/<int:pk>/download/", FileDownloadView.as_view(), name="file-download"
+    ),
     path("api/file/<int:pk>/", FileDetailAPIView.as_view(), name="file-detail"),
     path("api/track-page/", TrackPageView.as_view(), name="track-page"),
     path(
@@ -147,7 +172,7 @@ urlpatterns = [
     path(
         "swagger/", SpectacularSwaggerView.as_view(url_name="schema"), name="swagger-ui"
     ),
-    path("auth/", include("djoser.urls")),
+    path("auth/", include(auth_router.urls)),
     path("auth/", include("djoser.urls.jwt")),
     path("accounts/", include("allauth.socialaccount.urls")),
     path("accounts/", include("allauth.urls")),

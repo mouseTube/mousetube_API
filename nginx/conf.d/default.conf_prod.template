@@ -8,6 +8,13 @@ server {
     listen 80;
     server_name ${DOMAIN};
 
+    # uploads: the API refuses more than MAX_UPLOAD_SIZE (5 GiB by default)
+    client_max_body_size 5g;
+
+    server_tokens off;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+
     proxy_buffer_size       128k;
     proxy_buffers           4 256k;
     proxy_busy_buffers_size 256k;
@@ -26,6 +33,10 @@ server {
 
     # Django REST API
     location /api/ {
+        # the body goes straight to the API: nginx does not write a copy of it first
+        proxy_request_buffering off;
+        proxy_read_timeout 420s;
+        proxy_send_timeout 420s;
         proxy_pass http://web:8000;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
@@ -76,6 +87,8 @@ server {
         access_log off;
         expires 30d;
         add_header Cache-Control "public";
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header Content-Security-Policy "default-src 'none'; sandbox" always;
     }
 
     # Django Swagger

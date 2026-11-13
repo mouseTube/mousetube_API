@@ -1,26 +1,45 @@
 import json
 import os
 import re
-from urllib.parse import unquote
+from urllib.parse import quote, unquote
 
 import requests
 from django.conf import settings
-from django.db.models import ForeignKey
+from django.db.models import Q
 
-from mousetube_api.models import File, Repository
-from mousetube_api.utils.file_handler import link_to_local_path
+from mousetube_api.models import File, PublicationVersion, RecordingSession, Repository
+from mousetube_api.utils.file_handler import (
+    ProgressReader,
+    UploadError,
+    explain,
+    is_temp_path,
+    link_to_local_path,
+)
+from mousetube_api.utils.ontologies import session_terms
+from mousetube_api.utils.publication import latest_version
+from mousetube_api.utils.zenodo_description import description, keywords
 
 ZENODO_API = getattr(settings, "ZENODO_API", "https://sandbox.zenodo.org/api/")
-ZENODO_TOKEN = getattr(settings, "ZENODO_TOKEN", None)
 
-if not ZENODO_TOKEN:
-    raise ValueError("Zenodo token not configured in settings.")
+
+def _auth_headers():
+    """Bearer header instead of ?access_token=: URLs end up in logs and error messages."""
+    token = getattr(settings, "ZENODO_TOKEN", None)
+    if not token:
+        raise ValueError("Zenodo token not configured in settings.")
+    return {"Authorization": f"Bearer {token}"}
+
 
 METADATA_SCHEMA = {
     "type": "object",
     "properties": {
         "title": {"type": "string", "title": "Title"},
         "description": {"type": "string", "title": "Description", "format": "textarea"},
+        "keywords": {
+            "type": "array",
+            "title": "Keywords",
+            "items": {"type": "string", "title": "Keyword"},
+        },
         "upload_type": {
             "type": "string",
             "title": "Upload type",
@@ -119,137 +138,10 @@ METADATA_SCHEMA = {
 }
 
 
-def _build_session_description(recording_session, files):
-    """
-    Build a Zenodo-compatible HTML-safe description for a recording session,
-    including metadata, protocol, animal profiles, and files.
-    Sections are separated by ASCII titles and two <br> between sections.
-    """
-
-    def humanize_label(label: str) -> str:
-        """Convert a model field name into a readable label."""
-        return (
-            label.replace("_", " ")
-            .capitalize()
-            .replace(" id", "")
-            .replace(" context", " Context")
-            .replace(" equipment", " Equipment")
-        )
-
-    def format_value(value):
-        """Format a value for display."""
-        if isinstance(value, bool):
-            return "Yes" if value else "No"
-        if value is None or value == "":
-            return None
-        return str(value)
-
-    lines = []
-
-    # === RECORDING SESSION ===
-    lines.append("================= 🎧 RECORDING SESSION =================")
-    lines.append(f"Name: {recording_session.name}")
-
-    exclude_fields = {
-        "id",
-        "is_multiple",
-        "status",
-        "created_at",
-        "modified_at",
-        "created_by",
-        "name",
-        "protocol",
-        "animal_profiles",
-    }
-
-    # Regular fields
-    for field in recording_session._meta.fields:
-        fname = field.name
-        if fname in exclude_fields:
-            continue
-        value = getattr(recording_session, fname)
-        if isinstance(field, ForeignKey) and value:
-            value = str(value)
-        value = format_value(value)
-        if value:
-            lines.append(f"{humanize_label(fname)}: {value}")
-
-    # Many-to-many fields
-    for field in recording_session._meta.many_to_many:
-        fname = field.name
-        if fname in exclude_fields:
-            continue
-        related_values = getattr(recording_session, fname).all()
-        if related_values.exists():
-            values_str = ", ".join(str(v) for v in related_values)
-            lines.append(f"{humanize_label(fname)}: {values_str}")
-
-    # <br> before Protocol
-    lines.append("<br>")
-
-    # === PROTOCOL ===
-    protocol = getattr(recording_session, "protocol", None)
-    if protocol:
-        lines.append("================= 🧪 PROTOCOL =================")
-        lines.append(f"Name: {protocol.name}")
-
-        exclude_protocol = {
-            "id",
-            "created_by",
-            "created_at",
-            "modified_at",
-            "name",
-            "status",
-        }
-
-        for field in protocol._meta.fields:
-            fname = field.name
-            if fname in exclude_protocol:
-                continue
-            value = format_value(getattr(protocol, fname))
-            if value:
-                lines.append(f"{humanize_label(fname)}: {value}")
-
-        # <br> before Animal Profiles
-        lines.append("<br>")
-
-    # === ANIMAL PROFILES ===
-    animal_profiles = getattr(recording_session, "animal_profiles", None)
-    if animal_profiles and animal_profiles.exists():
-        lines.append("================= 🐭 ANIMAL PROFILES =================")
-        for ap in animal_profiles.all():
-            lines.append(
-                f"Animal: {ap.name} | Strain: {ap.strain} | "
-                f"Species: {ap.strain.species if ap.strain else 'N/A'} | "
-                f"Sex: {ap.sex} | Genotype: {ap.genotype} | Treatment: {ap.treatment}"
-            )
-
-    # # === FILES ===
-    # if files:
-    #     lines.append("<br>")
-    #     lines.append("================= 📂 FILES =================")
-    #     for f in files:
-    #         lines.append(f"File: {f.name}")
-    #         if f.format:
-    #             lines.append(f"Format: {f.format}")
-    #         if f.duration:
-    #             lines.append(f"Duration: {f.duration} s")
-    #         if f.sampling_rate:
-    #             lines.append(f"Sampling rate: {f.sampling_rate} Hz")
-    #         if f.bit_depth:
-    #             lines.append(f"Bit depth: {f.bit_depth}")
-    #         if f.link:
-    #             lines.append(f"Link: {f.link}")
-
-    # Join lines with <br> for Zenodo HTML
-    return "<br>".join(lines)
-
-
 def build_metadata_payload(recording_session, files):
     """
     Build the JSON payload for Zenodo metadata based on a recording session and its files.
     """
-    description = _build_session_description(recording_session, files)
     first_file = files[0]
 
     user = getattr(first_file, "created_by", None)
@@ -274,13 +166,44 @@ def build_metadata_payload(recording_session, files):
     metadata_payload = {
         "title": recording_session.name or "Untitled session",
         "upload_type": "dataset",
-        "description": description,
+        "description": description(recording_session, user),
+        "keywords": keywords(recording_session),
         "creators": creators,
         "communities": [{"identifier": "mousetube"}],
         "license": "CC-BY-NC-4.0",
     }
 
+    # the terms also go in the structured subjects, so that Zenodo can index them
+    subjects = [
+        {"term": t.label, "identifier": t.iri, "scheme": "url"}
+        for t in session_terms(recording_session)
+        if t.iri
+    ]
+    if subjects:
+        metadata_payload["subjects"] = subjects
+
     return metadata_payload
+
+
+def _new_version(record_id, auth):
+    """The draft of a new version of the published record `record_id`: it holds the files of
+    the version before, and takes the new ones."""
+    try:
+        r = requests.post(
+            f"{ZENODO_API}/deposit/depositions/{record_id}/actions/newversion",
+            headers=auth,
+            timeout=120,
+        )
+        r.raise_for_status()
+        draft = requests.get(
+            r.json()["links"]["latest_draft"], headers=auth, timeout=60
+        )
+        draft.raise_for_status()
+        return draft.json()["id"]
+    except requests.exceptions.RequestException as exc:
+        raise UploadError(
+            "A new version of the published record could not be made. " + explain(exc)
+        ) from exc
 
 
 def prepare_deposition_for_session(recording_session, new_file=None):
@@ -311,23 +234,25 @@ def prepare_deposition_for_session(recording_session, new_file=None):
         raise ValueError("No valid files found for this recording session.")
 
     # 🔹 parameters
-    params = {"access_token": ZENODO_TOKEN}
-    headers = {"Content-Type": "application/json"}
+    auth = _auth_headers()
+    headers = {**auth, "Content-Type": "application/json"}
 
+    failed = []  # (file name, reason for the user) of the files that did not reach Zenodo
     try:
         # 🔹 Check for existing deposition
         existing_file = next((f for f in files if f.repository and f.external_id), None)
+        latest = latest_version(recording_session)
         if existing_file:
-            deposition_id = existing_file.external_id
+            deposition_id = existing_file.external_id  # a draft already holds files
             repo = existing_file.repository
-            print(
-                f"ℹ️ Using existing {repo.name} repository with deposition ID {deposition_id}"
-            )
+        elif latest:
+            # the session is published: new files make a new version of its record
+            deposition_id = _new_version(latest.record_id, auth)
+            repo, _ = Repository.objects.get_or_create(name="Zenodo")
         else:
             # Create new zenodo repo
             r = requests.post(
                 ZENODO_API + "/deposit/depositions",
-                params=params,
                 json={},
                 headers=headers,
                 timeout=300,
@@ -337,34 +262,48 @@ def prepare_deposition_for_session(recording_session, new_file=None):
 
             repo, _ = Repository.objects.get_or_create(name="Zenodo")
 
-        # 🔹 Upload files
+        # 🔹 Upload files: streamed to the bucket of the deposition, never loaded in memory
+        r = requests.get(
+            f"{ZENODO_API}/deposit/depositions/{deposition_id}",
+            headers=auth,
+            timeout=60,
+        )
+        r.raise_for_status()
+        bucket = r.json()["links"]["bucket"]
+
         for file_instance in files:
             if file_instance.external_id == deposition_id:
                 continue  # already uploaded
 
-            local_path = link_to_local_path(file_instance)
+            try:
+                local_path = link_to_local_path(file_instance)
+            except ValueError:
+                local_path = ""
             if not os.path.exists(local_path) or os.path.getsize(local_path) == 0:
-                print(
-                    f"⚠️ Skipping file {file_instance.id}, not found or empty: {local_path}"
-                )
                 file_instance.status = "error"
                 file_instance.save(update_fields=["status"])
+                failed.append(
+                    (
+                        file_instance.name,
+                        "The file is no longer on the server or is empty. Upload it again.",
+                    )
+                )
                 continue
 
             filename = re.sub(r"[^a-zA-Z0-9._-]", "_", os.path.basename(local_path))
-            upload_url = f"{ZENODO_API + '/deposit/depositions'}/{deposition_id}/files"
-
             try:
-                with open(local_path, "rb") as file_obj:
-                    files_payload = {"file": (filename, file_obj)}
-                    r = requests.post(
-                        upload_url, params=params, files=files_payload, timeout=60
+                with ProgressReader(local_path, file_instance.id) as reader:
+                    r = requests.put(
+                        f"{bucket}/{quote(filename)}",
+                        data=reader,
+                        headers={**auth, "Content-Type": "application/octet-stream"},
+                        timeout=(30, 3600),
                     )
-                    r.raise_for_status()
-            except requests.exceptions.HTTPError as e:
-                print(f"❌ Failed to upload file {file_instance.id}: {e}")
+                r.raise_for_status()
+            except requests.exceptions.RequestException as e:
                 file_instance.status = "error"
                 file_instance.save(update_fields=["status"])
+                failed.append((file_instance.name, explain(e)))
                 continue
 
             # Update file after upload
@@ -375,16 +314,22 @@ def prepare_deposition_for_session(recording_session, new_file=None):
     finally:
         # 🔹 delete temporary files
         for file_instance in files:
-            local_path = link_to_local_path(file_instance)
-            if "/temp/" in local_path and os.path.exists(local_path):
+            try:
+                local_path = link_to_local_path(file_instance)
+            except ValueError:
+                continue
+            if is_temp_path(local_path) and os.path.exists(local_path):
                 os.remove(local_path)
+
+    if failed:
+        # the task must not end as "done" when a file did not arrive
+        raise UploadError(" ".join(f"{name}: {why}" for name, why in failed))
 
     # 🔹 update zenodo metadata
     metadata_payload = build_metadata_payload(recording_session, files)
 
     r = requests.put(
         f"{ZENODO_API + '/deposit/depositions'}/{deposition_id}",
-        params=params,
         data=json.dumps({"metadata": metadata_payload}),
         headers=headers,
         timeout=300,
@@ -407,12 +352,12 @@ def delete_file(file_instance):
     if not filename:
         raise ValueError(f"File {file_instance.id} has no name to delete on Zenodo.")
 
-    params = {"access_token": ZENODO_TOKEN}
-    headers = {"Content-Type": "application/json"}
+    auth = _auth_headers()
+    headers = {**auth, "Content-Type": "application/json"}
 
     # 🔹 List files
     list_url = f"{ZENODO_API}/deposit/depositions/{deposition_id}/files"
-    r = requests.get(list_url, params=params, headers=headers, timeout=30)
+    r = requests.get(list_url, headers=headers, timeout=30)
     r.raise_for_status()
 
     files = r.json()
@@ -425,7 +370,7 @@ def delete_file(file_instance):
     delete_url = (
         f"{ZENODO_API}/deposit/depositions/{deposition_id}/files/{target['id']}"
     )
-    r = requests.delete(delete_url, params=params, timeout=30)
+    r = requests.delete(delete_url, headers=auth, timeout=30)
     if r.status_code not in (200, 204):
         raise ValueError(f"Zenodo deletion failed: {r.status_code} {r.text}")
 
@@ -439,19 +384,21 @@ def publish_deposition(recording_session, payload=None):
     Updates only files without a manually set DOI/link.
     """
     files = File.objects.filter(recording_session=recording_session)
-    first_file_with_id = files.filter(external_id__isnull=False).first()
+    # the files sent by mouseTube and not published yet (the others have their DOI already)
+    first_file_with_id = files.filter(
+        Q(doi__isnull=True) | Q(doi=""), external_id__isnull=False
+    ).first()
     if not first_file_with_id:
-        raise ValueError("No Zenodo deposition_id found for this file/session.")
+        raise UploadError("No file of this session was sent to the repository yet.")
     deposition_id = first_file_with_id.external_id
 
-    params = {"access_token": ZENODO_TOKEN}
+    auth = _auth_headers()
 
     # Update metadata if provided
     if payload:
-        headers = {"Content-Type": "application/json"}
+        headers = {**auth, "Content-Type": "application/json"}
         r = requests.put(
             f"{ZENODO_API}/deposit/depositions/{deposition_id}",
-            params=params,
             data=json.dumps({"metadata": payload}),
             headers=headers,
             timeout=60,
@@ -462,19 +409,33 @@ def publish_deposition(recording_session, payload=None):
     try:
         r = requests.post(
             f"{ZENODO_API}/deposit/depositions/{deposition_id}/actions/publish",
-            params=params,
+            headers=auth,
             timeout=60,
         )
         r.raise_for_status()
-    except requests.HTTPError as e:
-        content = getattr(e.response, "text", str(e))
-        raise ValueError(f"Zenodo publish failed: {content}")
+    except requests.RequestException as e:
+        raise UploadError(f"Publishing failed. {explain(e)}") from e
 
     zenodo_doi = r.json().get("doi")
     if not zenodo_doi:
-        raise ValueError("Zenodo did not return a DOI after publishing.")
+        raise UploadError("The repository did not return a DOI. Try again later.")
 
     base_url = ZENODO_API.split("/api")[0]
+
+    # the record has one more version, with its own DOI; the DOI of the whole stays the same
+    last = latest_version(recording_session)
+    PublicationVersion.objects.create(
+        recording_session=recording_session,
+        number=(last.number if last else 0) + 1,
+        doi=zenodo_doi,
+        record_id=str(deposition_id),
+        url=f"{base_url}/records/{deposition_id}",
+    )
+    RecordingSession.objects.filter(pk=recording_session.pk).update(
+        concept_doi=r.json().get("conceptdoi") or recording_session.concept_doi,
+        zenodo_state="synced",
+        zenodo_message="",
+    )
 
     # Update files from session
     for f in files:
@@ -484,9 +445,53 @@ def publish_deposition(recording_session, payload=None):
             f.link = f"{base_url}/records/{deposition_id}/files/{f.name}?download=1"
             f.external_url = f"{base_url}/records/{deposition_id}"
             f.save(update_fields=["doi", "link", "external_url"])
-        elif f.doi and f.link:
-            if not f.link.startswith(base_url):
-                # Remove repository link if DOI/link point elsewhere
-                f.repository = None
-                f.save(update_fields=["repository"])
+        elif f.doi and f.link and not f.link.startswith(base_url):
+            # Remove repository link if DOI/link point elsewhere
+            f.repository = None
+            f.save(update_fields=["repository"])
     return zenodo_doi
+
+
+def update_published_metadata(recording_session):
+    """Make the published record say what the session says now (no new version, same DOI):
+    unlock it, change its metadata, publish it again."""
+    last = latest_version(recording_session)
+    if not last:
+        raise UploadError("This session has no published record to update.")
+    files = list(
+        File.objects.filter(recording_session=recording_session).order_by("id")
+    )
+    if not files:
+        raise UploadError("This session has no file.")
+    auth = _auth_headers()
+    headers = {**auth, "Content-Type": "application/json"}
+    payload = build_metadata_payload(recording_session, files)
+    deposit = f"{ZENODO_API}/deposit/depositions/{last.record_id}"
+    try:
+        r = requests.post(f"{deposit}/actions/edit", headers=auth, timeout=60)
+        if r.status_code >= 400 and r.status_code not in (400, 409):
+            r.raise_for_status()  # 400 / 409: it is already open for edition
+        r = requests.put(
+            deposit,
+            data=json.dumps({"metadata": payload}),
+            headers=headers,
+            timeout=120,
+        )
+        r.raise_for_status()
+        r = requests.post(f"{deposit}/actions/publish", headers=auth, timeout=120)
+        r.raise_for_status()
+    except requests.RequestException as exc:
+        raise UploadError(f"The record could not be updated. {explain(exc)}") from exc
+
+    # the draft of the next version, if files wait for it, tells the same
+    waiting = next((f.external_id for f in files if f.external_id and not f.doi), None)
+    if waiting:
+        try:
+            requests.put(
+                f"{ZENODO_API}/deposit/depositions/{waiting}",
+                data=json.dumps({"metadata": payload}),
+                headers=headers,
+                timeout=120,
+            )
+        except requests.RequestException:
+            pass  # it is rebuilt from the session when the version is published
