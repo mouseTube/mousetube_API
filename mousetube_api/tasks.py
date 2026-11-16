@@ -234,23 +234,60 @@ def publish_session_deposition(self, recording_session_id, repository_id, payloa
     return {"message": f"✅ Session {rs.id} published with DOI {doi}.", "progress": 100}
 
 
-@shared_task(bind=True)
+def _transient(exc):
+    """True when Zenodo may simply be busy or unreachable: trying again later can work."""
+    import requests
+
+    cause = exc.__cause__ if isinstance(exc, UploadError) else exc
+    if isinstance(cause, (requests.ConnectionError, requests.Timeout)):
+        return True
+    response = getattr(cause, "response", None)
+    return response is not None and (
+        response.status_code >= 500 or response.status_code == 429
+    )
+
+
+@shared_task(bind=True, max_retries=4)
 def update_published_record(self, recording_session_id):
-    """The published record follows the edits of its session (description, keywords...)."""
+    """The published record follows the edits of its session (description, keywords...).
+
+    One update at a time per record: two edits in a row would otherwise unlock and publish
+    the same record at once. The session is read once the lock is held, so the last update
+    tells the last edit. A busy or unreachable repository is retried with a growing delay.
+    """
+    import time
+
+    from django.core.cache import cache
+
     from mousetube_api.utils.zenodo import update_published_metadata
 
-    session = RecordingSession.objects.get(id=recording_session_id)
+    lock = f"update-published-record:{recording_session_id}"
+    for _ in range(12):  # wait up to a minute for the update that is running
+        if cache.add(lock, "1", timeout=600):
+            break
+        time.sleep(5)
+    else:
+        raise self.retry(countdown=30)
+
     try:
+        session = RecordingSession.objects.get(id=recording_session_id)
         update_published_metadata(session)
         RecordingSession.objects.filter(id=session.id).update(
             zenodo_state="synced", zenodo_message=""
         )
     except Exception as exc:
-        logger.exception("Update of the record of session %s failed", session.id)
-        RecordingSession.objects.filter(id=session.id).update(
+        logger.exception(
+            "Update of the record of session %s failed", recording_session_id
+        )
+        if _transient(exc) and self.request.retries < self.max_retries:
+            # still "pending" for the user: it is tried again
+            raise self.retry(exc=exc, countdown=min(60 * 2**self.request.retries, 900))
+        RecordingSession.objects.filter(id=recording_session_id).update(
             zenodo_state="failed", zenodo_message=explain(exc)[:500]
         )
         raise
+    finally:
+        cache.delete(lock)
 
 
 @shared_task

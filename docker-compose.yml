@@ -48,6 +48,8 @@ services:
       - ../mousetube_frontend/.env
     environment:
       - NPM_CONFIG_CACHE=/app/.npm
+      # the development server only runs when DEBUG is explicitly true (same DEBUG as the API)
+      - DEBUG=${DEBUG:-true}
     restart: unless-stopped
 
   celery:

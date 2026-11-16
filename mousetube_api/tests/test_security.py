@@ -3254,6 +3254,71 @@ class PublishedSessionKeepsLivingTests(FreshCache, TestCase):
         self.session.refresh_from_db()
         self.assertEqual(self.session.zenodo_state, "synced")
 
+    def test_a_busy_repository_is_tried_again_and_the_state_stays_pending(self):
+        from unittest import mock
+
+        import requests
+        from celery.exceptions import Retry
+
+        from mousetube_api.tasks import update_published_record
+        from mousetube_api.utils.file_handler import UploadError
+
+        RecordingSession.objects.filter(pk=self.session.pk).update(
+            zenodo_state="pending"
+        )
+        busy = UploadError("The record could not be updated.")
+        busy.__cause__ = requests.ConnectionError("down")
+        with (
+            mock.patch(
+                "mousetube_api.utils.zenodo.update_published_metadata", side_effect=busy
+            ),
+            mock.patch.object(update_published_record, "retry", side_effect=Retry()),
+            self.assertRaises(Retry),
+        ):
+            update_published_record(self.session.pk)
+        self.session.refresh_from_db()
+        self.assertEqual(self.session.zenodo_state, "pending")
+
+    def test_a_refused_update_is_failed_at_once_and_not_retried(self):
+        from unittest import mock
+
+        from mousetube_api.tasks import update_published_record
+        from mousetube_api.utils.file_handler import UploadError
+
+        with (
+            mock.patch(
+                "mousetube_api.utils.zenodo.update_published_metadata",
+                side_effect=UploadError("This session has no file."),
+            ),
+            mock.patch.object(update_published_record, "retry") as retry,
+            self.assertRaises(UploadError),
+        ):
+            update_published_record(self.session.pk)
+        retry.assert_not_called()
+        self.session.refresh_from_db()
+        self.assertEqual(self.session.zenodo_state, "failed")
+
+    def test_two_updates_of_the_same_record_do_not_run_at_the_same_time(self):
+        from unittest import mock
+
+        from django.core.cache import cache
+
+        from mousetube_api.tasks import update_published_record
+
+        lock = f"update-published-record:{self.session.pk}"
+        cache.set(lock, "1", 600)  # an update is running
+
+        def finished(_seconds):
+            cache.delete(lock)  # ... and ends while the second one waits
+
+        zenodo = FakeZenodo()
+        with zenodo.patch(), mock.patch("time.sleep", side_effect=finished) as sleep:
+            update_published_record(self.session.pk)
+        sleep.assert_called_once()
+        self.session.refresh_from_db()
+        self.assertEqual(self.session.zenodo_state, "synced")
+        self.assertIsNone(cache.get(lock))  # released at the end
+
     def test_a_file_added_after_publication_goes_in_a_new_version(self):
         import os
 
