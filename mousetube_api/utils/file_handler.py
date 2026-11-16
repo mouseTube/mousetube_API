@@ -1,4 +1,6 @@
 import os
+import shutil
+import tempfile
 import time
 import urllib.parse
 
@@ -71,6 +73,57 @@ def purge_temp_files(max_age=TEMP_MAX_AGE):
         except OSError:
             continue
     return removed
+
+
+UPLOADS_IN_FLIGHT = "uploads-in-flight"
+
+
+def _same_disk(a, b):
+    try:
+        return os.stat(a).st_dev == os.stat(b).st_dev
+    except OSError:
+        return False
+
+
+def upload_room(in_flight=0):
+    """Largest upload the server can take right now, in bytes (0 when it is full).
+
+    The ceiling is MAX_UPLOAD_SIZE, lowered to what the disk holds: an upload exists twice for a
+    moment (Django's temporary copy, then media/temp) when both are on the same disk, the uploads
+    being received (`in_flight` bytes) are counted, and UPLOAD_FREE_SPACE_RESERVE stays free.
+    """
+    from django.conf import settings
+
+    media = settings.MEDIA_ROOT
+    os.makedirs(media, exist_ok=True)
+    scratch = tempfile.gettempdir()
+    reserve = settings.UPLOAD_FREE_SPACE_RESERVE
+    free = shutil.disk_usage(media).free
+    if _same_disk(media, scratch):
+        room = (free - reserve) // 2 - in_flight
+    else:
+        room = min(free, shutil.disk_usage(scratch).free) - reserve - in_flight
+    return max(0, min(settings.MAX_UPLOAD_SIZE, room))
+
+
+def reserve_upload(size):
+    """Count an upload that starts; returns what the others already being received weigh."""
+    from django.core.cache import cache
+
+    cache.add(
+        UPLOADS_IN_FLIGHT, 0, timeout=3600
+    )  # a crashed worker cannot leave it stuck
+    return int(cache.incr(UPLOADS_IN_FLIGHT, size)) - size
+
+
+def release_upload(size):
+    from django.core.cache import cache
+
+    try:
+        if int(cache.decr(UPLOADS_IN_FLIGHT, size)) < 0:
+            cache.set(UPLOADS_IN_FLIGHT, 0, timeout=3600)
+    except ValueError:  # the counter expired meanwhile
+        pass
 
 
 class UploadError(Exception):

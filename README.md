@@ -57,6 +57,8 @@ The settings read `.env` at the root of the project, then `/etc/mousetube/mouset
 | `ZENODO_API`, `ZENODO_TOKEN` | to publish | sandbox URL, empty | The token is sent as a Bearer header, never in a URL. |
 | `CLIENT_ID`, `CLIENT_SECRET` | for ORCID login | empty | ORCID OAuth application. |
 | `REQUIRE_INSTITUTIONAL_EMAIL` | no | `true` | Registration is refused for personal addresses (Gmail, Outlook...), see `mousetube_api/utils/email_domains.py`. Set `false` in local development if you only have a personal address. |
+| `MAX_UPLOAD_SIZE` | no | `5368709120` (5 GiB) | Ceiling of one uploaded file, in bytes. Keep nginx `client_max_body_size` at least as large. |
+| `UPLOAD_FREE_SPACE_RESERVE` | no | `1073741824` (1 GiB) | Free disk space an upload always leaves. What a file may weigh at a given moment is the lower of `MAX_UPLOAD_SIZE` and what the disk holds (halved when the temporary copy and `media/` share a disk, minus the uploads being received and this reserve): `GET /api/file/upload-limit/` gives it, and the file form checks it before sending. |
 | `ORCID_BASE_DOMAIN` | no | `orcid.org` | Use `sandbox.orcid.org` with a sandbox application. |
 | `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_USER`, `EMAIL_PASSWORD`, `EMAIL_USE_TLS` | **yes in production** | no `EMAIL_HOST` = e-mails are printed in the logs | SMTP server. Needed for the confirmation e-mails below. |
 | `DEFAULT_ADMIN_EMAIL`, `DEFAULT_FROM_EMAIL` | yes in production | `mousetube@igbmc.fr`, `no-reply@mousetube.com` | The admin address receives the account requests. |

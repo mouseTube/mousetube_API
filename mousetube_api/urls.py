@@ -72,6 +72,7 @@ from .views import (
     personal_email_domains,
     repository_metadata_payload,
     repository_metadata_schema,
+    upload_limit,
 )
 
 router = DefaultRouter()
@@ -133,6 +134,7 @@ urlpatterns = [
     path("api/file/", FileAPIView.as_view(), name="file"),
     path("api/file/<int:file_id>/status/", file_task_status, name="file-status"),
     path("api/file/upload_async/", FileUploadAsyncView.as_view(), name="file-upload"),
+    path("api/file/upload-limit/", upload_limit, name="file-upload-limit"),
     path(
         "api/file/publish_session/",
         PublishSessionView.as_view(),

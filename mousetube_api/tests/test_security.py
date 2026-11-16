@@ -2121,6 +2121,73 @@ class UploadCleanupTests(FreshCache, TestCase):
         self.assertEqual(self._upload().status_code, 413)
         self.assertEqual(self._stored(), [])
 
+    def test_the_limit_follows_the_free_space_of_the_disk_minus_the_reserve(self):
+        from collections import namedtuple
+        from unittest import mock
+
+        from mousetube_api.utils.file_handler import upload_room
+
+        usage = namedtuple("usage", "total used free")
+        gib = 1024**3
+        # media and the scratch directory share a disk: an upload exists twice for a moment
+        with (
+            override_settings(MAX_UPLOAD_SIZE=50 * gib, UPLOAD_FREE_SPACE_RESERVE=gib),
+            mock.patch("shutil.disk_usage", return_value=usage(0, 0, 11 * gib)),
+            mock.patch(
+                "mousetube_api.utils.file_handler._same_disk", return_value=True
+            ),
+        ):
+            self.assertEqual(upload_room(), 5 * gib)  # (11 - 1) / 2
+            self.assertEqual(upload_room(in_flight=2 * gib), 3 * gib)
+            self.assertEqual(upload_room(in_flight=9 * gib), 0)
+        with (
+            override_settings(MAX_UPLOAD_SIZE=4 * gib, UPLOAD_FREE_SPACE_RESERVE=gib),
+            mock.patch("shutil.disk_usage", return_value=usage(0, 0, 100 * gib)),
+        ):
+            self.assertEqual(upload_room(), 4 * gib)  # the ceiling still applies
+
+    def test_a_file_the_disk_cannot_hold_is_refused_before_the_body_is_read(self):
+        from unittest import mock
+
+        with mock.patch("mousetube_api.views.upload_room", return_value=1000):
+            response = self.client.post(
+                "/api/file/upload_async/",
+                {"file": ""},
+                format="multipart",
+                CONTENT_LENGTH="5000",
+            )
+        self.assertEqual(response.status_code, 413)
+        self.assertIn("room", response.json()["error"])
+        self.assertEqual(response.json()["limit"], 1000)
+        self.assertEqual(self._stored(), [])
+
+    def test_the_uploads_being_received_are_counted_and_released(self):
+        from django.core.cache import cache
+
+        from mousetube_api.utils.file_handler import (
+            UPLOADS_IN_FLIGHT,
+            release_upload,
+            reserve_upload,
+        )
+
+        self.assertEqual(reserve_upload(300), 0)
+        self.assertEqual(reserve_upload(200), 300)  # the first one is counted
+        release_upload(300)
+        release_upload(200)
+        self.assertEqual(cache.get(UPLOADS_IN_FLIGHT), 0)
+        self.assertEqual(self._upload().status_code, 200)
+        self.assertEqual(
+            cache.get(UPLOADS_IN_FLIGHT), 0
+        )  # released after a request too
+
+    def test_the_form_can_read_the_limit_before_sending(self):
+        response = self.client.get("/api/file/upload-limit/")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(sorted(response.json()), ["free", "limit", "max", "reserve"])
+        self.assertLessEqual(response.json()["limit"], response.json()["max"])
+        anonymous = APIClient().get("/api/file/upload-limit/")
+        self.assertEqual(anonymous.status_code, 401)
+
     def test_unsupported_type_is_refused_and_nothing_is_stored(self):
         self.assertEqual(self._upload("virus.exe").status_code, 400)
         self.assertEqual(self._stored(), [])

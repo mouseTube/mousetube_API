@@ -10,6 +10,7 @@ Code under GPL v3.0 licence
 import hashlib
 import json
 import os
+import shutil
 import uuid
 
 import django_filters
@@ -71,7 +72,10 @@ from mousetube_api.utils.file_handler import (
     UploadError,
     get_progress,
     purge_temp_files,
+    release_upload,
     remove_temp,
+    reserve_upload,
+    upload_room,
 )
 from mousetube_api.utils.moderation import (
     SESSION_LOCKED,
@@ -1500,20 +1504,38 @@ class FileUploadAsyncView(APIView):
             return [IsAuthenticated()]
         return [AllowAny()]
 
+    @staticmethod
+    def _too_large(room):
+        if room < settings.MAX_UPLOAD_SIZE:
+            message = (
+                "The server does not have the room for a file this large right now: "
+                f"{room // 1024**2} MB at most. Try again later, or ask an administrator."
+            )
+        else:
+            message = f"File too large: the limit is {settings.MAX_UPLOAD_SIZE // 1024**2} MB."
+        return Response(
+            {"error": message, "limit": room},
+            status=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+        )
+
     def post(self, request):
+        # the declared size is known before the body is read: refuse now what the disk cannot
+        # hold, so nothing is received for nothing
+        declared = int(request.META.get("CONTENT_LENGTH") or 0)
+        reserved = reserve_upload(declared)
+        try:
+            return self._store(request, declared, upload_room(reserved))
+        finally:
+            release_upload(declared)
+
+    def _store(self, request, declared, room):
+        if declared > room:
+            return self._too_large(room)
         uploaded_file = request.FILES.get("file")
         if not uploaded_file:
             return Response({"error": "No file provided"}, status=400)
-
-        # refuse now what the processing would refuse later, so nothing useless is stored
-        if uploaded_file.size > settings.MAX_UPLOAD_SIZE:
-            return Response(
-                {
-                    "error": f"File too large: the limit is "
-                    f"{settings.MAX_UPLOAD_SIZE // 1024**2} MB."
-                },
-                status=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            )
+        if uploaded_file.size > room:
+            return self._too_large(room)
         extension = os.path.splitext(uploaded_file.name)[1].lstrip(".").upper()
         if extension not in {choice[0].upper() for choice in File.FORMAT_CHOICES}:
             return Response(
@@ -1538,6 +1560,23 @@ class FileUploadAsyncView(APIView):
             )
 
         return Response({"temp_path": f"/media/temp/{safe_name}"})
+
+
+@extend_schema(exclude=True)
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def upload_limit(request):
+    """What a file may weigh right now: the form checks it before sending anything."""
+    media = settings.MEDIA_ROOT
+    os.makedirs(media, exist_ok=True)
+    return Response(
+        {
+            "limit": upload_room(),
+            "max": settings.MAX_UPLOAD_SIZE,
+            "free": shutil.disk_usage(media).free,
+            "reserve": settings.UPLOAD_FREE_SPACE_RESERVE,
+        }
+    )
 
 
 # ----------------------------

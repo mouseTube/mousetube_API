@@ -388,6 +388,9 @@ ZENODO_TOKEN = env("ZENODO_TOKEN", default="")
 # Files are streamed to the repository, so this only has to fit the disk and the repository
 # (Zenodo accepts 50 GB per record).
 MAX_UPLOAD_SIZE = env.int("MAX_UPLOAD_SIZE", default=5 * 1024**3)
+# Free disk space that an upload must always leave (bytes): the limit of an upload is the lower of
+# MAX_UPLOAD_SIZE and what the disk can hold right now minus this reserve.
+UPLOAD_FREE_SPACE_RESERVE = env.int("UPLOAD_FREE_SPACE_RESERVE", default=1024**3)
 
 LOGS_DIR = Path(BASE_DIR) / "logs"
 LOGS_DIR.mkdir(exist_ok=True)
