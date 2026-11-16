@@ -51,7 +51,7 @@ The settings read `.env` at the root of the project, then `/etc/mousetube/mouset
 | `DB_SSL`, `DB_SSL_CA`, `DB_SSL_CERT`, `DB_SSL_KEY` | no | `False` | |
 | `CELERY_BROKER_URL` | yes | `redis://127.0.0.1:6379/0` | Redis, see step 4. |
 | `CACHE_URL` | no | same Redis server, db `1` | Shared cache used by the rate limits. |
-| `DRF_NUM_PROXIES` | **yes behind proxies** | `0` | Number of reverse proxies in front of Django (HAProxy + nginx = `2`). With `0` every visitor shares the proxy's IP, so the login limit (10/min) applies to the whole site. Check that your proxy sets `X-Forwarded-For`. |
+| `DRF_NUM_PROXIES` | **yes behind proxies** | `0` | Number of reverse proxies in front of Django (HAProxy + nginx = `2`). With `0` every visitor shares the proxy's IP, so the login limit (10/min) applies to the whole site (the container warns at start when it is `0` outside debug). Check that your proxy sets `X-Forwarded-For`. |
 | `SECURE_HSTS_SECONDS` | no | `31536000` | Only applied when `DEBUG` is false. |
 | `USE_X_FORWARDED_HOST` | no | `false` | |
 | `ZENODO_API`, `ZENODO_TOKEN` | to publish | sandbox URL, empty | The token is sent as a Bearer header, never in a URL. |
@@ -253,11 +253,15 @@ A published session keeps living (the record in the repository is the one of its
   unlocked, updated and published again with the same DOI. The state is shown on the session
   (`zenodo_state`: up to date, in progress, waiting, failed). If the edit makes it use entries
   nobody validated yet, the update waits for their validation (`blocked`) and runs by itself when
-  an administrator validates them, so the public never reads about an unvalidated entry
+  an administrator validates them, so the public never reads about an unvalidated entry. Two edits
+  in a row never update the record at the same time (one update per session, the next one waits),
+  and a repository that is unreachable or answers 5xx/429 is tried again with a growing delay
+  (the state stays `pending`; a refusal is `failed` at once)
 - the author can **add files**: they go to the draft of a **new version** of the record (the
   draft holds the files of the version before); *Publish a new version* publishes it. Each
   version has its own DOI (`PublicationVersion`), the DOI of the whole is `concept_doi`;
-  a file of a published version cannot be removed, a file waiting for the next version can
+  a file of a published version cannot be removed, by anyone (administrators included: the
+  repository would refuse), a file waiting for the next version can
 - it only works for records that mouseTube published itself: a session imported with the DOI of
   a record made elsewhere has no version to follow
 
