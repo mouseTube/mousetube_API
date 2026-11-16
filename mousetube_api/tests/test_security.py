@@ -821,9 +821,21 @@ PNG = (
 
 
 class _Response:
+    """What requests.get(stream=True) gives: a context manager that yields its body in chunks."""
+
     def __init__(self, status=200, content_type="image/png", content=PNG):
         self.status_code, self.content = status, content
         self.headers = {"content-type": content_type}
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def iter_content(self, chunk_size=1):
+        for i in range(0, len(self.content), chunk_size):
+            yield self.content[i : i + chunk_size]
 
 
 @override_settings(CACHES=LOCMEM)
@@ -3344,6 +3356,55 @@ class PublishedSessionKeepsLivingTests(FreshCache, TestCase):
             self.client.delete(f"/api/file/{waiting.pk}/").status_code, 204
         )
 
+    def test_an_administrator_cannot_remove_a_file_of_a_published_version_either(self):
+        admin = APIClient()
+        admin.force_authenticate(self.admin)
+        self.assertEqual(
+            admin.delete(f"/api/file/{self.old_file.pk}/").status_code, 409
+        )
+
+    def test_only_the_creator_or_an_administrator_follows_the_processing_of_a_file(
+        self,
+    ):
+        from mousetube_api.models import File
+
+        waiting = File.objects.create(
+            name="x.csv",
+            recording_session=self.session,
+            repository=self.repository,
+            status="processing",
+            celery_task_id="abc",
+            created_by=self.owner,
+        )
+        other = APIClient()
+        other.force_authenticate(
+            get_user_model().objects.create_user("peek", "p@igbmc.fr", "x")
+        )
+        url = f"/api/file/{waiting.pk}/status/"
+        self.assertEqual(other.get(url).status_code, 403)
+        self.assertEqual(self.client.get(url).status_code, 200)
+        admin = APIClient()
+        admin.force_authenticate(self.admin)
+        self.assertEqual(admin.get(url).status_code, 200)
+
+    def test_an_administrator_can_create_validated_hardware_and_a_user_cannot(self):
+        data = {"name": "mic", "type": "microphone", "status": "validated"}
+        user_answer = self.client.post("/api/hardware/", data, format="json")
+        self.assertEqual(user_answer.status_code, 400, user_answer.content)
+        admin = APIClient()
+        admin.force_authenticate(self.admin)
+        admin_answer = admin.post("/api/hardware/", data, format="json")
+        self.assertEqual(admin_answer.status_code, 201, admin_answer.content)
+
+    def test_the_default_repository_is_zenodo_by_name_not_the_smallest_id(self):
+        from mousetube_api.utils.repository import default_repository
+
+        Repository.objects.all().delete()
+        first = Repository.objects.create(name="Another")
+        self.assertEqual(default_repository(), first)
+        zenodo = Repository.objects.create(name="zenodo")
+        self.assertEqual(default_repository(), zenodo)
+
     def test_the_first_publication_is_version_one_with_the_doi_of_the_whole(self):
         from unittest import mock
 
@@ -3378,3 +3439,57 @@ class PublishedSessionKeepsLivingTests(FreshCache, TestCase):
             [(1, "77")],
         )
         self.assertEqual(fresh.concept_doi, "10.5072/zenodo.1")
+
+
+class ImageDownloadTests(TestCase):
+    """The images of an import are read in chunks and dropped when too big or not images."""
+
+    def _answer(
+        self, content_type="image/png", length=None, chunks=(b"abc",), status=200
+    ):
+        from unittest import mock
+
+        response = mock.MagicMock()
+        response.status_code = status
+        response.headers = {"content-type": content_type}
+        if length is not None:
+            response.headers["content-length"] = str(length)
+        response.iter_content.return_value = iter(chunks)
+        response.__enter__.return_value = response
+        return mock.patch("requests.get", return_value=response), response
+
+    def test_a_small_image_is_returned(self):
+        from mousetube_api.utils.dataset_metadata import _download_image
+
+        patcher, _ = self._answer(chunks=(b"ab", b"cd"))
+        with patcher:
+            self.assertEqual(_download_image("http://x/y.png"), b"abcd")
+
+    def test_a_big_image_is_refused_before_it_is_read(self):
+        from mousetube_api.utils.dataset_metadata import (
+            MAX_IMAGE_BYTES,
+            _download_image,
+        )
+
+        patcher, response = self._answer(length=MAX_IMAGE_BYTES + 1)
+        with patcher:
+            self.assertIsNone(_download_image("http://x/y.png"))
+        response.iter_content.assert_not_called()
+
+    def test_an_answer_that_grows_past_the_limit_is_dropped(self):
+        from mousetube_api.utils.dataset_metadata import (
+            MAX_IMAGE_BYTES,
+            _download_image,
+        )
+
+        big = b"x" * (MAX_IMAGE_BYTES // 2 + 1)
+        patcher, _ = self._answer(chunks=(big, big))
+        with patcher:
+            self.assertIsNone(_download_image("http://x/y.png"))
+
+    def test_something_that_is_not_an_image_is_refused(self):
+        from mousetube_api.utils.dataset_metadata import _download_image
+
+        patcher, _ = self._answer(content_type="text/html")
+        with patcher:
+            self.assertIsNone(_download_image("http://x/y.png"))

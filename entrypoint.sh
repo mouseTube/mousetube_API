@@ -34,10 +34,16 @@ if [ -z "$DB_NAME" ] || [ -z "$DB_USER" ] || [ -z "$DB_PASSWORD" ]; then
     exit 1
 fi
 
-if [ "$RESET_DB" = "true" ] && [ "$(echo "$DEBUG" | tr '[:upper:]' '[:lower:]')" = "false" ]; then
-    echo "❌ RESET_DB=true is refused when DEBUG=false (it would drop the production database)."
-    exit 1
-fi
+# DEBUG unset counts as false for Django: RESET_DB is only allowed when DEBUG is explicitly true
+case "$(echo "$DEBUG" | tr '[:upper:]' '[:lower:]')" in
+    true|1|yes|on) ;;
+    *)
+        if [ "$RESET_DB" = "true" ]; then
+            echo "❌ RESET_DB=true is refused unless DEBUG=true (it would drop the production database)."
+            exit 1
+        fi
+        ;;
+esac
 
 if [ "$RESET_DB" = "true" ]; then
     echo "🚀 RESET_DB=true → Recreating the database..."
@@ -54,6 +60,15 @@ else
     mariadb -h db -u root -p"$DB_ROOT_PASS" -e "CREATE USER IF NOT EXISTS '$DB_USER'@'localhost' IDENTIFIED BY '$DB_PASSWORD';"
     mariadb -h db -u root -p"$DB_ROOT_PASS" -e "GRANT ALL PRIVILEGES ON $DB_NAME.* TO '$DB_USER'@'localhost'; FLUSH PRIVILEGES;"
 fi
+
+case "$(echo "$DEBUG" | tr '[:upper:]' '[:lower:]')" in
+    true|1|yes|on) ;;
+    *)
+        if [ "${DRF_NUM_PROXIES:-0}" = "0" ]; then
+            echo "⚠️  DRF_NUM_PROXIES is 0: behind a reverse proxy (nginx, HAProxy) every visitor has the same address for Django, so the rate limits apply to the whole site. Set it to the number of proxies."
+        fi
+        ;;
+esac
 
 echo "🛠️ Running makemigrations..."
 python3 manage.py makemigrations mousetube_api --noinput

@@ -85,3 +85,13 @@ def publish_repository_deposition(repository, recording_session, payload=None):
             f"Repository '{repository.name}' does not implement 'publish_deposition'"
         )
     return func(recording_session, payload)
+
+
+def default_repository():
+    """Zenodo when it exists, else the first repository, else None (the frontend does the same)."""
+    from mousetube_api.models import Repository
+
+    return (
+        Repository.objects.filter(name__iexact="zenodo").first()
+        or Repository.objects.order_by("pk").first()
+    )

@@ -16,6 +16,7 @@ from mousetube_api.utils.file_handler import (
     set_progress,
 )
 from mousetube_api.utils.repository import (
+    default_repository,
     delete_repository_file,
     prepare_repository_deposition_for_session,
     publish_repository_deposition,
@@ -104,10 +105,13 @@ def process_file(self, file_id, repository_id):
     if not repository_id and file_instance.repository_id:
         repository_id = file_instance.repository_id
 
-    if not repository_id:
-        repository_id = 1
-
-    repository = Repository.objects.get(id=repository_id)
+    repository = (
+        Repository.objects.get(id=repository_id)
+        if repository_id
+        else default_repository()
+    )
+    if repository is None:
+        raise ValueError("No repository is configured.")
 
     try:
         file_instance.status = "processing"

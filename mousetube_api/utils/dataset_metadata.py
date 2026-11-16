@@ -302,6 +302,30 @@ def _datetime(value):
 MAX_IMAGE_BYTES = 20 * 1024 * 1024
 
 
+def _download_image(url):
+    """The bytes of an image of at most MAX_IMAGE_BYTES, or None.
+
+    The answer is read in chunks and dropped as soon as it is too big or not an image:
+    a huge file is never held in memory.
+    """
+    try:
+        with requests.get(url, timeout=60, stream=True) as response:
+            if response.status_code != 200:
+                return None
+            if not response.headers.get("content-type", "").startswith("image/"):
+                return None
+            if int(response.headers.get("content-length") or 0) > MAX_IMAGE_BYTES:
+                return None
+            data = bytearray()
+            for chunk in response.iter_content(chunk_size=64 * 1024):
+                data += chunk
+                if len(data) > MAX_IMAGE_BYTES:
+                    return None
+            return bytes(data)
+    except (requests.RequestException, ValueError):
+        return None
+
+
 class DatasetImporter:
     def __init__(self, created_by=None, images_from=None):
         self.created_by = created_by
@@ -582,18 +606,12 @@ class DatasetImporter:
                 self.stats.add("Image", False)
                 continue
             url = self.images_from.rstrip("/") + "/" + path.lstrip("/")
-            try:
-                response = requests.get(url, timeout=60)
-            except requests.RequestException:
-                self.stats.add("Image (failed)", True)
-                continue
-            is_image = response.headers.get("content-type", "").startswith("image/")
-            too_big = len(response.content) > MAX_IMAGE_BYTES
-            if response.status_code != 200 or not is_image or too_big:
+            content = _download_image(url)
+            if content is None:
                 self.stats.add("Image (failed)", True)
                 continue
             getattr(f, field).save(
-                os.path.basename(path), ContentFile(response.content), save=True
+                os.path.basename(path), ContentFile(content), save=True
             )
             self.stats.add("Image", True)
 

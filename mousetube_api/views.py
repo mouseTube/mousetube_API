@@ -81,6 +81,7 @@ from mousetube_api.utils.moderation import (
 from mousetube_api.utils.orcid_proof import read_orcid_proof
 from mousetube_api.utils.repository import (
     build_repository_metadata_payload,
+    default_repository,
     get_repository_metadata_schema,
 )
 
@@ -544,7 +545,7 @@ class ReferenceAPIView(GenericAPIView):
         return paginator.get_paginated_response(serializer.data)
 
     def post(self, request, *args, **kwargs):
-        serializer = self.serializer_class(data=request.data)
+        serializer = self.get_serializer(data=request.data)  # with the request context
         if serializer.is_valid():
             serializer.save(created_by=request.user)
             return Response(serializer.data, status=status.HTTP_201_CREATED)
@@ -777,11 +778,11 @@ class HardwareAPIView(GenericAPIView):
         return paginator.get_paginated_response(serializer.data)
 
     def post(self, request, *args, **kwargs):
-        serializer = self.serializer_class(data=request.data)
+        serializer = self.get_serializer(data=request.data)  # with the request context
         if serializer.is_valid():
             hardware = serializer.save(created_by=request.user)
             return Response(
-                self.serializer_class(hardware).data, status=status.HTTP_201_CREATED
+                self.get_serializer(hardware).data, status=status.HTTP_201_CREATED
             )
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -1413,10 +1414,7 @@ class FileAPIView(GenericAPIView):
 
         if not file.repository:
             # Zenodo is the default repository; any repository is better than none
-            default_repo = (
-                Repository.objects.filter(name__iexact="zenodo").first()
-                or Repository.objects.order_by("pk").first()
-            )
+            default_repo = default_repository()
             if default_repo is None:
                 file.delete()
                 return Response(
@@ -1457,6 +1455,11 @@ class FileAPIView(GenericAPIView):
 @permission_classes([IsAuthenticated])
 def file_task_status(request, file_id):
     file = get_object_or_404(File, id=file_id)
+    if not can_change(request.user, file):
+        return Response(
+            {"detail": "Only the creator of a file can follow its processing."},
+            status=status.HTTP_403_FORBIDDEN,
+        )
 
     if not file.celery_task_id:
         return Response({"error": "No task associated"}, status=404)
@@ -1703,7 +1706,6 @@ class FileDetailAPIView(GenericAPIView):
             and file.external_id
             and session is not None
             and session.publication_versions.exists()
-            and not request.user.is_staff
         ):
             return Response(
                 {
