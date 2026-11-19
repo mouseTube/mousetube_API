@@ -22,6 +22,7 @@ from rest_framework.exceptions import AuthenticationFailed, PermissionDenied
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
 from mousetube_api.utils.email_domains import is_personal_email
+from mousetube_api.utils.dataset_metadata import visible_sessions
 from mousetube_api.utils.moderation import (
     SESSION_FROZEN,
     VALIDATED,
@@ -1314,12 +1315,12 @@ class DatasetSerializer(serializers.ModelSerializer):
     def get_recording_sessions(self, obj):
         return [
             {"id": rs.id, "name": rs.name}
-            for rs in obj.recording_session_list.order_by("name")
+            for rs in self._sessions(obj).order_by("name")
         ]
 
     def get_files(self, obj):
         files_qs = (
-            File.objects.filter(recording_session__in=obj.recording_session_list.all())
+            File.objects.filter(recording_session__in=self._sessions(obj))
             .select_related("recording_session__protocol")
             .prefetch_related("recording_session__animal_profiles")
         )
@@ -1366,6 +1367,10 @@ class FavoriteSerializer(serializers.ModelSerializer):
             )
         except ContentType.DoesNotExist:
             raise serializers.ValidationError(
+    def _sessions(self, obj):
+        request = self.context.get("request")
+        return visible_sessions(obj, getattr(request, "user", None))
+
                 f"ContentType '{model_name}' does not exist."
             )
 

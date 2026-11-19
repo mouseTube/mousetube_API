@@ -2323,7 +2323,8 @@ class DatasetViewSet(viewsets.ModelViewSet):
         return Response(
             {
                 "datasets": [
-                    build_dataset_metadata(d)["dataset"] for d in self.get_queryset()
+                    build_dataset_metadata(d, request.user)["dataset"]
+                    for d in self.get_queryset()
                 ]
             }
         )
@@ -2334,7 +2335,7 @@ class DatasetViewSet(viewsets.ModelViewSet):
     )
     def metadata(self, request, pk=None):
         """Metadata JSON of one dataset: sessions, protocols, animals, equipment, files."""
-        return Response(build_dataset_metadata(self.get_object()))
+        return Response(build_dataset_metadata(self.get_object(), request.user))
 
     @extend_schema(exclude=True)
     @action(

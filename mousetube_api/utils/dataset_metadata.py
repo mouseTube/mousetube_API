@@ -35,6 +35,7 @@ from mousetube_api.models import (
     Study,
     Subject,
 )
+from mousetube_api.utils.moderation import SESSION_PUBLIC
 from mousetube_api.utils.ontologies import term_ref
 
 HARDWARE_FIELDS = {
@@ -227,18 +228,29 @@ def _session(rs):
     return data
 
 
-def build_dataset_metadata(dataset):
-    sessions = dataset.recording_session_list.select_related(
-        "protocol", "laboratory"
-    ).prefetch_related(
-        "studies",
-        "animal_profiles__strain__species",
-        "equipment_acquisition_software__software__references",
-        "equipment_acquisition_hardware_soundcards__references",
-        "equipment_acquisition_hardware_speakers__references",
-        "equipment_acquisition_hardware_amplifiers__references",
-        "equipment_acquisition_hardware_microphones__references",
-        "references",
+def visible_sessions(dataset, user):
+    """The sessions of a dataset that `user` may see: visitors only see the shared and published
+    ones (a draft put in a dataset by an administrator stays private until it is shared)."""
+    sessions = dataset.recording_session_list.all()
+    if user is not None and user.is_staff:
+        return sessions
+    return sessions.filter(status__in=SESSION_PUBLIC)
+
+
+def build_dataset_metadata(dataset, user):
+    sessions = (
+        visible_sessions(dataset, user)
+        .select_related("protocol", "laboratory")
+        .prefetch_related(
+            "studies",
+            "animal_profiles__strain__species",
+            "equipment_acquisition_software__software__references",
+            "equipment_acquisition_hardware_soundcards__references",
+            "equipment_acquisition_hardware_speakers__references",
+            "equipment_acquisition_hardware_amplifiers__references",
+            "equipment_acquisition_hardware_microphones__references",
+            "references",
+        )
     )
     return {
         "dataset": {

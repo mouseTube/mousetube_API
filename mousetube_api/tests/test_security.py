@@ -3722,3 +3722,87 @@ class AppVersionTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), {"version": written})
         self.assertEqual(settings.SPECTACULAR_SETTINGS["VERSION"], written)
+class DatasetSessionsTests(FreshCache, TestCase):
+    """An administrator adds sessions to a dataset and takes them out: the recordings stay."""
+
+    def setUp(self):
+        super().setUp()
+        from mousetube_api.models import Dataset, File
+
+        User = get_user_model()
+        self.admin = User.objects.create_user("boss", "b@igbmc.fr", "x", is_staff=True)
+        self.user = User.objects.create_user("user", "u@igbmc.fr", "x")
+        self.keep = RecordingSession.objects.create(
+            name="kept", is_multiple=True, status="shared", created_by=self.user
+        )
+        self.new = RecordingSession.objects.create(
+            name="new one", is_multiple=True, status="shared", created_by=self.user
+        )
+        self.draft = RecordingSession.objects.create(
+            name="a draft", is_multiple=True, status="draft", created_by=self.user
+        )
+        for session in (self.keep, self.new, self.draft):
+            File.objects.create(
+                name=f"{session.name}.wav",
+                recording_session=session,
+                created_by=self.user,
+            )
+        self.dataset = Dataset.objects.create(name="D", created_by=self.admin)
+        self.dataset.recording_session_list.add(self.keep)
+        self.url = f"/api/dataset/{self.dataset.id}/"
+
+    def _names(self, client):
+        body = client.get(self.url).json()
+        return sorted(f["name"] for f in body["files"])
+
+    def test_sessions_are_added_then_removed_and_the_recordings_stay(self):
+        from mousetube_api.models import File
+
+        client = APIClient()
+        client.force_authenticate(self.admin)
+        ids = [self.keep.id, self.new.id]
+        self.assertEqual(
+            client.patch(
+                self.url, {"recording_session_ids": ids}, format="json"
+            ).status_code,
+            200,
+        )
+        self.assertEqual(self._names(APIClient()), ["kept.wav", "new one.wav"])
+        client.patch(self.url, {"recording_session_ids": [self.keep.id]}, format="json")
+        self.assertEqual(self._names(APIClient()), ["kept.wav"])
+        self.assertTrue(File.objects.filter(name="new one.wav").exists())
+        self.assertTrue(RecordingSession.objects.filter(pk=self.new.pk).exists())
+
+    def test_only_an_administrator_changes_the_sessions(self):
+        client = APIClient()
+        client.force_authenticate(self.user)
+        response = client.patch(
+            self.url, {"recording_session_ids": [self.new.id]}, format="json"
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_only_an_administrator_deletes_a_dataset_and_the_recordings_stay(self):
+        from mousetube_api.models import Dataset, File
+
+        stranger = APIClient()
+        stranger.force_authenticate(self.user)
+        self.assertEqual(stranger.delete(self.url).status_code, 403)
+        self.assertEqual(APIClient().delete(self.url).status_code, 401)
+        self.assertTrue(Dataset.objects.filter(pk=self.dataset.pk).exists())
+        admin = APIClient()
+        admin.force_authenticate(self.admin)
+        self.assertEqual(admin.delete(self.url).status_code, 204)
+        self.assertFalse(Dataset.objects.filter(pk=self.dataset.pk).exists())
+        self.assertTrue(RecordingSession.objects.filter(pk=self.keep.pk).exists())
+        self.assertTrue(File.objects.filter(name="kept.wav").exists())
+
+    def test_the_files_of_a_draft_session_are_not_shown_to_the_public(self):
+        client = APIClient()
+        client.force_authenticate(self.admin)
+        client.patch(
+            self.url, {"recording_session_ids": [self.draft.id]}, format="json"
+        )
+        self.assertEqual(self._names(APIClient()), [])
+
+
+@override_settings(CACHES=LOCMEM, ZENODO_TOKEN="t")
