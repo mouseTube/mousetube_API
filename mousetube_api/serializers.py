@@ -21,8 +21,9 @@ from rest_framework import serializers
 from rest_framework.exceptions import AuthenticationFailed, PermissionDenied
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
-from mousetube_api.utils.email_domains import is_personal_email
+from mousetube_api.utils import usv
 from mousetube_api.utils.dataset_metadata import visible_sessions
+from mousetube_api.utils.email_domains import is_personal_email
 from mousetube_api.utils.moderation import (
     SESSION_FROZEN,
     VALIDATED,
@@ -67,6 +68,7 @@ from .models import (
     Study,
     Subject,
     UserProfile,
+    UsvDetection,
 )
 
 
@@ -1188,6 +1190,57 @@ class StudySerializer(ModerationMixin, serializers.ModelSerializer):
         return data
 
 
+class FileImagesSerializer(serializers.Serializer):
+    spectrogram = serializers.ImageField(
+        required=False
+    )  # Pillow checks it is a picture
+    plot = serializers.ImageField(required=False)
+
+    def validate(self, attrs):
+        for name, image in attrs.items():
+            if image.size > 10 * 1024 * 1024:
+                raise serializers.ValidationError({name: "The image is over 10 MB."})
+        return attrs
+
+
+class UsvDetectionSerializer(serializers.ModelSerializer):
+    """What a detector found in a file, without the calls (they are read on demand)."""
+
+    label = serializers.SerializerMethodField()
+    color = serializers.SerializerMethodField()
+    citation = serializers.SerializerMethodField()
+
+    class Meta:
+        model = UsvDetection
+        fields = (
+            "id",
+            "tool",
+            "label",
+            "color",
+            "tool_version",
+            "parameters",
+            "reference",
+            "citation",
+            "summary",
+            "source",
+            "deposit",
+        )
+
+    def get_label(self, obj):
+        return usv.TOOLS.get(obj.tool, {}).get("label", obj.tool)
+
+    def get_color(self, obj):
+        return usv.TOOLS.get(obj.tool, {}).get("color", "#555555")
+
+    def get_citation(self, obj):
+        return usv.TOOLS.get(obj.tool, {}).get("citation", "")
+
+
+class UsvDetectionCallsSerializer(UsvDetectionSerializer):
+    class Meta(UsvDetectionSerializer.Meta):
+        fields = UsvDetectionSerializer.Meta.fields + ("calls",)
+
+
 class FileSerializer(serializers.ModelSerializer):
     repository_id = serializers.PrimaryKeyRelatedField(
         source="repository",
@@ -1205,6 +1258,7 @@ class FileSerializer(serializers.ModelSerializer):
     recording_session = RecordingSessionSerializer(required=False)
     subjects = SubjectSerializer(many=True, required=False)
     created_by = CustomUserSerializer(read_only=True)
+    usv_detections = UsvDetectionSerializer(many=True, read_only=True)
 
     class Meta:
         model = File
@@ -1238,6 +1292,7 @@ class FileNestedSerializer(serializers.ModelSerializer):
             "doi",
             "plot_url",
             "spectrogram_url",
+            "deposit_images",
             "status",
             "downloads",
             "session",
@@ -1312,6 +1367,10 @@ class DatasetSerializer(serializers.ModelSerializer):
             "recording_session_ids",
         ]
 
+    def _sessions(self, obj):
+        request = self.context.get("request")
+        return visible_sessions(obj, getattr(request, "user", None))
+
     def get_recording_sessions(self, obj):
         return [
             {"id": rs.id, "name": rs.name}
@@ -1367,10 +1426,6 @@ class FavoriteSerializer(serializers.ModelSerializer):
             )
         except ContentType.DoesNotExist:
             raise serializers.ValidationError(
-    def _sessions(self, obj):
-        request = self.context.get("request")
-        return visible_sessions(obj, getattr(request, "user", None))
-
                 f"ContentType '{model_name}' does not exist."
             )
 

@@ -378,6 +378,54 @@ def delete_file(file_instance):
     return True
 
 
+def extra_files(file_instance):
+    """What the author chose to send along with a file: (name in the record, path on the disk).
+
+    The tables of the detection tools and the images are optional, and each is sent only when its
+    box was ticked. They are named like the file, so the record shows which belongs to which."""
+    stem = re.sub(r"[^a-zA-Z0-9._-]", "_", os.path.splitext(file_instance.name)[0])
+    extras = []
+    for detection in file_instance.usv_detections.filter(deposit=True).exclude(
+        original=""
+    ):
+        extension = os.path.splitext(detection.original.name)[1]
+        extras.append((f"{stem}_{detection.tool}{extension}", detection.original.path))
+    if file_instance.deposit_images:
+        for field in ("spectrogram", "plot"):
+            image = getattr(file_instance, field)
+            if image:
+                extension = os.path.splitext(image.name)[1]
+                extras.append((f"{stem}_{field}{extension}", image.path))
+    return extras
+
+
+def upload_extras(deposition_id, files):
+    """Put the optional tables and images of `files` in the draft, before it is published."""
+    extras = [extra for f in files for extra in extra_files(f)]
+    if not extras:
+        return
+    auth = _auth_headers()
+    r = requests.get(
+        f"{ZENODO_API}/deposit/depositions/{deposition_id}", headers=auth, timeout=60
+    )
+    r.raise_for_status()
+    bucket = r.json()["links"]["bucket"]
+    for name, path in extras:
+        if not os.path.exists(path):
+            raise UploadError(f"{name}: the file is no longer on the server.")
+        try:
+            with open(path, "rb") as handle:  # the same name again replaces the file
+                r = requests.put(
+                    f"{bucket}/{quote(name)}",
+                    data=handle,
+                    headers={**auth, "Content-Type": "application/octet-stream"},
+                    timeout=(30, 600),
+                )
+            r.raise_for_status()
+        except requests.exceptions.RequestException as e:
+            raise UploadError(f"{name}: {explain(e)}") from e
+
+
 def publish_deposition(recording_session, payload=None):
     """
     Publish an existing Zenodo deposition (make it public).
@@ -404,6 +452,9 @@ def publish_deposition(recording_session, payload=None):
             timeout=60,
         )
         r.raise_for_status()
+
+    # the tables and images the author chose to send, of the files of this deposit
+    upload_extras(deposition_id, files.filter(external_id=str(deposition_id)))
 
     # Publish deposition
     try:

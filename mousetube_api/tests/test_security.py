@@ -1,3 +1,4 @@
+import io
 import tempfile
 from types import SimpleNamespace
 
@@ -553,7 +554,6 @@ class OrcidLoginRedirectTests(TestCase):
         self.assertIn("/auth/callback#token=", url)
 
 
-# ----------------------------------------------------------------------------
 class OrcidNamesTests(TestCase):
     """A new person coming from ORCID gets their name in the registration form."""
 
@@ -634,6 +634,7 @@ class OrcidNamesTests(TestCase):
         self.assertEqual(query["first_name"], "Josiah")
 
 
+# ----------------------------------------------------------------------------
 # Datasets: import of the 0.5 metadata, public metadata route, admin-only form
 # ----------------------------------------------------------------------------
 @override_settings(CACHES=LOCMEM)
@@ -3707,21 +3708,399 @@ class ImageDownloadTests(TestCase):
             self.assertIsNone(_download_image("http://x/y.png"))
 
 
-class AppVersionTests(TestCase):
-    """The version shown in the footer comes from pyproject.toml, the only place it is written."""
+def _xlsx(header, rows):
+    """A minimal .xlsx (one sheet), built here so the test needs no spreadsheet package."""
+    import io
+    import zipfile
 
-    def test_the_version_route_gives_the_one_of_pyproject_to_everybody(self):
-        from pathlib import Path
+    strings = list(
+        dict.fromkeys([v for row in [header, *rows] for v in row if isinstance(v, str)])
+    )
+    cells = lambda values: "".join(
+        f'<c r="{chr(65 + i)}{{r}}" t="s"><v>{strings.index(v)}</v></c>'
+        if isinstance(v, str)
+        else f'<c r="{chr(65 + i)}{{r}}"><v>{v}</v></c>'
+        for i, v in enumerate(values)
+    )
+    body = "".join(
+        f'<row r="{n}">{cells(values).replace("{r}", str(n))}</row>'
+        for n, values in enumerate([header, *rows], start=1)
+    )
+    out = io.BytesIO()
+    with zipfile.ZipFile(out, "w") as book:
+        book.writestr(
+            "xl/sharedStrings.xml",
+            '<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+            + "".join(f"<si><t>{x}</t></si>" for x in strings)
+            + "</sst>",
+        )
+        book.writestr(
+            "xl/worksheets/sheet1.xml",
+            '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+            f"<sheetData>{body}</sheetData></worksheet>",
+        )
+    return out.getvalue()
 
-        import tomllib
-        from django.conf import settings
 
-        with open(Path(settings.BASE_DIR) / "pyproject.toml", "rb") as handle:
-            written = tomllib.load(handle)["project"]["version"]
-        response = APIClient().get("/api/version/")
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json(), {"version": written})
-        self.assertEqual(settings.SPECTACULAR_SETTINGS["VERSION"], written)
+class UsvDetectionTests(FreshCache, TestCase):
+    """Results of USV detectors are read as they come, kept with their tool, shown on demand."""
+
+    USVSEG = (
+        "#,start,end,duration,maxfreq,maxamp,meanfreq,cvfreq\n"
+        "1,0.09,0.093,3.0,nan,nan,nan,nan\n"
+        "2,0.63,0.66,31.5,54.8,-59.3,57.7,0.2\n"
+    )
+    DEEPSQUEAK = (
+        [
+            "ID",
+            "Label",
+            "Score",
+            "Begin Time (s)",
+            "End Time (s)",
+            "Call Length (s)",
+            "Principal Frequency (kHz)",
+            "Low Freq (kHz)",
+            "High Freq (kHz)",
+            "Peak Freq (kHz)",
+        ],
+        [
+            [2, "USV", 0.7, 0.81, 0.85, 0.036, 57.8, 52.0, 68.5, 65.3],
+            [1, "USV", 0.7, 0.63, 0.66, 0.028, 54.9, 51.2, 55.3, 55.3],
+        ],
+    )
+
+    def setUp(self):
+        super().setUp()
+        User = get_user_model()
+        self.owner = User.objects.create_user("owner", "o@igbmc.fr", "x")
+        self.session = RecordingSession.objects.create(
+            name="shared one", is_multiple=True, status="shared", created_by=self.owner
+        )
+        from mousetube_api.models import File
+
+        self.file = File.objects.create(
+            name="rec.wav", recording_session=self.session, created_by=self.owner
+        )
+
+    def test_usvseg_is_read_with_all_its_variables_and_nothing_for_nan(self):
+        from mousetube_api.utils import usv
+
+        calls = usv.parse("usvseg", self.USVSEG.encode())
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(calls[1]["start_s"], 0.63)
+        self.assertEqual(calls[1]["freq_peak_khz"], 54.8)  # maxfreq: the loudest point
+        self.assertIsNone(calls[0]["freq_peak_khz"])  # "nan" is nothing, not a number
+        self.assertEqual(
+            calls[1]["native"]["cvfreq"], 0.2
+        )  # what the tool gave is kept
+
+    def test_deepsqueak_is_read_from_the_spreadsheet_and_sorted_in_time(self):
+        from mousetube_api.utils import usv
+
+        calls = usv.parse("deepsqueak", _xlsx(*self.DEEPSQUEAK))
+        self.assertEqual([c["start_s"] for c in calls], [0.63, 0.81])
+        self.assertEqual(calls[0]["freq_min_khz"], 51.2)
+        self.assertEqual(calls[0]["freq_max_khz"], 55.3)
+        self.assertEqual(calls[0]["native"]["Label"], "USV")
+
+    def test_the_other_tools_are_read_with_their_own_units_and_separators(self):
+        from mousetube_api.utils import usv
+
+        avisoft = (
+            "#;duration;interval;start time;end time;peak freq(start);peak freq(max);"
+            "peak freq(minentire);peak freq(maxentire);peak freq(meanentire)\n"
+            "1;0,0056;_;37,6138;37,6194;18000;18500;16800;21400;18000\n"
+            "2;0,3944;2,1191;68,3112;68,7057;24100;23600;;24100;23600\n"
+        )
+        call = usv.parse("avisoft", avisoft.encode())[
+            0
+        ]  # decimal commas, frequencies in Hz
+        self.assertEqual((call["start_s"], call["end_s"]), (37.6138, 37.6194))
+        self.assertEqual((call["freq_min_khz"], call["freq_peak_khz"]), (16.8, 18.5))
+        self.assertIsNone(usv.parse("avisoft", avisoft.encode())[1]["freq_min_khz"])
+
+        sonotrack = (
+            "Start Time\tEnd Time\tDuration(ms)\tPF. Min\tPF. Max\tPF. Mean\tComments\n"
+            "000:01:06.373\t000:01:06.999\t626\t2930\t29297\t9288\tDetected\n"
+        )
+        call = usv.parse("sonotrack", sonotrack.encode())[0]  # hhh:mm:ss.mmm
+        self.assertEqual((call["start_s"], call["end_s"]), (66.373, 66.999))
+        self.assertEqual(call["freq_max_khz"], 29.297)
+        self.assertEqual(call["native"]["Comments"], "Detected")
+
+        ratrec = (
+            "No;Start [s];End [s];Minimum frequency [kHz];Maximum frequency [kHz];"
+            "Mean frequency [kHz];Type\n1;66,193;68,711;22,95;36,62;26,97; X \n"
+        )
+        call = usv.parse("ratrec", ratrec.encode())[0]
+        self.assertEqual((call["start_s"], call["freq_mean_khz"]), (66.193, 26.97))
+
+        toolbox = (
+            "Exp:;C:\\Users\\someone\\Documents\\rec.wav;;\n;;;\n"
+            "Voc number;startOffset(ms);duration(ms):;minFrequency(Hz);maxFrequency(Hz);"
+            "meanFrequency(Hz);peak Frequency(Hz)\n"
+            "0;66192.0;1673.5;26074.2;36621.1;28965.1;29003.9\n"
+        )
+        call = usv.parse("usvtoolbox", toolbox.encode())[
+            0
+        ]  # the start and length are in ms
+        self.assertEqual((call["start_s"], call["end_s"]), (66.192, 67.8655))
+        self.assertEqual(call["freq_peak_khz"], 29.0039)
+        self.assertNotIn("Users", str(call))  # the line before the table is not kept
+
+    def test_the_summary_says_how_many_how_often_and_how_long(self):
+        from mousetube_api.utils import usv
+
+        calls = usv.parse("deepsqueak", _xlsx(*self.DEEPSQUEAK))
+        summary = usv.summarize(calls)
+        self.assertEqual(summary["calls"], 2)
+        self.assertEqual(summary["span_s"], 0.85)
+        self.assertEqual(summary["freq_min_khz"], 51.2)
+        self.assertEqual(usv.summarize([]), {"calls": 0})
+
+    def _folder(self):
+        import os
+
+        folder = os.path.join(tempfile.mkdtemp(), "rec")
+        os.makedirs(folder)
+        with open(os.path.join(folder, "usvseg.csv"), "w") as out:
+            out.write(self.USVSEG)
+        with open(os.path.join(folder, "deepsqueak.xlsx"), "wb") as out:
+            out.write(_xlsx(*self.DEEPSQUEAK))
+        with open(os.path.join(folder, "parameters_analysis.csv"), "w") as out:
+            out.write(
+                "file;rec\nDeepSqueak 3.2.0;Mouse Detector YOLO R2\nUSVSeg;threshold 4.0 SD\n"
+            )
+        return os.path.dirname(folder)
+
+    def test_the_command_links_the_results_to_the_file_and_can_run_again(self):
+        from django.core.management import call_command
+
+        from mousetube_api.models import UsvDetection
+
+        root = self._folder()
+        call_command(
+            "import_usv_detections", dir=root, dry_run=True, stdout=io.StringIO()
+        )
+        self.assertEqual(UsvDetection.objects.count(), 0)
+        for _ in range(2):  # twice: nothing is duplicated
+            call_command("import_usv_detections", dir=root, stdout=io.StringIO())
+        found = {d.tool: d for d in UsvDetection.objects.filter(file=self.file)}
+        self.assertEqual(set(found), {"usvseg", "deepsqueak"})
+        self.assertEqual(found["deepsqueak"].tool_version, "3.2.0")
+        self.assertEqual(found["deepsqueak"].parameters, "Mouse Detector YOLO R2")
+        self.assertEqual(found["usvseg"].summary["calls"], 2)
+
+    def test_the_file_list_gives_the_summary_and_the_calls_come_on_demand(self):
+        from django.core.management import call_command
+
+        call_command("import_usv_detections", dir=self._folder(), stdout=io.StringIO())
+        listed = APIClient().get("/api/file/?search=rec.wav").json()["results"][0]
+        self.assertEqual(
+            {d["tool"] for d in listed["usv_detections"]}, {"usvseg", "deepsqueak"}
+        )
+        self.assertTrue(
+            all("calls" not in d for d in listed["usv_detections"])
+        )  # light list
+        colors = {d["color"] for d in listed["usv_detections"]}
+        self.assertEqual(len(colors), 2)  # each tool has its own colour
+        detail = APIClient().get(
+            f"/api/usv-detection/{listed['usv_detections'][0]['id']}/"
+        )
+        self.assertEqual(detail.status_code, 200)
+        self.assertGreaterEqual(len(detail.json()["calls"]), 2)
+        self.assertIn("citation", detail.json())
+
+    def test_the_calls_of_a_private_file_are_not_given_to_the_public(self):
+        from django.core.management import call_command
+
+        from mousetube_api.models import UsvDetection
+
+        call_command("import_usv_detections", dir=self._folder(), stdout=io.StringIO())
+        RecordingSession.objects.filter(pk=self.session.pk).update(status="draft")
+        detection = UsvDetection.objects.first()
+        url = f"/api/usv-detection/{detection.pk}/"
+        self.assertEqual(APIClient().get(url).status_code, 404)
+        owner = APIClient()
+        owner.force_authenticate(self.owner)
+        self.assertEqual(owner.get(url).status_code, 200)
+
+    # ---- results added by the author, with a preview before they are sent ----
+    def _upload(self, client, url, name, content, **data):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        return client.post(
+            url, {"file": SimpleUploadedFile(name, content), **data}, format="multipart"
+        )
+
+    def _as(self, user):
+        client = APIClient()
+        client.force_authenticate(user)
+        return client
+
+    def test_a_path_of_the_authors_computer_is_never_kept(self):
+        from mousetube_api.utils import usv
+
+        header = ["File", "ID", "Begin Time (s)", "End Time (s)"]
+        row = ["C:\\Users\\someone\\Detections\\rec 2025.mat", 1, 0.5, 0.6]
+        calls = usv.parse("deepsqueak", _xlsx(header, [row]))
+        self.assertEqual(calls[0]["native"]["File"], "rec 2025.mat")
+
+    def test_the_tools_that_can_be_added_are_listed_with_what_they_write(self):
+        tools = {
+            t["tool"]: t for t in APIClient().get("/api/usv-detection/tools/").json()
+        }
+        self.assertEqual(
+            set(tools),
+            {"usvseg", "deepsqueak", "avisoft", "sonotrack", "ratrec", "usvtoolbox"},
+        )
+        self.assertEqual(len({t["color"] for t in tools.values()}), 6)
+        self.assertIn(".xlsx", tools["deepsqueak"]["formats"])
+        self.assertTrue(tools["usvseg"]["reference"].startswith("10."))
+
+    def test_the_preview_reads_a_result_file_and_keeps_nothing(self):
+        from mousetube_api.models import UsvDetection
+
+        url = "/api/usv-detection/preview/"
+        response = self._upload(
+            self._as(self.owner), url, "u.csv", self.USVSEG.encode(), tool="usvseg"
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(response.json()["summary"]["calls"], 2)
+        self.assertEqual(len(response.json()["calls"]), 2)
+        self.assertEqual(UsvDetection.objects.count(), 0)  # a preview is not saved
+        anonymous = self._upload(
+            APIClient(), url, "u.csv", self.USVSEG.encode(), tool="usvseg"
+        )
+        self.assertEqual(anonymous.status_code, 401)
+
+    def test_the_preview_says_what_is_wrong_with_a_file(self):
+        url = "/api/usv-detection/preview/"
+        client = self._as(self.owner)
+        wrong_type = self._upload(client, url, "u.pdf", b"x", tool="usvseg")
+        self.assertEqual(wrong_type.status_code, 400)
+        self.assertIn("csv", wrong_type.json()["error"])
+        unreadable = self._upload(
+            client, url, "u.xlsx", b"not a spreadsheet", tool="deepsqueak"
+        )
+        self.assertEqual(unreadable.status_code, 400)
+        empty = self._upload(client, url, "u.csv", b"#,start,end\n", tool="usvseg")
+        self.assertEqual(empty.status_code, 400)
+        unknown = self._upload(client, url, "u.csv", b"x", tool="nothing")
+        self.assertEqual(unknown.status_code, 400)
+
+    def test_the_creator_of_a_file_adds_replaces_and_removes_results(self):
+        from mousetube_api.models import UsvDetection
+
+        url = f"/api/file/{self.file.pk}/usv-detections/"
+        stranger = self._as(
+            get_user_model().objects.create_user("x", "x@igbmc.fr", "x")
+        )
+        self.assertEqual(
+            self._upload(
+                stranger, url, "u.csv", self.USVSEG.encode(), tool="usvseg"
+            ).status_code,
+            403,
+        )
+        owner = self._as(self.owner)
+        first = self._upload(
+            owner, url, "u.csv", self.USVSEG.encode(), tool="usvseg", tool_version="1"
+        )
+        self.assertEqual(first.status_code, 201, first.content)
+        self._upload(
+            owner, url, "u.csv", self.USVSEG.encode(), tool="usvseg"
+        )  # replaces
+        self.assertEqual(UsvDetection.objects.filter(file=self.file).count(), 1)
+        self.assertEqual(UsvDetection.objects.get().source, "u.csv")
+        detail = f"/api/usv-detection/{UsvDetection.objects.get().pk}/"
+        self.assertEqual(stranger.delete(detail).status_code, 403)
+        self.assertEqual(owner.delete(detail).status_code, 204)
+        self.assertEqual(UsvDetection.objects.count(), 0)
+
+
+class FileImagesTests(FreshCache, TestCase):
+    """The spectrogram and the plot shown with a file in the datasets: administrators only."""
+
+    def setUp(self):
+        super().setUp()
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from PIL import Image
+
+        from mousetube_api.models import File
+
+        User = get_user_model()
+        self.owner = User.objects.create_user("owner", "o@igbmc.fr", "x")
+        self.admin = User.objects.create_user("boss", "b@igbmc.fr", "x", is_staff=True)
+        session = RecordingSession.objects.create(
+            name="s", is_multiple=True, status="shared", created_by=self.owner
+        )
+        self.file = File.objects.create(
+            name="rec.wav", recording_session=session, created_by=self.owner
+        )
+        self.media = tempfile.TemporaryDirectory()
+        self.addCleanup(self.media.cleanup)
+        buffer = io.BytesIO()
+        Image.new("RGB", (4, 4), "white").save(buffer, "PNG")
+        self.png = lambda name="a.png": SimpleUploadedFile(
+            name, buffer.getvalue(), "image/png"
+        )
+        self.url = f"/api/file/{self.file.id}/images/"
+
+    def _as(self, user):
+        client = APIClient()
+        client.force_authenticate(user)
+        return client
+
+    def test_only_an_administrator_sets_the_images_even_for_a_file_of_theirs(self):
+        with override_settings(MEDIA_ROOT=self.media.name):
+            for user in (self.owner, None):
+                client = self._as(user) if user else APIClient()
+                response = client.post(
+                    self.url, {"plot": self.png()}, format="multipart"
+                )
+                self.assertIn(response.status_code, (401, 403))
+            self.file.refresh_from_db()
+            self.assertFalse(self.file.plot)
+
+    def test_an_administrator_sets_replaces_and_removes_an_image(self):
+        with override_settings(MEDIA_ROOT=self.media.name):
+            client = self._as(self.admin)
+            first = client.post(
+                self.url, {"spectrogram": self.png("one.png")}, format="multipart"
+            )
+            self.assertEqual(first.status_code, 200)
+            self.assertTrue(first.json()["spectrogram_url"].endswith(".png"))
+            self.file.refresh_from_db()
+            old = self.file.spectrogram.path
+            client.post(
+                self.url, {"spectrogram": self.png("two.png")}, format="multipart"
+            )
+            self.file.refresh_from_db()
+            self.assertNotEqual(self.file.spectrogram.path, old)
+            import os
+
+            self.assertFalse(os.path.exists(old))  # the replaced picture is not kept
+            gone = client.delete(self.url + "?field=spectrogram")
+            self.assertEqual(gone.status_code, 204)
+            self.file.refresh_from_db()
+            self.assertFalse(self.file.spectrogram)
+
+    def test_something_that_is_not_a_picture_or_nothing_is_refused(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        with override_settings(MEDIA_ROOT=self.media.name):
+            client = self._as(self.admin)
+            fake = SimpleUploadedFile("x.png", b"not an image", "image/png")
+            self.assertEqual(
+                client.post(self.url, {"plot": fake}, format="multipart").status_code,
+                400,
+            )
+            self.assertEqual(
+                client.post(self.url, {}, format="multipart").status_code, 400
+            )
+            self.assertEqual(client.delete(self.url + "?field=name").status_code, 400)
+
+
 class DatasetSessionsTests(FreshCache, TestCase):
     """An administrator adds sessions to a dataset and takes them out: the recordings stay."""
 
@@ -3806,3 +4185,167 @@ class DatasetSessionsTests(FreshCache, TestCase):
 
 
 @override_settings(CACHES=LOCMEM, ZENODO_TOKEN="t")
+class OptionalDepositTests(FreshCache, TestCase):
+    """The tables of the detection tools and the images are sent to the repository only when asked."""
+
+    CSV = b"#,start,end,duration,maxfreq,maxamp,meanfreq,cvfreq\n1,0.1,0.2,100,60,-20,55,0.1\n"
+
+    def setUp(self):
+        super().setUp()
+        import os
+
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from PIL import Image
+
+        from mousetube_api.models import File
+
+        User = get_user_model()
+        self.owner = User.objects.create_user("owner", "o@igbmc.fr", "x")
+        self.admin = User.objects.create_user("boss", "b@igbmc.fr", "x", is_staff=True)
+        session = RecordingSession.objects.create(
+            name="s", is_multiple=True, status="shared", created_by=self.owner
+        )
+        self.file = File.objects.create(
+            name="my rec.wav",
+            recording_session=session,
+            external_id="7",
+            created_by=self.owner,
+        )
+        self.media = tempfile.TemporaryDirectory()
+        self.addCleanup(self.media.cleanup)
+        override = override_settings(MEDIA_ROOT=self.media.name)
+        override.enable()
+        self.addCleanup(override.disable)
+        self.os = os
+        buffer = io.BytesIO()
+        Image.new("RGB", (4, 4), "white").save(buffer, "PNG")
+        self.png = lambda: SimpleUploadedFile("p.png", buffer.getvalue(), "image/png")
+        self.owner_client = APIClient()
+        self.owner_client.force_authenticate(self.owner)
+        self.admin_client = APIClient()
+        self.admin_client.force_authenticate(self.admin)
+
+    def _attach(self, **extra):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        return self.owner_client.post(
+            f"/api/file/{self.file.id}/usv-detections/",
+            {
+                "tool": "usvseg",
+                "file": SimpleUploadedFile("u.csv", self.CSV, "text/csv"),
+                **extra,
+            },
+            format="multipart",
+        )
+
+    def test_a_table_is_kept_only_when_it_is_to_be_sent(self):
+        from mousetube_api.models import UsvDetection
+
+        self._attach()  # box not ticked
+        detection = UsvDetection.objects.get()
+        self.assertFalse(detection.deposit)
+        self.assertFalse(detection.original)
+        self.assertEqual(self.os.listdir(self.media.name), [])  # nothing written
+
+        self._attach(deposit="true")  # ticked: replaces the row
+        detection = UsvDetection.objects.get()
+        self.assertTrue(detection.deposit)
+        self.assertEqual(detection.original.read(), self.CSV)
+        kept = detection.original.path
+
+        self._attach()  # replaced again, unticked: the stored table goes
+        self.assertFalse(self.os.path.exists(kept))
+        self.assertFalse(UsvDetection.objects.get().deposit)
+
+    def test_the_stored_table_goes_with_its_row(self):
+        from mousetube_api.models import UsvDetection
+
+        self._attach(deposit="true")
+        kept = UsvDetection.objects.get().original.path
+        self.owner_client.delete(f"/api/usv-detection/{UsvDetection.objects.get().id}/")
+        self.assertFalse(self.os.path.exists(kept))
+
+    def test_the_images_box_alone_is_saved_by_an_administrator_only(self):
+        url = f"/api/file/{self.file.id}/images/"
+        response = self.admin_client.post(
+            url, {"deposit_images": "true"}, format="multipart"
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["deposit_images"])
+        self.file.refresh_from_db()
+        self.assertTrue(self.file.deposit_images)
+        self.admin_client.post(url, {"deposit_images": "false"}, format="multipart")
+        self.file.refresh_from_db()
+        self.assertFalse(self.file.deposit_images)
+        self.assertEqual(
+            self.owner_client.post(
+                url, {"deposit_images": "true"}, format="multipart"
+            ).status_code,
+            403,
+        )
+
+    def test_only_what_was_ticked_goes_to_the_repository_with_the_file_name(self):
+        from mousetube_api.models import File
+        from mousetube_api.utils import zenodo
+
+        self._attach(deposit="true")
+        self.admin_client.post(
+            f"/api/file/{self.file.id}/images/",
+            {"spectrogram": self.png()},
+            format="multipart",
+        )  # an image, but its box is not ticked
+        fake = FakeZenodo()
+        with fake.patch():
+            zenodo.upload_extras("7", File.objects.filter(pk=self.file.pk))
+        sent = [u.rsplit("/", 1)[-1] for u in fake.urls("PUT")]
+        self.assertEqual(sent, ["my_rec_usvseg.csv"])  # the table only
+
+        self.admin_client.post(
+            f"/api/file/{self.file.id}/images/",
+            {"deposit_images": "true"},
+            format="multipart",
+        )
+        fake = FakeZenodo()
+        with fake.patch():
+            zenodo.upload_extras("7", File.objects.filter(pk=self.file.pk))
+        sent = sorted(u.rsplit("/", 1)[-1] for u in fake.urls("PUT"))
+        self.assertEqual(sent, ["my_rec_spectrogram.png", "my_rec_usvseg.csv"])
+
+    def test_nothing_is_asked_of_the_repository_when_nothing_was_ticked(self):
+        from mousetube_api.models import File
+        from mousetube_api.utils import zenodo
+
+        self._attach()
+        fake = FakeZenodo()
+        with fake.patch():
+            zenodo.upload_extras("7", File.objects.filter(pk=self.file.pk))
+        self.assertEqual(fake.calls, [])
+
+    def test_the_ticked_table_is_put_in_the_draft_before_it_is_published(self):
+        from mousetube_api.utils import zenodo
+
+        self._attach(deposit="true")
+        fake = FakeZenodo()
+        with fake.patch():
+            zenodo.publish_deposition(self.file.recording_session)
+        steps = [
+            (m, u.rsplit("/", 1)[-1]) for m, u, _ in fake.calls if m in ("PUT", "POST")
+        ]
+        self.assertEqual(steps, [("PUT", "my_rec_usvseg.csv"), ("POST", "publish")])
+
+
+class AppVersionTests(TestCase):
+    """The version shown in the footer comes from pyproject.toml, the only place it is written."""
+
+    def test_the_version_route_gives_the_one_of_pyproject_to_everybody(self):
+        from pathlib import Path
+
+        import tomllib
+        from django.conf import settings
+
+        with open(Path(settings.BASE_DIR) / "pyproject.toml", "rb") as handle:
+            written = tomllib.load(handle)["project"]["version"]
+        response = APIClient().get("/api/version/")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"version": written})
+        self.assertEqual(settings.SPECTACULAR_SETTINGS["VERSION"], written)

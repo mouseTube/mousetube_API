@@ -68,12 +68,17 @@ from .views import (
     UserProfileDetailAPIView,
     UserProfileListAPIView,
     app_version,
+    file_images,
     file_task_status,
+    file_usv_detections,
     get_task_status,
     personal_email_domains,
     repository_metadata_payload,
     repository_metadata_schema,
     upload_limit,
+    usv_detection_detail,
+    usv_detection_preview,
+    usv_tools,
 )
 
 router = DefaultRouter()
@@ -136,12 +141,21 @@ urlpatterns = [
     path("api/file/<int:file_id>/status/", file_task_status, name="file-status"),
     path("api/file/upload_async/", FileUploadAsyncView.as_view(), name="file-upload"),
     path("api/file/upload-limit/", upload_limit, name="file-upload-limit"),
+    path("api/version/", app_version, name="app-version"),
+    path("api/usv-detection/tools/", usv_tools, name="usv-tools"),
+    path("api/usv-detection/preview/", usv_detection_preview, name="usv-preview"),
+    path("api/usv-detection/<int:pk>/", usv_detection_detail, name="usv-detection"),
+    path("api/file/<int:file_id>/images/", file_images, name="file-images"),
+    path(
+        "api/file/<int:file_id>/usv-detections/",
+        file_usv_detections,
+        name="file-usv-detections",
+    ),
     path(
         "api/file/publish_session/",
         PublishSessionView.as_view(),
         name="publish-session",
     ),
-    path("api/version/", app_version, name="app-version"),
     path("api/recording-session/get_task_status", get_task_status, name="file-status"),
     path("api/hardware/", HardwareAPIView.as_view(), name="hardware"),
     path(

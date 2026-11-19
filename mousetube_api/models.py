@@ -1224,6 +1224,10 @@ class File(models.Model):
     )
     spectrogram = models.ImageField(blank=True, null=True)
     plot = models.ImageField(blank=True, null=True)
+    deposit_images = models.BooleanField(
+        default=False,
+        help_text="Send the spectrogram and the plot to the repository with the record.",
+    )
     doi = models.CharField(max_length=255, blank=True, null=True)
     number = models.IntegerField(blank=True, null=True)
     is_valid_link = models.BooleanField(default=False)
@@ -1271,6 +1275,60 @@ class File(models.Model):
     class Meta:
         verbose_name = "File"
         verbose_name_plural = "Files"
+
+
+class UsvDetection(models.Model):
+    """The calls that a detection tool found in a file, as the authors of the file exported them.
+
+    One row per file and tool, kept with the version and the settings of the tool: detectors do not
+    agree, so people choose the one they trust. Each call has the same few columns whatever the tool
+    (start, end, frequencies) and all the variables the tool gave, untouched, in `native`.
+    """
+
+    file = models.ForeignKey(
+        File, on_delete=models.CASCADE, related_name="usv_detections"
+    )
+    tool = models.CharField(max_length=32, help_text="usvseg, deepsqueak...")
+    tool_version = models.CharField(max_length=64, blank=True, default="")
+    parameters = models.TextField(
+        blank=True, default="", help_text="Settings of the run."
+    )
+    reference = models.CharField(
+        max_length=255,
+        blank=True,
+        default="",
+        help_text="Publication of the tool (DOI).",
+    )
+    calls = models.JSONField(default=list)
+    summary = models.JSONField(default=dict)
+    source = models.CharField(
+        max_length=500, blank=True, default="", help_text="Where the results come from."
+    )
+    deposit = models.BooleanField(
+        default=False,
+        help_text="Send the table of the author to the repository with the record.",
+    )
+    original = models.FileField(
+        upload_to="usv_results/",
+        blank=True,
+        default="",
+        help_text="The table as the author gave it: kept only when it is to be sent.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="usv_detections",
+    )
+
+    class Meta:
+        unique_together = ("file", "tool")
+        ordering = ("tool",)
+
+    def __str__(self):
+        return f"{self.tool} on {self.file_id}"
 
 
 class Dataset(models.Model):

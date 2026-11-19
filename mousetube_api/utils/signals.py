@@ -3,7 +3,7 @@ from django.core.exceptions import ObjectDoesNotExist
 from django.db.models.signals import post_delete, post_save
 from django.dispatch import receiver
 
-from mousetube_api.models import Software, SoftwareVersion, UserProfile
+from mousetube_api.models import Software, SoftwareVersion, UserProfile, UsvDetection
 
 User = get_user_model()
 
@@ -33,3 +33,10 @@ def delete_software_if_no_versions(sender, instance, **kwargs):
 
     if not software.versions.exists():
         software.delete()
+
+
+@receiver(post_delete, sender=UsvDetection)
+def delete_stored_table(sender, instance, **kwargs):
+    """The table kept to be sent to the repository goes with its row (no orphan on the disk)."""
+    if instance.original:
+        instance.original.delete(save=False)

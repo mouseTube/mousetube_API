@@ -9,6 +9,7 @@ Code under GPL v3.0 licence
 
 import hashlib
 import json
+import ntpath
 import os
 import shutil
 import uuid
@@ -20,6 +21,7 @@ from django.conf import settings
 from django.contrib.contenttypes.models import ContentType
 from django.core import signing
 from django.core.cache import cache
+from django.core.files.base import ContentFile
 from django.db.models import (
     BooleanField,
     Case,
@@ -29,6 +31,7 @@ from django.db.models import (
     IntegerField,
     Max,
     OuterRef,
+    Prefetch,
     Q,
     Sum,
     Value,
@@ -65,7 +68,7 @@ from mousetube_api.tasks import (
     process_file,
     publish_session_deposition,
 )
-from mousetube_api.utils import ontologies
+from mousetube_api.utils import ontologies, usv
 from mousetube_api.utils.dataset_metadata import build_dataset_metadata
 from mousetube_api.utils.email_domains import PERSONAL_EMAIL_DOMAINS
 from mousetube_api.utils.file_handler import (
@@ -110,12 +113,15 @@ from .models import (
     Study,
     Subject,
     UserProfile,
+    UsvDetection,
 )
 from .serializers import (
     AnimalProfileSerializer,
     ContactSerializer,
     DatasetSerializer,
     FavoriteSerializer,
+    FileImagesSerializer,
+    FileNestedSerializer,
     FileSerializer,
     HardwareSerializer,
     LaboratorySerializer,
@@ -132,6 +138,8 @@ from .serializers import (
     SubjectSerializer,
     TrackPageSerializer,
     UserProfileSerializer,
+    UsvDetectionCallsSerializer,
+    UsvDetectionSerializer,
 )
 
 
@@ -1180,6 +1188,165 @@ def visible_files(user):
     return files.filter(visible)
 
 
+def _is_true(value):
+    """A checkbox sent in a form: "true", "on" or 1 (unchecked, or not sent, is false)."""
+    return str(value).strip().lower() in ("1", "true", "on")
+
+
+def _detection_payload(tool, calls, filename):
+    return {
+        "tool": tool,
+        "label": usv.TOOLS[tool]["label"],
+        "citation": usv.TOOLS[tool]["citation"],
+        "reference": usv.TOOLS[tool]["reference"],
+        "summary": usv.summarize(calls),
+        "source": filename,
+        "calls": calls,
+    }
+
+
+@extend_schema(exclude=True)
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def usv_tools(request):
+    """The detectors whose results can be added, with what they write and where they come from."""
+    return Response(
+        [
+            {
+                "tool": key,
+                "label": value["label"],
+                "color": value["color"],
+                "formats": value["formats"],
+                "help": value["help"],
+                "citation": value["citation"],
+                "reference": value["reference"],
+            }
+            for key, value in usv.TOOLS.items()
+        ]
+    )
+
+
+@extend_schema(exclude=True)
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def usv_detection_preview(request):
+    """Read a result file and say what it holds, without keeping anything: the form shows it
+    before the file is sent."""
+    upload = request.FILES.get("file")
+    if upload is None:
+        return Response({"error": "No file provided."}, status=400)
+    try:
+        calls = usv.read_result(
+            request.data.get("tool", ""), upload.name, upload.read()
+        )
+    except usv.ResultError as exc:
+        return Response({"error": str(exc)}, status=400)
+    return Response(_detection_payload(request.data["tool"], calls, upload.name))
+
+
+@extend_schema(exclude=True)
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def file_usv_detections(request, file_id):
+    """Add (or replace) the results of a detector for a file; only its creator does it."""
+    file = get_object_or_404(File, pk=file_id)
+    if not can_change(request.user, file):
+        return Response(
+            {"detail": "Only the creator of a file can add results to it."}, status=403
+        )
+    upload = request.FILES.get("file")
+    if upload is None:
+        return Response({"error": "No file provided."}, status=400)
+    tool = request.data.get("tool", "")
+    data = upload.read()
+    try:
+        calls = usv.read_result(tool, upload.name, data)
+    except usv.ResultError as exc:
+        return Response({"error": str(exc)}, status=400)
+    deposit = _is_true(request.data.get("deposit"))
+    for old in UsvDetection.objects.filter(file=file, tool=tool).exclude(original=""):
+        old.original.delete(save=False)  # replaced: the old table is not kept
+    detection, _ = UsvDetection.objects.update_or_create(
+        file=file,
+        tool=tool,
+        defaults={
+            "tool_version": str(request.data.get("tool_version", ""))[:64],
+            "parameters": str(request.data.get("parameters", ""))[:2000],
+            "reference": usv.TOOLS[tool]["reference"],
+            "calls": calls,
+            "summary": usv.summarize(calls),
+            "source": ntpath.basename(upload.name)[:500],
+            "created_by": request.user,
+            "deposit": deposit,
+            "original": "",
+        },
+    )
+    if deposit:  # the table is kept only to be sent to the repository with the record
+        extension = ntpath.splitext(upload.name)[1].lower()
+        detection.original.save(
+            f"{ntpath.splitext(file.name)[0]}_{tool}{extension}", ContentFile(data)
+        )
+    return Response(UsvDetectionSerializer(detection).data, status=201)
+
+
+@extend_schema(exclude=True)
+@api_view(["POST", "DELETE"])
+@permission_classes([IsAdminUser])
+def file_images(request, file_id):
+    """Set (POST: `spectrogram` and/or `plot`) or remove (DELETE ?field=plot) the images shown with
+    a file in the datasets. Administrators only, whoever created the file."""
+    file = get_object_or_404(File, pk=file_id)
+    if request.method == "DELETE":
+        field = request.query_params.get("field")
+        if field not in ("spectrogram", "plot"):
+            return Response({"error": "field must be spectrogram or plot."}, status=400)
+        getattr(file, field).delete(save=False)  # the picture on the disk goes too
+        setattr(file, field, None)
+        file.save(update_fields=[field])
+        return Response(status=204)
+    serializer = FileImagesSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    changes = dict(serializer.validated_data)
+    if (
+        "deposit_images" in request.data
+    ):  # the checkbox: send them to the repository too
+        changes["deposit_images"] = _is_true(request.data["deposit_images"])
+    if not changes:
+        return Response({"error": "Send a spectrogram or a plot."}, status=400)
+    for name, value in changes.items():
+        if name != "deposit_images":
+            getattr(file, name).delete(save=False)  # replaced: no orphan on the disk
+        setattr(file, name, value)
+    file.save(update_fields=list(changes))
+    data = FileNestedSerializer(file, context={"request": request}).data
+    return Response(
+        {
+            "spectrogram_url": data["spectrogram_url"],
+            "plot_url": data["plot_url"],
+            "deposit_images": file.deposit_images,
+        }
+    )
+
+
+@extend_schema(exclude=True)
+@api_view(["GET", "DELETE"])
+@permission_classes([AllowAny])
+def usv_detection_detail(request, pk):
+    """The calls a detector found in a file, read when someone opens them (or removing them)."""
+    if request.method == "DELETE":
+        if not request.user.is_authenticated:
+            return Response(status=401)
+        detection = get_object_or_404(UsvDetection, pk=pk)
+        if not can_change(request.user, detection.file):
+            return Response(status=403)
+        detection.delete()
+        return Response(status=204)
+    detection = get_object_or_404(
+        UsvDetection.objects.filter(file__in=visible_files(request.user)), pk=pk
+    )
+    return Response(UsvDetectionCallsSerializer(detection).data)
+
+
 # ----------------------------
 # File
 # ----------------------------
@@ -1336,6 +1503,8 @@ class FileAPIView(GenericAPIView):
             "recording_session__created_by__user_profile",
             "created_by__user_profile",
         ).prefetch_related(
+            # the calls are heavy: a list only needs the summary of each detection
+            Prefetch("usv_detections", queryset=UsvDetection.objects.defer("calls")),
             "subjects__animal_profile__strain__species",
             "subjects__animal_profile__strain__ontology_term",
             "subjects__animal_profile__sex_term",
@@ -1396,7 +1565,9 @@ class FileAPIView(GenericAPIView):
     # -----------------------------
     def post(self, request, *args, **kwargs):
         if not request.user.is_staff and (
-            "plot" in request.data or "spectrogram" in request.data
+            "plot" in request.data
+            or "spectrogram" in request.data
+            or "deposit_images" in request.data
         ):
             return Response(
                 {"detail": "Only administrators can set plot or spectrogram."},
@@ -1564,6 +1735,14 @@ class FileUploadAsyncView(APIView):
 
 @extend_schema(exclude=True)
 @api_view(["GET"])
+@permission_classes([AllowAny])
+def app_version(request):
+    """The version of the API, shown in the footer of the site."""
+    return Response({"version": settings.APP_VERSION})
+
+
+@extend_schema(exclude=True)
+@api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def upload_limit(request):
     """What a file may weigh right now: the form checks it before sending anything."""
@@ -1715,7 +1894,9 @@ class FileDetailAPIView(GenericAPIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
         if not request.user.is_staff and (
-            "plot" in request.data or "spectrogram" in request.data
+            "plot" in request.data
+            or "spectrogram" in request.data
+            or "deposit_images" in request.data
         ):
             return Response(
                 {"detail": "Only administrators can set plot or spectrogram."},
@@ -1733,14 +1914,6 @@ class FileDetailAPIView(GenericAPIView):
             return Response(
                 {"detail": "File not found"}, status=status.HTTP_404_NOT_FOUND
             )
-@extend_schema(exclude=True)
-@api_view(["GET"])
-@permission_classes([AllowAny])
-def app_version(request):
-    """The version of the API, shown in the footer of the site."""
-    return Response({"version": settings.APP_VERSION})
-
-
 
         if not can_change(request.user, file):
             return Response(
