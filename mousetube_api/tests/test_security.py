@@ -554,6 +554,86 @@ class OrcidLoginRedirectTests(TestCase):
 
 
 # ----------------------------------------------------------------------------
+class OrcidNamesTests(TestCase):
+    """A new person coming from ORCID gets their name in the registration form."""
+
+    def _redirect(self, extra_data, process=None):
+        from urllib.parse import parse_qs, urlparse
+
+        from allauth.core.exceptions import ImmediateHttpResponse
+        from django.test import RequestFactory
+
+        from mousetube_api.utils.adapters import MySocialAccountAdapter
+
+        request = RequestFactory().get("/")
+        request.session = {"orcid_process": process} if process else {}
+        sociallogin = SimpleNamespace(
+            account=SimpleNamespace(
+                provider="orcid", uid="0000-0002-1825-0097", extra_data=extra_data
+            )
+        )
+        with self.assertRaises(ImmediateHttpResponse) as caught:
+            MySocialAccountAdapter().pre_social_login(request, sociallogin)
+        url = urlparse(caught.exception.response.url)
+        return url.path, {
+            k: v[0] for k, v in parse_qs(url.query, keep_blank_values=True).items()
+        }
+
+    def test_the_names_of_the_record_fill_the_form(self):
+        record = {
+            "person": {
+                "name": {
+                    "given-names": {"value": " Josiah "},
+                    "family-name": {"value": "Carberry"},
+                }
+            }
+        }
+        path, query = self._redirect(record)
+        self.assertEqual(path, "/account/register")
+        self.assertEqual(
+            (query["first_name"], query["last_name"]), ("Josiah", "Carberry")
+        )
+        self.assertEqual(query["orcid"], "0000-0002-1825-0097")
+
+    def test_a_private_name_or_a_missing_family_name_does_not_break_the_login(self):
+        # ORCID sends null for a name that is private, and for a family name nobody gave
+        for record in (
+            {"person": {"name": None}},
+            {"person": None},
+            {
+                "person": {
+                    "name": {"given-names": {"value": "Mono"}, "family-name": None}
+                }
+            },
+        ):
+            path, query = self._redirect(record)
+            self.assertEqual(path, "/account/register")
+        self.assertEqual((query["first_name"], query["last_name"]), ("Mono", ""))
+
+    def test_a_public_institutional_email_prefills_the_form_a_personal_one_does_not(
+        self,
+    ):
+        def record(*addresses):
+            return {"person": {"emails": {"email": [{"email": a} for a in addresses]}}}
+
+        _, query = self._redirect(record("me@gmail.com", "me@igbmc.fr"))
+        self.assertEqual(query["email"], "me@igbmc.fr")
+        _, query = self._redirect(record("me@gmail.com"))
+        self.assertNotIn("email", query)
+        for empty in (
+            {"person": {"emails": None}},
+            {"person": {"emails": {"email": []}}},
+        ):
+            _, query = self._redirect(empty)  # a private email: nothing, no error
+            self.assertNotIn("email", query)
+
+    def test_linking_an_account_goes_to_the_link_page_with_the_names(self):
+        record = {"person": {"name": {"given-names": {"value": "Josiah"}}}}
+        path, query = self._redirect(record, process="connect")
+        self.assertEqual(path, "/account/link-orcid")
+        self.assertEqual(query["first_name"], "Josiah")
+
+
 # Datasets: import of the 0.5 metadata, public metadata route, admin-only form
 # ----------------------------------------------------------------------------
 @override_settings(CACHES=LOCMEM)
