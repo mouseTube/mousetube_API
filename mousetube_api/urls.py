@@ -67,6 +67,7 @@ from .views import (
     TrackPageView,
     UserProfileDetailAPIView,
     UserProfileListAPIView,
+    app_version,
     file_task_status,
     get_task_status,
     personal_email_domains,
@@ -140,6 +141,7 @@ urlpatterns = [
         PublishSessionView.as_view(),
         name="publish-session",
     ),
+    path("api/version/", app_version, name="app-version"),
     path("api/recording-session/get_task_status", get_task_status, name="file-status"),
     path("api/hardware/", HardwareAPIView.as_view(), name="hardware"),
     path(

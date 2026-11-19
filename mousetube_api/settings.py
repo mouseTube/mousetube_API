@@ -15,6 +15,7 @@ from datetime import timedelta
 from pathlib import Path
 
 import environ
+import tomllib
 from django.core.exceptions import ImproperlyConfigured
 from django.core.management.utils import get_random_secret_key
 
@@ -26,6 +27,18 @@ COUNTRIES_OVERRIDE = {
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+
+def _project_version():
+    """The version of the API: the one of pyproject.toml, the only place it is written."""
+    try:
+        with open(BASE_DIR / "pyproject.toml", "rb") as handle:
+            return tomllib.load(handle)["project"]["version"]
+    except (OSError, KeyError, tomllib.TOMLDecodeError):
+        return "unknown"
+
+
+APP_VERSION = _project_version()
 
 
 # Quick-start development settings - unsuitable for production
@@ -259,7 +272,7 @@ REST_FRAMEWORK = {
 SPECTACULAR_SETTINGS = {
     "TITLE": "Mousetube API",
     "DESCRIPTION": "API Documentation",
-    "VERSION": "1.0.0",
+    "VERSION": APP_VERSION,
     "PREPROCESSING_HOOKS": [
         "mousetube_api.utils.swagger_hooks.remove_auth_paths",
     ],

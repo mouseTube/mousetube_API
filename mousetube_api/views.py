@@ -1733,6 +1733,14 @@ class FileDetailAPIView(GenericAPIView):
             return Response(
                 {"detail": "File not found"}, status=status.HTTP_404_NOT_FOUND
             )
+@extend_schema(exclude=True)
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def app_version(request):
+    """The version of the API, shown in the footer of the site."""
+    return Response({"version": settings.APP_VERSION})
+
+
 
         if not can_change(request.user, file):
             return Response(

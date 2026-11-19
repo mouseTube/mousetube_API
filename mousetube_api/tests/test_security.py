@@ -3705,3 +3705,20 @@ class ImageDownloadTests(TestCase):
         patcher, _ = self._answer(content_type="text/html")
         with patcher:
             self.assertIsNone(_download_image("http://x/y.png"))
+
+
+class AppVersionTests(TestCase):
+    """The version shown in the footer comes from pyproject.toml, the only place it is written."""
+
+    def test_the_version_route_gives_the_one_of_pyproject_to_everybody(self):
+        from pathlib import Path
+
+        import tomllib
+        from django.conf import settings
+
+        with open(Path(settings.BASE_DIR) / "pyproject.toml", "rb") as handle:
+            written = tomllib.load(handle)["project"]["version"]
+        response = APIClient().get("/api/version/")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"version": written})
+        self.assertEqual(settings.SPECTACULAR_SETTINGS["VERSION"], written)
