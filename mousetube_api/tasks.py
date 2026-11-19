@@ -290,6 +290,34 @@ def update_published_record(self, recording_session_id):
         cache.delete(lock)
 
 
+@shared_task(bind=True)
+def check_dead_links(self, fill_name=False):
+    """Check the download links of the files; the interface follows it in the cache."""
+    from django.core.cache import cache
+    from django.utils import timezone
+
+    from mousetube_api.utils import link_check
+
+    link_check.start_state(self.request.id or "")
+    try:
+        counts = link_check.run(
+            progress=lambda c: link_check.write_state(**c), fill_name=fill_name
+        )
+        link_check.write_state(
+            **counts, state="done", finished_at=timezone.now().isoformat()
+        )
+    except Exception as exc:
+        logger.exception("Check of the links failed")
+        link_check.write_state(
+            state="failed",
+            error=explain(exc)[:300],
+            finished_at=timezone.now().isoformat(),
+        )
+        raise
+    finally:
+        cache.delete(link_check.LOCK_KEY)
+
+
 @shared_task
 def export_page_views():
     """Regenerate the static page-view report (was run inside a web request)."""

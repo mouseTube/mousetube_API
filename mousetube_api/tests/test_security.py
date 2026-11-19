@@ -4349,3 +4349,169 @@ class AppVersionTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), {"version": written})
         self.assertEqual(settings.SPECTACULAR_SETTINGS["VERSION"], written)
+
+
+@override_settings(CACHES=LOCMEM)
+class LinkCheckTests(FreshCache, TestCase):
+    """The check of the download links: what it follows, what it refuses, who starts it."""
+
+    def setUp(self):
+        super().setUp()
+        from mousetube_api.models import File
+
+        User = get_user_model()
+        self.admin = User.objects.create_user("boss", "b@igbmc.fr", "x", is_staff=True)
+        self.user = User.objects.create_user("user", "u@igbmc.fr", "x")
+        session = RecordingSession.objects.create(
+            name="s", is_multiple=True, status="shared", created_by=self.user
+        )
+
+        def make(name, link, valid):
+            return File.objects.create(
+                name=name,
+                link=link,
+                is_valid_link=valid,
+                recording_session=session,
+                created_by=self.user,
+            )
+
+        self.alive = make("alive.wav", "https://good.example/a.wav", False)
+        self.dead = make("dead.wav", "https://gone.example/b.wav", True)
+        self.local = make("local.wav", "http://localhost:8000/c.wav", True)
+        self.busy = make("busy.wav", "https://busy.example/d.wav", True)
+        self.client_admin = APIClient()
+        self.client_admin.force_authenticate(self.admin)
+
+    def _fake(self, answers):
+        """requests.request answered from {host: status or an exception}."""
+        from unittest import mock
+
+        def request(method, url, **kwargs):
+            host = url.split("/")[2]
+            answer = answers[host]
+            if isinstance(answer, Exception):
+                raise answer
+            response = mock.Mock(status_code=answer, headers={})
+            return response
+
+        return mock.patch(
+            "mousetube_api.utils.link_check.is_public_host",
+            lambda host: host != "localhost",
+        ), mock.patch("mousetube_api.utils.link_check.requests.request", request)
+
+    def test_the_addresses_that_are_not_public_are_never_followed(self):
+        from mousetube_api.utils.link_check import is_public_host
+
+        for host in (
+            "127.0.0.1",
+            "10.0.0.5",
+            "192.168.1.1",
+            "169.254.169.254",
+            "::1",
+            "0.0.0.0",
+        ):
+            self.assertFalse(is_public_host(host), host)
+        self.assertTrue(is_public_host("93.184.216.34"))
+        self.assertFalse(is_public_host(""))
+
+    def test_each_file_follows_the_answer_of_its_link_and_a_failure_does_not_stop_the_check(
+        self,
+    ):
+        import requests as real
+
+        from mousetube_api.utils import link_check
+
+        host_patch, request_patch = self._fake(
+            {
+                "good.example": 200,
+                "gone.example": real.ConnectionError("no route"),  # no answer at all
+                "busy.example": 429,
+            }
+        )
+        with host_patch, request_patch:
+            counts = link_check.run(pause=lambda s: None)
+        for f in (self.alive, self.dead, self.local, self.busy):
+            f.refresh_from_db()
+        self.assertTrue(self.alive.is_valid_link)  # it answers: valid again
+        self.assertFalse(self.dead.is_valid_link)  # it does not: not valid
+        self.assertTrue(self.local.is_valid_link)  # not looked at: unchanged
+        self.assertTrue(self.busy.is_valid_link)  # "slow down": nothing concluded
+        self.assertEqual(
+            (counts["ok"], counts["broken"], counts["skipped"], counts["unknown"]),
+            (1, 1, 1, 1),
+        )
+
+    def test_a_redirect_to_a_private_address_is_not_followed(self):
+        from unittest import mock
+
+        from mousetube_api.utils import link_check
+
+        def request(method, url, **kwargs):
+            return mock.Mock(
+                status_code=302, headers={"location": "http://10.0.0.1/secret"}
+            )
+
+        with (
+            mock.patch(
+                "mousetube_api.utils.link_check.is_public_host",
+                lambda h: h != "10.0.0.1",
+            ),
+            mock.patch("mousetube_api.utils.link_check.requests.request", request),
+        ):
+            state, _, _ = link_check.check_link("https://good.example/a.wav")
+        self.assertEqual(state, "skipped")
+
+    def test_only_an_administrator_follows_and_starts_the_check(self):
+        url = "/api/admin/link-check/"
+        stranger = APIClient()
+        stranger.force_authenticate(self.user)
+        self.assertEqual(stranger.get(url).status_code, 403)
+        self.assertEqual(stranger.post(url).status_code, 403)
+        self.assertEqual(APIClient().get(url).status_code, 401)
+
+    def test_a_check_starts_once_and_the_report_lists_the_links_that_do_not_answer(
+        self,
+    ):
+        from unittest import mock
+
+        url = "/api/admin/link-check/"
+        self.assertEqual(self.client_admin.get(url).json()["check"], None)
+        with mock.patch("mousetube_api.views.check_dead_links.delay") as delay:
+            delay.return_value = mock.Mock(id="task-1")
+            first = self.client_admin.post(url)
+            second = self.client_admin.post(url)  # one at a time
+        self.assertEqual(first.status_code, 202)
+        self.assertEqual(second.status_code, 409)
+        self.assertEqual(delay.call_count, 1)
+        self.assertEqual(first.json()["check"]["state"], "running")
+
+        self.dead.is_valid_link = False
+        self.dead.save()
+        report = self.client_admin.get(url).json()
+        self.assertEqual(
+            [b["name"] for b in report["broken"]], ["alive.wav", "dead.wav"]
+        )
+        self.assertEqual(report["files_with_link"], 4)
+
+    def test_the_task_reports_its_end_and_frees_the_lock(self):
+        from django.core.cache import cache
+
+        from mousetube_api.tasks import check_dead_links
+        from mousetube_api.utils import link_check
+
+        cache.add(link_check.LOCK_KEY, "1", 60)
+        host_patch, request_patch = self._fake(
+            {"good.example": 200, "gone.example": 404, "busy.example": 200}
+        )
+        with host_patch, request_patch, mock_no_pause():
+            check_dead_links.apply()
+        state = link_check.read_state()
+        self.assertEqual(state["state"], "done")
+        self.assertEqual((state["done"], state["total"]), (4, 4))
+        self.assertIsNone(cache.get(link_check.LOCK_KEY))
+
+
+def mock_no_pause():
+    from unittest import mock
+
+    return mock.patch("mousetube_api.utils.link_check.time.sleep", lambda s: None)

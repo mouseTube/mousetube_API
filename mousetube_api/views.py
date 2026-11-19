@@ -48,6 +48,7 @@ from drf_spectacular.utils import (
     OpenApiParameter,
     extend_schema,
 )
+from kombu.exceptions import OperationalError
 from rest_framework import filters, permissions, status, viewsets
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.exceptions import PermissionDenied
@@ -63,12 +64,13 @@ from rest_framework.throttling import BaseThrottle, ScopedRateThrottle
 from rest_framework.views import APIView
 
 from mousetube_api.tasks import (
+    check_dead_links,
     delete_file_from_repository,
     export_page_views,
     process_file,
     publish_session_deposition,
 )
-from mousetube_api.utils import ontologies, usv
+from mousetube_api.utils import link_check, ontologies, usv
 from mousetube_api.utils.dataset_metadata import build_dataset_metadata
 from mousetube_api.utils.email_domains import PERSONAL_EMAIL_DOMAINS
 from mousetube_api.utils.file_handler import (
@@ -1731,6 +1733,54 @@ class FileUploadAsyncView(APIView):
             )
 
         return Response({"temp_path": f"/media/temp/{safe_name}"})
+
+
+def _link_check_report():
+    """The state of the check, and the files whose link does not answer (the validity is kept in
+    each file, so this is also what the last checks found)."""
+    with_link = File.objects.exclude(link__isnull=True).exclude(link="")
+    broken = with_link.filter(is_valid_link=False).select_related("recording_session")
+    return {
+        "check": link_check.read_state(),
+        "files_with_link": with_link.count(),
+        "valid": with_link.filter(is_valid_link=True).count(),
+        "broken_count": broken.count(),
+        "broken": [
+            {
+                "id": f.id,
+                "name": f.name,
+                "link": f.link,
+                "session_id": f.recording_session_id,
+                "session": f.recording_session.name if f.recording_session else None,
+            }
+            for f in broken.order_by("name")[:200]
+        ],
+    }
+
+
+@extend_schema(exclude=True)
+@api_view(["GET", "POST"])
+@permission_classes([IsAdminUser])
+def link_check_view(request):
+    """GET: where the check of the download links is, and the links that do not answer. POST:
+    start it in the background (one at a time)."""
+    if request.method == "GET":
+        return Response(_link_check_report())
+    if not cache.add(link_check.LOCK_KEY, "1", link_check.LOCK_SECONDS):
+        return Response(
+            {"detail": "A check is already running.", **_link_check_report()},
+            status=status.HTTP_409_CONFLICT,
+        )
+    try:
+        task = check_dead_links.delay()
+    except OperationalError:  # the broker is down: nothing runs, the lock must not stay
+        cache.delete(link_check.LOCK_KEY)
+        return Response(
+            {"detail": "The task could not be started. Try again later."},
+            status=status.HTTP_503_SERVICE_UNAVAILABLE,
+        )
+    link_check.start_state(task.id)
+    return Response(_link_check_report(), status=status.HTTP_202_ACCEPTED)
 
 
 @extend_schema(exclude=True)
