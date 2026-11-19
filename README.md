@@ -156,4 +156,4 @@ docker image prune -a
 ## Documentation
 
 The `docs/` folder describes the configuration, how to update a deployment and the main features:
-[configuration](docs/configuration.md), [updating a deployment](docs/deployment.md), [account requests](docs/accounts.md), [moderation](docs/moderation.md), [datasets](docs/datasets.md), [published sessions and versions](docs/publication.md), [vocabularies](docs/ontologies.md).
+[configuration](docs/configuration.md), [updating a deployment](docs/deployment.md), [account requests](docs/accounts.md), [moderation](docs/moderation.md), [datasets](docs/datasets.md), [published sessions and versions](docs/publication.md), [vocabularies](docs/ontologies.md), [USV detections](docs/usv-detections.md), [checking the links](docs/link-check.md).

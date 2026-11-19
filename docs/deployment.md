@@ -17,3 +17,6 @@ and an access token that now lasts one hour and is renewed by the new frontend).
 5. `DEBUG` defaults to false: a development environment needs a `.env` (see `.env.example`). `RESET_DB=true` is
    refused unless `DEBUG=true`. In production the frontend container needs `DEBUG=false` or no `DEBUG`, never `true`.
 6. Take a dump of the database before a big update (`docker compose exec db mariadb-dump ...`).
+7. Rebuild the image when a dependency is added (`defusedxml` reads the tables of the detection tools); `--build` does it. The Celery worker must know the tasks of the new version (the check of the links is one).
+8. The tables that authors chose to send to Zenodo are kept in `media/usv_results/` until they are published: include `media/` in the backups.
+9. The version of the API is the one of `pyproject.toml` (the documentation and `GET /api/version/` give it); the one of the website is in its `package.json`. The footer of the site shows both.

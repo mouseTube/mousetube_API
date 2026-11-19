@@ -32,7 +32,7 @@ requests, sessions, software, hardware, laboratories, references, contacts, stud
 animal profiles) with the number waiting, the oldest first. Each item can be validated or
 sent back with a reason, one by one or several at once; an account request is activated or
 rejected (only a brand-new one can be rejected). A session is validated with everything it
-uses. The link, with the count, is in the *Add* menu of the header for administrators.
+uses. The link, with the count, is in the *Add* menu of the header for administrators and a *Review* button in their profile; next to it, *Check links* opens the check of the download links (see [checking the links](link-check.md)).
 It uses `GET /api/review/`, `GET /api/review/<kind>/` and
 `POST /api/review/<kind>/decision/` (`{"action": "validate" | "send_back", "ids": [...],
 "reason": "..."}`), which are for staff only.

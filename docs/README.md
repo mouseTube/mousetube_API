@@ -12,3 +12,5 @@ configured and how its main features work.
 | [Datasets](datasets.md) | Datasets and their metadata JSON |
 | [Published sessions and versions](publication.md) | Editing a published session, new versions of its record |
 | [Vocabularies](ontologies.md) | Ontologies and the units of the numeric fields |
+| [USV detections](usv-detections.md) | Results of the detection tools shown with the recordings, and what is sent to the repository |
+| [Checking the links](link-check.md) | The check of the download links, from the website or the command line |
