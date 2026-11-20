@@ -1,3 +1,5 @@
+"""The files of an upload: temporary storage, room left on the disk, progress, local paths."""
+
 import os
 import shutil
 import tempfile
@@ -117,6 +119,7 @@ def reserve_upload(size):
 
 
 def release_upload(size):
+    """Free the room reserved by `reserve_upload` once the upload is over (or refused)."""
     from django.core.cache import cache
 
     try:
@@ -166,6 +169,7 @@ def set_progress(file_id, percent):
 
 
 def get_progress(file_id):
+    """The progress (0 to 100) of the processing or deposit of a file, kept in the cache."""
     from django.core.cache import cache
 
     return cache.get(f"file-progress:{file_id}") or 0

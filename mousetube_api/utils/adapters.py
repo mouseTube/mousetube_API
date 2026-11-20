@@ -1,3 +1,5 @@
+"""Sign-in with ORCID (allauth): what happens when the ORCID iD is known or not."""
+
 from urllib.parse import urlencode
 
 from allauth.core.exceptions import ImmediateHttpResponse
@@ -41,21 +43,23 @@ def _orcid_email(extra_data):
 
 
 class MySocialAccountAdapter(DefaultSocialAccountAdapter):
+    """Sign-in with ORCID: a known ORCID iD logs in, an unknown one goes to the registration form."""
+
     def is_open_for_signup(self, request, sociallogin):
+        """ORCID may always start a registration (an administrator still reviews it)."""
         return True
 
-    """
-    Handle login with ORCID.
-
-    Args:
-        request (HttpRequest): The current HTTP request.
-        sociallogin (SocialLogin): The social login information from Allauth.
-
-    Raises:
-        ImmediateHttpResponse: Redirects the user depending on whether the ORCID is known.
-    """
-
     def pre_social_login(self, request, sociallogin):
+        """
+        Handle login with ORCID.
+
+        Args:
+            request (HttpRequest): The current HTTP request.
+            sociallogin (SocialLogin): The social login information from Allauth.
+
+        Raises:
+            ImmediateHttpResponse: Redirects the user depending on whether the ORCID is known.
+        """
         process = request.session.pop("orcid_process", None)
 
         if sociallogin.account.provider != "orcid":

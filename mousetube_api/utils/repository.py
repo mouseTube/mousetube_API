@@ -1,3 +1,5 @@
+"""The repository a deposit goes to: the default one, and the builder of its metadata."""
+
 import importlib
 
 from mousetube_api.models import File

@@ -90,6 +90,7 @@ def _entries(kind):
 
 
 def counts():
+    """How many things wait for a decision, per kind (`accounts` and each of `ENTRIES`)."""
     result = {"accounts": pending_review_count()}
     for kind in ENTRIES:
         result[kind] = _entries(kind).count()
@@ -134,6 +135,7 @@ def _admin_url(obj):
 
 
 def describe_account(user):
+    """An account request as the review page shows it: who, e-mail, ORCID, laboratory."""
     profile = getattr(user, "user_profile", None)
     facts = [
         {"label": "E-mail", "value": user.email},
@@ -158,6 +160,7 @@ def describe_account(user):
 
 
 def describe_entry(kind, obj):
+    """A session or a catalog entry as the review page shows it, with the fields told to the reviewer."""
     _label, _model, fields = ENTRIES[kind]
     item = {
         "id": obj.pk,

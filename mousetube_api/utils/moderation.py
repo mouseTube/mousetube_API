@@ -48,6 +48,7 @@ def _validated(item):
 
 
 def validated_only(items):
+    """Keep the validated entries of a list of serialized objects (those whose `status` is `validated`)."""
     return [item for item in items or [] if _validated(item)]
 
 

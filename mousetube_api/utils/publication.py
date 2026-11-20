@@ -23,6 +23,7 @@ PUBLISHED = "published"
 
 
 def latest_version(session):
+    """The most recent `PublicationVersion` of a session, or `None` if it was never published."""
     return session.publication_versions.order_by("-number").first()
 
 

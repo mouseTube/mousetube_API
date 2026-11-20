@@ -1,3 +1,5 @@
+"""Rows that follow others: the profile of a new account, the first version of a software."""
+
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ObjectDoesNotExist
 from django.db.models.signals import post_delete, post_save

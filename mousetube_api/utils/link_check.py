@@ -129,16 +129,19 @@ def run(progress=None, fill_name=False, pause=time.sleep):
 
 
 def read_state():
+    """The state of the last check of the download links (or `None` if none ran)."""
     return cache.get(STATE_KEY)
 
 
 def write_state(**changes):
+    """Merge `changes` into the state of the check and keep it a week. Returns the new state."""
     state = {**(cache.get(STATE_KEY) or {}), **changes}
     cache.set(STATE_KEY, state, 7 * 24 * 3600)
     return state
 
 
 def start_state(task_id=""):
+    """Reset the state for a check that starts now (`running`, counters at zero)."""
     return write_state(
         state="running",
         task_id=task_id,

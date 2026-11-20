@@ -1,3 +1,5 @@
+"""The background tasks (Celery): process and deposit files, publish and update records, check links."""
+
 import logging
 import os
 

@@ -98,6 +98,11 @@ def merge_page_view_paths():
 
 
 def run_all():
+    """Run every data upgrade, in order. Safe to run again.
+
+    Returns:
+        dict: the number of rows each upgrade changed, by name.
+    """
     return {
         "statuses renamed": normalize_statuses(),
         "profiles created": create_missing_profiles(),

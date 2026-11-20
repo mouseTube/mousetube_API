@@ -14,10 +14,12 @@ from mousetube_api.utils.ontologies import session_terms
 
 
 def esc(value):
+    """HTML-escape any value, quotes included: nothing a user typed goes into a record as markup."""
     return html.escape(str(value), quote=True)
 
 
 def link(url, text):
+    """An HTML link whose address and text are escaped."""
     return f'<a href="{esc(url)}">{esc(text)}</a>'
 
 
