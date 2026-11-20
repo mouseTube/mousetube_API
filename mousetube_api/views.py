@@ -2004,10 +2004,8 @@ class FileDetailAPIView(GenericAPIView):
         return [AllowAny()]
 
     def get_object(self, pk):
-        try:
-            return File.objects.get(pk=pk)
-        except File.DoesNotExist:
-            return None
+        # the file of a draft or of a session under review exists only for its author
+        return visible_files(self.request.user).filter(pk=pk).first()
 
     def get(self, request, *args, **kwargs):
         file = self.get_object(kwargs["pk"])
