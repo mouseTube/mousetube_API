@@ -7,16 +7,21 @@ PHENOMIN, CNRS UMR7104, INSERM U964, Université de Strasbourg
 Code under GPL v3.0 licence
 """
 
+import hashlib
 import json
+import ntpath
 import os
+import shutil
+import uuid
 
 import django_filters
 from celery.result import AsyncResult
 from django.apps import apps
 from django.conf import settings
 from django.contrib.contenttypes.models import ContentType
+from django.core import signing
 from django.core.cache import cache
-from django.core.management import call_command
+from django.core.files.base import ContentFile
 from django.db.models import (
     BooleanField,
     Case,
@@ -24,7 +29,9 @@ from django.db.models import (
     Exists,
     F,
     IntegerField,
+    Max,
     OuterRef,
+    Prefetch,
     Q,
     Sum,
     Value,
@@ -33,6 +40,7 @@ from django.db.models import (
 from django.db.models.functions import Cast
 from django.http import Http404
 from django.shortcuts import get_object_or_404, render
+from django.utils.text import get_valid_filename
 from django.utils.timezone import now
 from django_countries import countries
 from django_filters.rest_framework import DjangoFilterBackend
@@ -40,8 +48,9 @@ from drf_spectacular.utils import (
     OpenApiParameter,
     extend_schema,
 )
+from kombu.exceptions import OperationalError
 from rest_framework import filters, permissions, status, viewsets
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.generics import GenericAPIView
 from rest_framework.pagination import PageNumberPagination
@@ -51,17 +60,44 @@ from rest_framework.permissions import (
     IsAuthenticated,
 )
 from rest_framework.response import Response
+from rest_framework.throttling import BaseThrottle, ScopedRateThrottle
 from rest_framework.views import APIView
 
 from mousetube_api.tasks import (
+    check_dead_links,
     delete_file_from_repository,
+    export_page_views,
     process_file,
     publish_session_deposition,
 )
+from mousetube_api.utils import link_check, ontologies, usv
+from mousetube_api.utils.dataset_metadata import build_dataset_metadata
+from mousetube_api.utils.email_domains import PERSONAL_EMAIL_DOMAINS
+from mousetube_api.utils.file_handler import (
+    UploadError,
+    get_progress,
+    purge_temp_files,
+    release_upload,
+    remove_temp,
+    reserve_upload,
+    upload_room,
+)
+from mousetube_api.utils.moderation import (
+    SESSION_PUBLIC,
+    session_pending_entries,
+)
+from mousetube_api.utils.orcid_proof import read_orcid_proof
+from mousetube_api.utils.publication import (
+    MAX_APPROVED_PAYLOAD,
+    approve_auto_publish,
+    reset_auto_publish,
+)
 from mousetube_api.utils.repository import (
     build_repository_metadata_payload,
+    default_repository,
     get_repository_metadata_schema,
 )
+from mousetube_api.utils.session_rights import session_rights
 
 from .celery import app
 from .models import (
@@ -84,12 +120,15 @@ from .models import (
     Study,
     Subject,
     UserProfile,
+    UsvDetection,
 )
 from .serializers import (
     AnimalProfileSerializer,
     ContactSerializer,
     DatasetSerializer,
     FavoriteSerializer,
+    FileImagesSerializer,
+    FileNestedSerializer,
     FileSerializer,
     HardwareSerializer,
     LaboratorySerializer,
@@ -106,6 +145,8 @@ from .serializers import (
     SubjectSerializer,
     TrackPageSerializer,
     UserProfileSerializer,
+    UsvDetectionCallsSerializer,
+    UsvDetectionSerializer,
 )
 
 
@@ -144,14 +185,19 @@ class LinkOrcidView(APIView):
     """
 
     def post(self, request):
-        orcid = request.data.get("orcid", "").strip()
+        try:
+            # Only an iD proven by the ORCID login is accepted, never a free-text one.
+            orcid = read_orcid_proof(request.data.get("orcid_proof", ""))
+        except signing.BadSignature:
+            orcid = ""
         first_name = request.data.get("firstName", "").strip()
         last_name = request.data.get("lastName", "").strip()
         user = request.user
 
         if not orcid:
             return Response(
-                {"error": "Missing ORCID"}, status=status.HTTP_400_BAD_REQUEST
+                {"error": "Missing or expired ORCID proof"},
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
         # ORCID already bind to another user
@@ -193,6 +239,21 @@ class FilePagination(PageNumberPagination):
 # ----------------------------
 # Permissions
 # ----------------------------
+def visible_to(queryset, user):
+    """Published objects and the user's own (administrators see everything)."""
+    if user.is_staff:
+        return queryset
+    condition = Q(status="validated")
+    if user.is_authenticated:
+        condition |= Q(created_by=user)
+    return queryset.filter(condition)
+
+
+def can_change(user, obj):
+    """The creator of an object, or an administrator."""
+    return user.is_staff or obj.created_by_id == user.id
+
+
 class IsCreatorOrReadOnly(permissions.BasePermission):
     """
     Custom permission to only allow the creator of an object to edit or delete it.
@@ -201,7 +262,56 @@ class IsCreatorOrReadOnly(permissions.BasePermission):
     def has_object_permission(self, request, view, obj):
         if request.method in permissions.SAFE_METHODS:
             return True
-        return obj.created_by == request.user
+        if request.user.is_staff:
+            return True  # administrators moderate: they may change or remove anything
+        if obj.created_by != request.user:
+            return False
+        if isinstance(obj, RecordingSession):  # see utils/session_rights.py
+            return (
+                request.method != "DELETE"
+                or session_rights(obj, request.user)["can_delete"]
+            )
+        status = getattr(obj, "status", None)
+        if status == "validated":
+            return False  # validated by an administrator: it can no longer be changed
+        # an entry that waits for a review is not deleted by its owner
+        return not (request.method == "DELETE" and status == "waiting validation")
+
+
+# ----------------------------
+# Ontology terms (autocomplete of the fields that have a vocabulary)
+# ----------------------------
+class OntologySearchView(APIView):
+    """GET /api/ontology/search/?field=sex&q=male -> terms of that field's vocabulary.
+
+    Signed-in users only and rate limited: the server asks the vocabulary service for them.
+    """
+
+    permission_classes = [IsAuthenticated]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "ontology"
+
+    def get(self, request):
+        field = request.query_params.get("field", "")
+        if field not in ontologies.FIELDS:
+            return Response(
+                {"field": f"One of: {', '.join(sorted(ontologies.FIELDS))}."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            terms = ontologies.search(
+                field,
+                request.query_params.get("q", ""),
+                ontology=request.query_params.get("ontology"),
+            )
+        except ontologies.OntologyError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
+        return Response(
+            {
+                "vocabulary": ontologies.FIELDS[field]["name"],
+                "results": terms,
+            }
+        )
 
 
 # ----------------------------
@@ -239,7 +349,7 @@ class LaboratoryAPIView(viewsets.ModelViewSet):
                 queryset = queryset.filter(Q(created_by=user) | Q(status="validated"))
 
         if search_query:
-            search_fields = ["name", "location", "institution", "description", "status"]
+            search_fields = ["name", "unit", "institution", "address", "status"]
             search_q = Q()
             for field in search_fields:
                 search_q |= Q(**{f"{field}__icontains": search_query})
@@ -277,6 +387,22 @@ class LaboratoryAPIView(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
+
+
+# ----------------------------
+# Personal e-mail domains (for the registration form)
+# ----------------------------
+@extend_schema(exclude=True)
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def personal_email_domains(request):
+    """Same list the API enforces, so the website can warn before submitting."""
+    return Response(
+        {
+            "enforced": settings.REQUIRE_INSTITUTIONAL_EMAIL,
+            "domains": sorted(PERSONAL_EMAIL_DOMAINS),
+        }
+    )
 
 
 # ----------------------------
@@ -349,6 +475,9 @@ def repository_metadata_payload(request, repository_id: int, recording_session_i
         return Response(
             {"error": "Recording session not found."}, status=status.HTTP_404_NOT_FOUND
         )
+
+    if recording_session.created_by != request.user and not request.user.is_staff:
+        return Response({"detail": "Not authorized."}, status=status.HTTP_403_FORBIDDEN)
 
     files = File.objects.filter(recording_session=recording_session).exclude(
         status__in=["pending", "processing", "error"]
@@ -440,7 +569,7 @@ class ReferenceAPIView(GenericAPIView):
         return paginator.get_paginated_response(serializer.data)
 
     def post(self, request, *args, **kwargs):
-        serializer = self.serializer_class(data=request.data)
+        serializer = self.get_serializer(data=request.data)  # with the request context
         if serializer.is_valid():
             serializer.save(created_by=request.user)
             return Response(serializer.data, status=status.HTTP_201_CREATED)
@@ -459,20 +588,23 @@ class ReferenceDetailAPIView(GenericAPIView):
     permission_classes = [permissions.IsAuthenticatedOrReadOnly, IsCreatorOrReadOnly]
 
     def get_object(self, pk):
-        reference = get_object_or_404(Reference, pk=pk)
-        if reference.status == "draft" and reference.created_by != self.request.user:
-            raise Http404("Reference not found")
-
+        reference = get_object_or_404(
+            visible_to(Reference.objects.all(), self.request.user), pk=pk
+        )
+        # a hand-made lookup does not check the object permission by itself
+        self.check_object_permissions(self.request, reference)
         return reference
 
     def get(self, request, pk, *args, **kwargs):
         instance = self.get_object(pk)
-        serializer = self.serializer_class(instance)
+        serializer = self.serializer_class(instance, context={"request": request})
         return Response(serializer.data)
 
     def put(self, request, pk, *args, **kwargs):
         instance = self.get_object(pk)
-        serializer = self.serializer_class(instance, data=request.data)
+        serializer = self.serializer_class(
+            instance, data=request.data, context={"request": request}
+        )
         if serializer.is_valid():
             serializer.save()
             return Response(serializer.data)
@@ -480,7 +612,9 @@ class ReferenceDetailAPIView(GenericAPIView):
 
     def patch(self, request, pk, *args, **kwargs):
         instance = self.get_object(pk)
-        serializer = self.serializer_class(instance, data=request.data, partial=True)
+        serializer = self.serializer_class(
+            instance, data=request.data, partial=True, context={"request": request}
+        )
         if serializer.is_valid():
             serializer.save()
             return Response(serializer.data)
@@ -501,11 +635,15 @@ class UserProfileListAPIView(GenericAPIView):
 
     @extend_schema(operation_id="api_user_profile_list_get")
     def get(self, request, *args, **kwargs):
+        # an account created before the profile existed has none: make it on first use
+        UserProfile.objects.get_or_create(user=request.user)
         queryset = UserProfile.objects.all()
+        if not request.user.is_staff:  # profiles expose e-mails: own profile only
+            queryset = queryset.filter(user=request.user)
         user_id = request.query_params.get("user_id")
         if user_id:
             queryset = queryset.filter(user__id=user_id)
-        serializer = self.serializer_class(queryset, many=True)
+        serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
 
 
@@ -536,6 +674,34 @@ class UserProfileDetailAPIView(GenericAPIView):
             return Response(serializer.data)
         else:
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+def filter_catalog(qs, request, used_in):
+    """The filters the catalog lists (software, hardware) share, from the query string:
+    `type` (comma separated), `used` (in a shared or published session), `documented`
+    (has references) and, when signed in, `favorites` and `mine`."""
+    get = request.GET
+    types = [v.strip() for v in get.get("type", "").split(",") if v.strip()]
+    if types:
+        qs = qs.filter(type__in=types)
+    if get.get("used") == "1":
+        used = Q()
+        for path in used_in:
+            used |= Q(**{f"{path}__status__in": SESSION_PUBLIC})
+        qs = qs.filter(used)
+    if get.get("documented") == "1":
+        qs = qs.filter(references__isnull=False)
+    if request.user.is_authenticated:
+        if get.get("favorites") == "1":
+            qs = qs.filter(
+                id__in=Favorite.objects.filter(
+                    user=request.user,
+                    content_type=ContentType.objects.get_for_model(qs.model),
+                ).values_list("object_id", flat=True)
+            )
+        if get.get("mine") == "1":
+            qs = qs.filter(created_by=request.user)
+    return qs.distinct()
 
 
 # ----------------------------
@@ -601,6 +767,16 @@ class HardwareAPIView(GenericAPIView):
 
         if filter_query and filter_query in ALLOWED_FILTERS:
             hardware = hardware.filter(type=filter_query)
+        hardware = filter_catalog(
+            hardware,
+            request,
+            [
+                "recording_sessions_as_soundcard",
+                "recording_sessions_as_speaker",
+                "recording_sessions_as_amplifier",
+                "recording_sessions_as_microphone",
+            ],
+        )
 
         if request.user.is_authenticated:
             favorite_ids = Favorite.objects.filter(
@@ -626,13 +802,11 @@ class HardwareAPIView(GenericAPIView):
         return paginator.get_paginated_response(serializer.data)
 
     def post(self, request, *args, **kwargs):
-        serializer = self.serializer_class(data=request.data)
+        serializer = self.get_serializer(data=request.data)  # with the request context
         if serializer.is_valid():
-            hardware = serializer.save(
-                created_by=request.user, status="waiting validation"
-            )
+            hardware = serializer.save(created_by=request.user)
             return Response(
-                self.serializer_class(hardware).data, status=status.HTTP_201_CREATED
+                self.get_serializer(hardware).data, status=status.HTTP_201_CREATED
             )
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -648,29 +822,42 @@ class HardwareDetailAPIView(GenericAPIView):
             return [IsAuthenticated(), IsCreatorOrReadOnly()]
         return [AllowAny()]
 
+    def get_hardware(self, request, pk):
+        # drafts are private; the object permission is NOT automatic with a hand-made
+        # lookup: without this call anybody could change or delete any hardware
+        hardware = get_object_or_404(
+            visible_to(Hardware.objects.all(), request.user), pk=pk
+        )
+        self.check_object_permissions(request, hardware)
+        return hardware
+
     def get(self, request, pk, *args, **kwargs):
-        hardware = get_object_or_404(Hardware, pk=pk)
-        serializer = self.serializer_class(hardware)
+        hardware = self.get_hardware(request, pk)
+        serializer = self.serializer_class(hardware, context={"request": request})
         return Response(serializer.data)
 
     def put(self, request, pk, *args, **kwargs):
-        hardware = get_object_or_404(Hardware, pk=pk)
-        serializer = self.serializer_class(hardware, data=request.data)
+        hardware = self.get_hardware(request, pk)
+        serializer = self.serializer_class(
+            hardware, data=request.data, context={"request": request}
+        )
         if serializer.is_valid():
             serializer.save()
             return Response(serializer.data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     def patch(self, request, pk, *args, **kwargs):
-        hardware = get_object_or_404(Hardware, pk=pk)
-        serializer = self.serializer_class(hardware, data=request.data, partial=True)
+        hardware = self.get_hardware(request, pk)
+        serializer = self.serializer_class(
+            hardware, data=request.data, partial=True, context={"request": request}
+        )
         if serializer.is_valid():
             serializer.save()
             return Response(serializer.data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     def delete(self, request, pk, *args, **kwargs):
-        hardware = get_object_or_404(Hardware, pk=pk)
+        hardware = self.get_hardware(request, pk)
         hardware.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
@@ -681,6 +868,18 @@ class HardwareDetailAPIView(GenericAPIView):
 class SubjectViewSet(viewsets.ModelViewSet):
     queryset = Subject.objects.all()
     serializer_class = SubjectSerializer
+
+    def get_queryset(self):
+        # the animals of a file of a draft are private to its author, like the file
+        user = self.request.user
+        if user.is_staff:
+            return Subject.objects.all().order_by("name")
+        visible = Q(files_m2m_temp__recording_session__status__in=SESSION_PUBLIC)
+        if user.is_authenticated:
+            visible |= Q(created_by=user) | Q(
+                files_m2m_temp__recording_session__created_by=user
+            )
+        return Subject.objects.filter(visible).distinct().order_by("name")
 
     def get_permissions(self):
         if self.action == "create":
@@ -736,7 +935,7 @@ class ProtocolViewSet(viewsets.ModelViewSet):
         user = self.request.user
         ordering = self.request.query_params.get("ordering")
 
-        qs = Protocol.objects.all()
+        qs = visible_to(Protocol.objects.all(), user)  # validated ones and one's own
 
         if user.is_authenticated:
             favorite_subquery = Favorite.objects.filter(
@@ -805,7 +1004,7 @@ class ProtocolViewSet(viewsets.ModelViewSet):
         )
 
         # Check if a protocol with the same name already exists
-        protocol, created = Protocol.objects.get_or_create(
+        protocol, _created = Protocol.objects.get_or_create(
             name=name,
             defaults={
                 **validated_data,
@@ -815,6 +1014,10 @@ class ProtocolViewSet(viewsets.ModelViewSet):
         )
 
         # If the protocol already existed, do not create but return the existing object
+        # (a protocol has no free text: it is validated whoever made it)
+        if protocol.status != "validated":
+            Protocol.objects.filter(pk=protocol.pk).update(status="validated")
+            protocol.refresh_from_db()
         serializer.instance = protocol
 
 
@@ -846,7 +1049,7 @@ class StrainViewSet(viewsets.ModelViewSet):
     search_fields = ["name"]
 
     def get_queryset(self):
-        qs = super().get_queryset()
+        qs = visible_to(super().get_queryset(), self.request.user)
         user = self.request.user
         if user.is_authenticated:
             content_type = ContentType.objects.get_for_model(Strain)
@@ -886,7 +1089,16 @@ class AnimalProfileFilter(django_filters.FilterSet):
 
     class Meta:
         model = AnimalProfile
-        fields = ["sex", "age", "genotype", "status", "strain", "treatment", "species"]
+        fields = [
+            "sex",
+            "age",
+            "genotype",
+            "status",
+            "strain",
+            "treatment",
+            "diet",
+            "species",
+        ]
 
 
 class AnimalProfileViewSet(viewsets.ModelViewSet):
@@ -897,7 +1109,7 @@ class AnimalProfileViewSet(viewsets.ModelViewSet):
     search_fields = ["name"]
 
     def get_queryset(self):
-        qs = super().get_queryset()
+        qs = visible_to(super().get_queryset(), self.request.user)
         user = self.request.user
         if user.is_authenticated:
             content_type = ContentType.objects.get_for_model(AnimalProfile)
@@ -931,19 +1143,22 @@ class AnimalProfileViewSet(viewsets.ModelViewSet):
 # Study
 # ----------------------------
 class StudyViewSet(viewsets.ModelViewSet):
+    """The studies of a person are theirs: each one lists, picks and changes only its own (the
+    administrators see all). They are not reviewed. Their names still show on the sessions that
+    are shared, like the rest of what a session says about itself."""
+
     queryset = Study.objects.all().order_by("name")
     serializer_class = StudySerializer
 
     def get_queryset(self):
         user = self.request.user
-        return Study.objects.filter(created_by=user).order_by("name")
+        studies = Study.objects.all().order_by("name")
+        return studies if user.is_staff else studies.filter(created_by=user)
 
     def get_permissions(self):
-        if self.action == "create":
-            return [IsAuthenticated()]
         if self.action in ["update", "partial_update", "destroy"]:
             return [IsAuthenticated(), IsCreatorOrReadOnly()]
-        return [permissions.AllowAny()]
+        return [IsAuthenticated()]
 
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
@@ -964,14 +1179,212 @@ class RecordingSessionViewSet(viewsets.ModelViewSet):
     ]
     search_fields = ["name", "description"]
     filterset_fields = ["is_multiple", "laboratory", "status", "protocol"]
-    ordering_fields = ["name", "date", "status", "protocol__name", "laboratory__name"]
+    ordering_fields = [
+        "name",
+        "date",
+        "status",
+        "protocol__name",
+        "laboratory__name",
+        "modified_at",
+    ]
     ordering = ["name"]
 
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
 
     def get_queryset(self):
-        return RecordingSession.objects.filter(created_by=self.request.user)
+        return (
+            RecordingSession.objects.filter(created_by=self.request.user)
+            .prefetch_related("publication_versions")
+            .annotate(
+                files_count=Count("file", distinct=True),
+                first_doi=Max("file__doi"),
+                files_to_deposit=Count(
+                    "file",
+                    filter=Q(file__doi__isnull=True) | Q(file__doi=""),
+                    distinct=True,
+                ),
+            )
+        )
+
+
+# The facets of the list of files that describe the animals: filter name -> lookup on the
+# animal profile (the animals of a file are those of its subjects or of its session)
+ANIMAL_FACETS = {
+    "species": "strain__species__name",
+    "sex": "sex",
+    "age": "age",
+}
+
+
+def visible_files(user):
+    """The files `user` may see: those of a shared or published session, and their own."""
+    files = File.objects.all()
+    if user.is_staff:
+        return files
+    visible = Q(recording_session__status__in=SESSION_PUBLIC)
+    if user.is_authenticated:
+        visible |= Q(created_by=user) | Q(recording_session__created_by=user)
+    return files.filter(visible)
+
+
+def _is_true(value):
+    """A checkbox sent in a form: "true", "on" or 1 (unchecked, or not sent, is false)."""
+    return str(value).strip().lower() in ("1", "true", "on")
+
+
+def _detection_payload(tool, calls, filename):
+    return {
+        "tool": tool,
+        "label": usv.TOOLS[tool]["label"],
+        "citation": usv.TOOLS[tool]["citation"],
+        "reference": usv.TOOLS[tool]["reference"],
+        "summary": usv.summarize(calls),
+        "source": filename,
+        "calls": calls,
+    }
+
+
+@extend_schema(exclude=True)
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def usv_tools(request):
+    """The detectors whose results can be added, with what they write and where they come from."""
+    return Response(
+        [
+            {
+                "tool": key,
+                "label": value["label"],
+                "color": value["color"],
+                "formats": value["formats"],
+                "help": value["help"],
+                "citation": value["citation"],
+                "reference": value["reference"],
+            }
+            for key, value in usv.TOOLS.items()
+        ]
+    )
+
+
+@extend_schema(exclude=True)
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def usv_detection_preview(request):
+    """Read a result file and say what it holds, without keeping anything: the form shows it
+    before the file is sent."""
+    upload = request.FILES.get("file")
+    if upload is None:
+        return Response({"error": "No file provided."}, status=400)
+    try:
+        calls = usv.read_result(
+            request.data.get("tool", ""), upload.name, upload.read()
+        )
+    except usv.ResultError as exc:
+        return Response({"error": str(exc)}, status=400)
+    return Response(_detection_payload(request.data["tool"], calls, upload.name))
+
+
+@extend_schema(exclude=True)
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def file_usv_detections(request, file_id):
+    """Add (or replace) the results of a detector for a file; only its creator does it."""
+    file = get_object_or_404(File, pk=file_id)
+    if not can_change(request.user, file):
+        return Response(
+            {"detail": "Only the creator of a file can add results to it."}, status=403
+        )
+    upload = request.FILES.get("file")
+    if upload is None:
+        return Response({"error": "No file provided."}, status=400)
+    tool = request.data.get("tool", "")
+    data = upload.read()
+    try:
+        calls = usv.read_result(tool, upload.name, data)
+    except usv.ResultError as exc:
+        return Response({"error": str(exc)}, status=400)
+    deposit = _is_true(request.data.get("deposit"))
+    for old in UsvDetection.objects.filter(file=file, tool=tool).exclude(original=""):
+        old.original.delete(save=False)  # replaced: the old table is not kept
+    detection, _ = UsvDetection.objects.update_or_create(
+        file=file,
+        tool=tool,
+        defaults={
+            "tool_version": str(request.data.get("tool_version", ""))[:64],
+            "parameters": str(request.data.get("parameters", ""))[:2000],
+            "reference": usv.TOOLS[tool]["reference"],
+            "calls": calls,
+            "summary": usv.summarize(calls),
+            "source": ntpath.basename(upload.name)[:500],
+            "created_by": request.user,
+            "deposit": deposit,
+            "original": "",
+        },
+    )
+    if deposit:  # the table is kept only to be sent to the repository with the record
+        extension = ntpath.splitext(upload.name)[1].lower()
+        detection.original.save(
+            f"{ntpath.splitext(file.name)[0]}_{tool}{extension}", ContentFile(data)
+        )
+    return Response(UsvDetectionSerializer(detection).data, status=201)
+
+
+@extend_schema(exclude=True)
+@api_view(["POST", "DELETE"])
+@permission_classes([IsAdminUser])
+def file_images(request, file_id):
+    """Set (POST: `spectrogram` and/or `plot`) or remove (DELETE ?field=plot) the images shown with
+    a file in the datasets. Administrators only, whoever created the file."""
+    file = get_object_or_404(File, pk=file_id)
+    if request.method == "DELETE":
+        field = request.query_params.get("field")
+        if field not in ("spectrogram", "plot"):
+            return Response({"error": "field must be spectrogram or plot."}, status=400)
+        getattr(file, field).delete(save=False)  # the picture on the disk goes too
+        setattr(file, field, None)
+        file.save(update_fields=[field])
+        return Response(status=204)
+    serializer = FileImagesSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    changes = dict(serializer.validated_data)
+    if (
+        "deposit_images" in request.data
+    ):  # the checkbox: send them to the repository too
+        changes["deposit_images"] = _is_true(request.data["deposit_images"])
+    if not changes:
+        return Response({"error": "Send a spectrogram or a plot."}, status=400)
+    for name, value in changes.items():
+        if name != "deposit_images":
+            getattr(file, name).delete(save=False)  # replaced: no orphan on the disk
+        setattr(file, name, value)
+    file.save(update_fields=list(changes))
+    data = FileNestedSerializer(file, context={"request": request}).data
+    return Response(
+        {
+            "spectrogram_url": data["spectrogram_url"],
+            "plot_url": data["plot_url"],
+            "deposit_images": file.deposit_images,
+        }
+    )
+
+
+@extend_schema(exclude=True)
+@api_view(["GET", "DELETE"])
+@permission_classes([AllowAny])
+def usv_detection_detail(request, pk):
+    """The calls a detector found in a file, read when someone opens them (or removing them)."""
+    if request.method == "DELETE":
+        if not request.user.is_authenticated:
+            return Response(status=401)
+        detection = get_object_or_404(UsvDetection, pk=pk)
+        if not can_change(request.user, detection.file):
+            return Response(status=403)
+        detection.delete()
+        return Response(status=204)
+    detection = get_object_or_404(
+        UsvDetection.objects.filter(file__in=visible_files(request.user)), pk=pk
+    )
+    return Response(UsvDetectionCallsSerializer(detection).data)
 
 
 # ----------------------------
@@ -992,8 +1405,9 @@ class FileAPIView(GenericAPIView):
     # Dynamic queryset
     # -----------------------------
     def get_queryset(self):
-        files = File.objects.all()
         request = self.request
+        # --- Visibility: files of a draft session are private to their owner ---
+        files = visible_files(request.user)
 
         # --- Filter by RecordingSession ---
         recording_session_id = request.GET.get("recording_session")
@@ -1007,31 +1421,13 @@ class FileAPIView(GenericAPIView):
         # --- Global text search ---
         search_query = request.GET.get("search", "").strip()
         if search_query:
-            file_fields = ["number", "link", "notes", "doi"]
+            file_fields = ["name", "number", "link", "notes", "doi"]
 
-            recording_session_fields = [
-                "name",
-                "equipment_acquisition_software__software__name",
-                "equipment_acquisition_hardware_soundcards__name",
-                "equipment_acquisition_hardware_speakers__name",
-                "equipment_acquisition_hardware_amplifiers__name",
-                "equipment_acquisition_hardware_microphones__name",
-                "description",
-                "date",
-                "duration",
-            ]
-
+            session_fields = ["name", "description", "date", "duration"]
             subject_fields = ["name", "identifier", "origin", "cohort"]
 
-            user_fields = [
-                "name_user",
-                "first_name_user",
-                "email_user",
-                "unit_user",
-                "institution_user",
-                "address_user",
-                "country_user",
-            ]
+            # the author is the owner of the recording session
+            author_fields = ["first_name", "last_name"]
 
             strain_fields = [
                 "animal_profile__strain__name",
@@ -1042,8 +1438,6 @@ class FileAPIView(GenericAPIView):
 
             protocol_fields = [
                 "name",
-                "description",
-                "user__name_user",
                 "animals_sex",
                 "animals_age",
                 "animals_housing",
@@ -1059,6 +1453,7 @@ class FileAPIView(GenericAPIView):
                 "sex",
                 "genotype",
                 "treatment",
+                "diet",
             ]
 
             laboratory_fields = [
@@ -1067,31 +1462,70 @@ class FileAPIView(GenericAPIView):
                 "unit",
                 "address",
                 "country",
-                "contact",
             ]
 
             study_fields = ["name", "description"]
 
-            def build_query(prefix, fields):
+            user = request.user
+            if user.is_staff:
+                mine = Q(pk__isnull=False)
+            elif user.is_authenticated:
+                mine = Q(recording_session__created_by=user)
+            else:
+                mine = Q(pk__isnull=True)
+
+            def validated(path):
+                """What nobody validated is not searched: it is not shown either."""
+                return mine | Q(**{f"{path}status": "validated"})
+
+            def build_query(prefix, fields, term, *needs):
                 q = Q()
                 for f in fields:
                     lookup = f"{prefix}{f}__icontains" if prefix else f"{f}__icontains"
-                    q |= Q(**{lookup: search_query})
+                    q |= Q(**{lookup: term})
+                for path in needs:
+                    q &= validated(path)
                 return q
 
-            combined_query = (
-                build_query("", file_fields)
-                | build_query("recording_session__", recording_session_fields)
-                | build_query("subjects__", subject_fields)
-                | build_query("subjects__user__", user_fields)
-                | build_query("subjects__", strain_fields)
-                | build_query("recording_session__protocol__", protocol_fields)
-                | build_query("subjects__animal_profile__", animal_profile_fields)
-                | build_query("recording_session__laboratory__", laboratory_fields)
-                | build_query("recording_session__studies__", study_fields)
-            )
+            session = "recording_session__"
+            profile = "subjects__animal_profile__"
+            equipment = [
+                f"{session}equipment_acquisition_software__software__",
+                f"{session}equipment_acquisition_hardware_soundcards__",
+                f"{session}equipment_acquisition_hardware_speakers__",
+                f"{session}equipment_acquisition_hardware_amplifiers__",
+                f"{session}equipment_acquisition_hardware_microphones__",
+            ]
 
-            files = files.filter(combined_query).distinct()
+            # every word must be found somewhere (name, session, author, protocol...)
+            for term in search_query.split():
+                found = (
+                    build_query("", file_fields, term)
+                    | build_query(session, session_fields, term)
+                    | build_query("subjects__", subject_fields, term)
+                    | build_query(f"{session}created_by__", author_fields, term)
+                    | build_query(
+                        "subjects__", strain_fields, term, profile, f"{profile}strain__"
+                    )
+                    | build_query(
+                        f"{session}protocol__",
+                        protocol_fields,
+                        term,
+                        f"{session}protocol__",
+                    )
+                    | build_query(profile, animal_profile_fields, term, profile)
+                    | build_query(
+                        f"{session}laboratory__",
+                        laboratory_fields,
+                        term,
+                        f"{session}laboratory__",
+                    )
+                    | build_query(f"{session}studies__", study_fields, term)
+                )
+                for path in equipment:
+                    found |= build_query(path, ["name"], term, path)
+                files = files.filter(found)
+            files = files.distinct()
 
         # --- Filtres ---
         ALLOWED_FILTERS = ["is_valid_link"]
@@ -1101,6 +1535,58 @@ class FileAPIView(GenericAPIView):
                 if filter_name in ALLOWED_FILTERS and filter_name == "is_valid_link":
                     files = files.filter(is_valid_link=True)
 
+        # --- Facets: a comma separated list per name, one of the values must match ---
+        def values(name):
+            return [
+                v.strip() for v in request.GET.get(name, "").split(",") if v.strip()
+            ]
+
+        for name, lookup in ANIMAL_FACETS.items():
+            chosen = values(name)
+            if chosen:
+                files = files.filter(
+                    Q(**{f"subjects__animal_profile__{lookup}__in": chosen})
+                    | Q(**{f"recording_session__animal_profiles__{lookup}__in": chosen})
+                )
+        # not "format": DRF reads ?format= as the wanted rendering (json, api...)
+        if values("file_format"):
+            files = files.filter(format__in=[v.upper() for v in values("file_format")])
+        if values("repository"):
+            files = files.filter(repository__name__in=values("repository"))
+        files = files.distinct()
+
+        # a page of files is serialized with its session, animals and equipment: load
+        # them in a few queries instead of a few per row
+        files = files.select_related(
+            "repository",
+            "recording_session__protocol",
+            "recording_session__laboratory",
+            "recording_session__created_by__user_profile",
+            "created_by__user_profile",
+        ).prefetch_related(
+            # the calls are heavy: a list only needs the summary of each detection
+            Prefetch("usv_detections", queryset=UsvDetection.objects.defer("calls")),
+            "subjects__animal_profile__strain__species",
+            "subjects__animal_profile__strain__ontology_term",
+            "subjects__animal_profile__sex_term",
+            "subjects__animal_profile__age_term",
+            "subjects__animal_profile__treatment_term",
+            "subjects__animal_profile__diet_term",
+            "recording_session__behavior_terms",
+            "recording_session__studies",
+            "recording_session__references",
+            "recording_session__animal_profiles__strain__species",
+            "recording_session__animal_profiles__strain__ontology_term",
+            "recording_session__animal_profiles__sex_term",
+            "recording_session__animal_profiles__age_term",
+            "recording_session__animal_profiles__treatment_term",
+            "recording_session__animal_profiles__diet_term",
+            "recording_session__equipment_acquisition_software__software__references",
+            "recording_session__equipment_acquisition_hardware_soundcards__references",
+            "recording_session__equipment_acquisition_hardware_speakers__references",
+            "recording_session__equipment_acquisition_hardware_amplifiers__references",
+            "recording_session__equipment_acquisition_hardware_microphones__references",
+        )
         files = files.order_by(F("name").asc(nulls_last=True))
         return files
 
@@ -1134,36 +1620,49 @@ class FileAPIView(GenericAPIView):
         queryset = self.get_queryset()
         paginator = FilePagination()
         paginated_files = paginator.paginate_queryset(queryset, request)
-        serializer = self.serializer_class(paginated_files, many=True)
+        serializer = self.serializer_class(
+            paginated_files, many=True, context={"viewer": request.user}
+        )
         return paginator.get_paginated_response(serializer.data)
 
     # -----------------------------
     # POST Celery
     # -----------------------------
     def post(self, request, *args, **kwargs):
-        if not request.user.is_staff:
-            if "plot" in request.data or "spectrogram" in request.data:
-                return Response(
-                    {"detail": "Only administrators can set plot or spectrogram."},
-                    status=status.HTTP_403_FORBIDDEN,
-                )
+        if not request.user.is_staff and (
+            "plot" in request.data
+            or "spectrogram" in request.data
+            or "deposit_images" in request.data
+        ):
+            return Response(
+                {"detail": "Only administrators can set plot or spectrogram."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         serializer = self.serializer_class(
             data=request.data, context={"request": request}
         )
         serializer.is_valid(raise_exception=True)
 
+        session = serializer.validated_data.get("recording_session")
+        if session is not None and not can_change(request.user, session):
+            return Response(
+                {"detail": "This recording session belongs to someone else."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
         file = serializer.save(created_by=request.user)
 
         if not file.repository:
-            try:
-                default_repo = Repository.objects.get(id=1)
-                file.repository = default_repo
-                file.save(update_fields=["repository"])
-            except Repository.DoesNotExist:
+            # Zenodo is the default repository; any repository is better than none
+            default_repo = default_repository()
+            if default_repo is None:
+                file.delete()
                 return Response(
-                    {"error": "Default repository (id=1) not found."},
+                    {"error": "No repository is configured."},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
+            file.repository = default_repo
+            file.save(update_fields=["repository"])
 
         # Start background task to process the file if no DOI
         if not file.doi:
@@ -1173,7 +1672,7 @@ class FileAPIView(GenericAPIView):
                 task = process_file.delay(file.id, file.repository.id)
                 file.celery_task_id = task.id
                 file.save(update_fields=["celery_task_id"])
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 - any broker error must flag the file
                 file.status = "error"
                 file.save(update_fields=["status"])
                 return Response(
@@ -1185,7 +1684,8 @@ class FileAPIView(GenericAPIView):
             file.save(update_fields=["status"])
 
         return Response(
-            self.serializer_class(file).data, status=status.HTTP_201_CREATED
+            self.serializer_class(file, context={"viewer": request.user}).data,
+            status=status.HTTP_201_CREATED,
         )
 
 
@@ -1193,8 +1693,14 @@ class FileAPIView(GenericAPIView):
 # File status endpoint
 # ----------------------------
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def file_task_status(request, file_id):
     file = get_object_or_404(File, id=file_id)
+    if not can_change(request.user, file):
+        return Response(
+            {"detail": "Only the creator of a file can follow its processing."},
+            status=status.HTTP_403_FORBIDDEN,
+        )
 
     if not file.celery_task_id:
         return Response({"error": "No task associated"}, status=404)
@@ -1205,9 +1711,15 @@ def file_task_status(request, file_id):
         "id": file.id,
         "task_state": result.state,  # PENDING, STARTED, SUCCESS, FAILURE
         "status": file.status,
+        "progress": get_progress(file.id) if file.status == "processing" else 0,
+        "error_message": file.error_message,
     }
 
-    if result.failed():
+    # error text can contain the Zenodo URL with its access_token: staff only,
+    # unless it was written for the user (UploadError)
+    if result.failed() and isinstance(result.result, UploadError):
+        response["task_error"] = str(result.result)
+    elif result.failed() and request.user.is_staff:
         response["task_error"] = str(result.result)
         response["task_traceback"] = result.traceback
 
@@ -1229,20 +1741,174 @@ class FileUploadAsyncView(APIView):
             return [IsAuthenticated()]
         return [AllowAny()]
 
+    @staticmethod
+    def _too_large(room):
+        if room < settings.MAX_UPLOAD_SIZE:
+            message = (
+                "The server does not have the room for a file this large right now: "
+                f"{room // 1024**2} MB at most. Try again later, or ask an administrator."
+            )
+        else:
+            message = f"File too large: the limit is {settings.MAX_UPLOAD_SIZE // 1024**2} MB."
+        return Response(
+            {"error": message, "limit": room},
+            status=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+        )
+
     def post(self, request):
+        # the declared size is known before the body is read: refuse now what the disk cannot
+        # hold, so nothing is received for nothing
+        declared = int(request.META.get("CONTENT_LENGTH") or 0)
+        reserved = reserve_upload(declared)
+        try:
+            return self._store(request, declared, upload_room(reserved))
+        finally:
+            release_upload(declared)
+
+    def _store(self, request, declared, room):
+        if declared > room:
+            return self._too_large(room)
         uploaded_file = request.FILES.get("file")
         if not uploaded_file:
             return Response({"error": "No file provided"}, status=400)
+        if uploaded_file.size > room:
+            return self._too_large(room)
+        extension = os.path.splitext(uploaded_file.name)[1].lstrip(".").upper()
+        if extension not in {choice[0].upper() for choice in File.FORMAT_CHOICES}:
+            return Response(
+                {"error": f"Unsupported file type: .{extension.lower()}"}, status=400
+            )
 
         temp_dir = os.path.join(settings.MEDIA_ROOT, "temp")
         os.makedirs(temp_dir, exist_ok=True)
+        purge_temp_files()  # uploads nobody took over within a day
 
-        temp_path = os.path.join(temp_dir, uploaded_file.name)
-        with open(temp_path, "wb+") as dest:
-            for chunk in uploaded_file.chunks():
-                dest.write(chunk)
+        # unique prefix: two users uploading "a.wav" must not overwrite each other
+        safe_name = f"{uuid.uuid4().hex}_{get_valid_filename(uploaded_file.name)}"
+        temp_path = os.path.join(temp_dir, safe_name)
+        try:
+            with open(temp_path, "wb+") as dest:
+                dest.writelines(uploaded_file.chunks())
+        except OSError:
+            remove_temp(temp_path)  # no half-written file left behind (disk full...)
+            return Response(
+                {"error": "The file could not be stored."},
+                status=status.HTTP_507_INSUFFICIENT_STORAGE,
+            )
 
-        return Response({"temp_path": f"/media/temp/{uploaded_file.name}"})
+        return Response({"temp_path": f"/media/temp/{safe_name}"})
+
+
+def _link_check_report():
+    """The state of the check, and the files whose link does not answer (the validity is kept in
+    each file, so this is also what the last checks found)."""
+    with_link = File.objects.exclude(link__isnull=True).exclude(link="")
+    broken = with_link.filter(is_valid_link=False).select_related("recording_session")
+    return {
+        "check": link_check.read_state(),
+        "files_with_link": with_link.count(),
+        "valid": with_link.filter(is_valid_link=True).count(),
+        "broken_count": broken.count(),
+        "broken": [
+            {
+                "id": f.id,
+                "name": f.name,
+                "link": f.link,
+                "session_id": f.recording_session_id,
+                "session": f.recording_session.name if f.recording_session else None,
+            }
+            for f in broken.order_by("name")[:200]
+        ],
+    }
+
+
+@extend_schema(exclude=True)
+@api_view(["POST", "DELETE"])
+@permission_classes([IsAuthenticated])
+def auto_publish_view(request, pk):
+    """The author of a session that waits for validation approves the preview of its publication
+    (POST: the repository and the metadata as they looked at them), so that it is published by
+    itself once an administrator shares it. DELETE takes the approval back."""
+    session = get_object_or_404(RecordingSession, pk=pk)
+    if session.created_by != request.user:
+        return Response({"detail": "Not authorized."}, status=status.HTTP_403_FORBIDDEN)
+    if request.method == "DELETE":
+        reset_auto_publish(session)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+    if session.status != "waiting validation":
+        return Response(
+            {
+                "detail": "Only a session that waits for validation can be approved for "
+                "automatic publication: a shared one is published with its own button."
+            },
+            status=status.HTTP_409_CONFLICT,
+        )
+    repository = get_object_or_404(Repository, pk=request.data.get("repository_id"))
+    payload = request.data.get("payload")
+    if not isinstance(payload, dict) or not payload:
+        return Response({"error": "payload required"}, status=400)
+    if len(json.dumps(payload)) > MAX_APPROVED_PAYLOAD:
+        return Response({"error": "The metadata is too large."}, status=400)
+    try:
+        approve_auto_publish(session, repository, payload)
+    except (NotImplementedError, IndexError, ValueError):
+        return Response(
+            {"error": "This session has nothing to publish yet in this repository."},
+            status=400,
+        )
+    return Response(
+        RecordingSessionSerializer(session, context={"request": request}).data
+    )
+
+
+@extend_schema(exclude=True)
+@api_view(["GET", "POST"])
+@permission_classes([IsAdminUser])
+def link_check_view(request):
+    """GET: where the check of the download links is, and the links that do not answer. POST:
+    start it in the background (one at a time)."""
+    if request.method == "GET":
+        return Response(_link_check_report())
+    if not cache.add(link_check.LOCK_KEY, "1", link_check.LOCK_SECONDS):
+        return Response(
+            {"detail": "A check is already running.", **_link_check_report()},
+            status=status.HTTP_409_CONFLICT,
+        )
+    try:
+        task = check_dead_links.delay()
+    except OperationalError:  # the broker is down: nothing runs, the lock must not stay
+        cache.delete(link_check.LOCK_KEY)
+        return Response(
+            {"detail": "The task could not be started. Try again later."},
+            status=status.HTTP_503_SERVICE_UNAVAILABLE,
+        )
+    link_check.start_state(task.id)
+    return Response(_link_check_report(), status=status.HTTP_202_ACCEPTED)
+
+
+@extend_schema(exclude=True)
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def app_version(request):
+    """The version of the API, shown in the footer of the site."""
+    return Response({"version": settings.APP_VERSION})
+
+
+@extend_schema(exclude=True)
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def upload_limit(request):
+    """What a file may weigh right now: the form checks it before sending anything."""
+    media = settings.MEDIA_ROOT
+    os.makedirs(media, exist_ok=True)
+    return Response(
+        {
+            "limit": upload_room(),
+            "max": settings.MAX_UPLOAD_SIZE,
+            "free": shutil.disk_usage(media).free,
+            "reserve": settings.UPLOAD_FREE_SPACE_RESERVE,
+        }
+    )
 
 
 # ----------------------------
@@ -1271,6 +1937,41 @@ class PublishSessionView(APIView):
 
         payload = request.data.get("payload")
 
+        session = get_object_or_404(RecordingSession, pk=recording_session_id)
+        if session.created_by != request.user and not request.user.is_staff:
+            return Response(
+                {"detail": "Not authorized."}, status=status.HTTP_403_FORBIDDEN
+            )
+        if session_pending_entries(session):
+            return Response(
+                {
+                    "detail": "The session uses entries that wait for an administrator: "
+                    "it can be published once they are validated."
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+        if session.status == "published":
+            # a published session has a new version to publish when files were added since
+            waiting = File.objects.filter(
+                recording_session=session, external_id__isnull=False, status="done"
+            ).filter(Q(doi__isnull=True) | Q(doi=""))
+            if not waiting.exists():
+                return Response(
+                    {
+                        "detail": "Nothing new to publish: add a file to make a new "
+                        "version of the record."
+                    },
+                    status=status.HTTP_409_CONFLICT,
+                )
+        elif session.status != "shared" and not request.user.is_staff:
+            return Response(
+                {
+                    "detail": "Share the session first: an administrator has to validate "
+                    "its new entries before it can be deposited in a repository."
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+
         task = publish_session_deposition.delay(
             recording_session_id, repository_id, payload
         )
@@ -1285,6 +1986,7 @@ class PublishSessionView(APIView):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_task_status(request):
     task_id = request.query_params.get("task_id")
     if not task_id:
@@ -1296,7 +1998,10 @@ def get_task_status(request):
         "task_id": task_id,
         "state": result.state,  # PENDING, STARTED, SUCCESS, FAILURE
         "success": result.successful(),
-        "error": str(result.result) if result.failed() else None,
+        "error": str(result.result)
+        if result.failed()
+        and (request.user.is_staff or isinstance(result.result, UploadError))
+        else None,
         "progress": 0,
     }
 
@@ -1326,7 +2031,7 @@ class FileDetailAPIView(GenericAPIView):
             return Response(
                 {"detail": "File not found"}, status=status.HTTP_404_NOT_FOUND
             )
-        serializer = self.serializer_class(file)
+        serializer = self.serializer_class(file, context={"viewer": request.user})
         return Response(serializer.data)
 
     def put(self, request, *args, **kwargs):
@@ -1335,48 +2040,55 @@ class FileDetailAPIView(GenericAPIView):
             return Response(
                 {"detail": "File not found"}, status=status.HTTP_404_NOT_FOUND
             )
-        if not request.user.is_staff:
-            if "plot" in request.data or "spectrogram" in request.data:
-                return Response(
-                    {"detail": "Only administrators can set plot or spectrogram."},
-                    status=status.HTTP_403_FORBIDDEN,
-                )
-        serializer = self.serializer_class(file, data=request.data)
+        if not can_change(request.user, file):
+            return Response(
+                {"detail": "Only the creator of a file can change it."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        if not request.user.is_staff and (
+            "plot" in request.data
+            or "spectrogram" in request.data
+            or "deposit_images" in request.data
+        ):
+            return Response(
+                {"detail": "Only administrators can set plot or spectrogram."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        serializer = self.serializer_class(
+            file, data=request.data, context={"viewer": request.user}
+        )
         if serializer.is_valid():
             file = serializer.save()
-            return Response(self.serializer_class(file).data)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-    @extend_schema(exclude=True)
-    def patch(self, request, *args, **kwargs):
-        try:
-            file = File.objects.get(pk=kwargs["pk"])
-        except File.DoesNotExist:
             return Response(
-                {"detail": "File not found"}, status=status.HTTP_404_NOT_FOUND
+                self.serializer_class(file, context={"viewer": request.user}).data
             )
-
-        if "downloads" in request.data and request.data["downloads"] == "increment":
-            updated = File.objects.filter(pk=kwargs["pk"]).update(
-                downloads=F("downloads") + 1
-            )
-            if updated == 0:
-                return Response(
-                    {"detail": "File not found or update failed"},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-            file.refresh_from_db()
-            return Response({"downloads": file.downloads}, status=status.HTTP_200_OK)
-
-        return Response(
-            {"detail": "Invalid request body"}, status=status.HTTP_400_BAD_REQUEST
-        )
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     def delete(self, request, *args, **kwargs):
         file = self.get_object(kwargs["pk"])
         if not file:
             return Response(
                 {"detail": "File not found"}, status=status.HTTP_404_NOT_FOUND
+            )
+
+        if not can_change(request.user, file):
+            return Response(
+                {"detail": "Only the creator of a file can delete it."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        session = file.recording_session
+        if (
+            file.doi
+            and file.external_id
+            and session is not None
+            and session.publication_versions.exists()
+        ):
+            return Response(
+                {
+                    "detail": "This file is part of a published version of the record: "
+                    "it cannot be removed."
+                },
+                status=status.HTTP_409_CONFLICT,
             )
 
         # 🔹 Start async deletion
@@ -1401,6 +2113,55 @@ class FileDetailAPIView(GenericAPIView):
         return Response(
             {"detail": "File deletion scheduled.", "celery_task_id": task.id},
             status=status.HTTP_202_ACCEPTED,
+        )
+
+
+class FileDownloadView(APIView):
+    """Counts a download. Open to everybody (visitors download too), once per visitor
+    and file per hour so that reloading or clicking twice does not inflate the number."""
+
+    permission_classes = [AllowAny]
+    authentication_classes = []  # a stale token must not turn a visitor into a 401
+
+    @extend_schema(exclude=True)
+    def post(self, request, pk):
+        file = get_object_or_404(visible_files(request.user), pk=pk)
+        visitor = hashlib.sha256(BaseThrottle().get_ident(request).encode()).hexdigest()
+        counted = cache.add(f"download:{file.pk}:{visitor}", 1, 3600)
+        if counted:
+            File.objects.filter(pk=file.pk).update(downloads=F("downloads") + 1)
+            file.refresh_from_db(fields=["downloads"])
+        return Response({"downloads": file.downloads, "counted": counted})
+
+
+class FileFilterOptionsView(APIView):
+    """What the filters of the list of files can offer: the values that exist among the
+    files the user may see."""
+
+    permission_classes = [AllowAny]
+
+    @extend_schema(exclude=True)
+    def get(self, request):
+        files = visible_files(request.user)
+
+        def distinct(*paths):
+            found = set()
+            for path in paths:
+                found |= set(files.values_list(path, flat=True))
+            return sorted(v for v in found if v)
+
+        return Response(
+            {
+                name: distinct(
+                    f"subjects__animal_profile__{lookup}",
+                    f"recording_session__animal_profiles__{lookup}",
+                )
+                for name, lookup in ANIMAL_FACETS.items()
+            }
+            | {
+                "format": distinct("format"),
+                "repository": distinct("repository__name"),
+            }
         )
 
 
@@ -1434,13 +2195,9 @@ class ContactViewSet(viewsets.ModelViewSet):
                 qs = qs.filter(Q(created_by=user) | Q(status="validated"))
 
         if search_query:
-            search_fields = [
-                "last_name",
-                "first_name",
-                "email",
-                "institution",
-                "status",
-            ]
+            search_fields = ["last_name", "first_name", "institution", "status"]
+            if user.is_authenticated:  # e-mail is hidden from anonymous users
+                search_fields.append("email")
             q = Q()
             for f in search_fields:
                 q |= Q(**{f"{f}__icontains": search_query})
@@ -1478,14 +2235,14 @@ class ContactViewSet(viewsets.ModelViewSet):
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        contact = serializer.save(created_by=request.user, status="waiting_validation")
+        contact = serializer.save(created_by=request.user)
         return Response(
             self.get_serializer(contact).data, status=status.HTTP_201_CREATED
         )
 
     def perform_create(self, serializer):
         # kept for compatibility if other code calls perform_create
-        serializer.save(created_by=self.request.user, status="waiting_validation")
+        serializer.save(created_by=self.request.user)
 
 
 # ----------------------------
@@ -1527,37 +2284,31 @@ class SoftwareViewSet(viewsets.ModelViewSet):
                 "technical_requirements",
             ]
             reference_fields = ["name", "description", "url", "doi"]
-            user_fields = [
-                "name_user",
-                "first_name_user",
-                "email_user",
-                "unit_user",
-                "institution_user",
-                "address_user",
-                "country_user",
-            ]
-            contact_fields = [
-                "last_name",
-                "email",
-                "institution",
-            ]
+            contact_fields = ["last_name", "institution"]
+            if self.request.user.is_authenticated:
+                contact_fields.append(
+                    "email"
+                )  # hidden from visitors: do not let them probe it
 
-            q = Q()
-            for f in software_fields:
-                q |= Q(**{f"{f}__icontains": search_query})
-            for f in reference_fields:
-                q |= Q(**{f"references__{f}__icontains": search_query})
-            for f in user_fields:
-                q |= Q(**{f"users__{f}__icontains": search_query})
-            for f in contact_fields:
-                q |= Q(**{f"contacts__{f}__icontains": search_query})
-
-            qs = qs.filter(q).distinct()
+            # every word must be found somewhere (name, maker, references, contacts...)
+            for term in search_query.split():
+                q = Q()
+                for f in software_fields:
+                    q |= Q(**{f"{f}__icontains": term})
+                for f in reference_fields:
+                    q |= Q(**{f"references__{f}__icontains": term})
+                for f in contact_fields:
+                    q |= Q(**{f"contacts__{f}__icontains": term})
+                qs = qs.filter(q)
+            qs = qs.distinct()
 
         filter_query = self.request.GET.get("filter")
         ALLOWED_FILTERS = ["acquisition", "analysis", "acquisition and analysis"]
         if filter_query in ALLOWED_FILTERS:
             qs = qs.filter(type=filter_query)
+        qs = filter_catalog(
+            qs, self.request, ["versions__recording_sessions_as_software"]
+        )
 
         if self.action == "retrieve":
             qs = SoftwareSerializer.annotate_queryset(
@@ -1610,7 +2361,7 @@ class SoftwareViewSet(viewsets.ModelViewSet):
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        software = serializer.save(created_by=request.user, status="waiting validation")
+        software = serializer.save(created_by=request.user)
         return Response(
             self.get_serializer(software).data, status=status.HTTP_201_CREATED
         )
@@ -1677,13 +2428,16 @@ class SoftwareVersionViewSet(viewsets.ModelViewSet):
             )
 
         if self.action == "retrieve":
+            # for a visitor, every linked session belongs to "other users"
+            others = (
+                ~Q(recording_sessions_as_software__created_by=self.request.user)
+                if self.request.user.is_authenticated
+                else None
+            )
             queryset = queryset.annotate(
                 linked_sessions_count=Count("recording_sessions_as_software"),
                 linked_sessions_from_other_users=Count(
-                    "recording_sessions_as_software",
-                    filter=~Q(
-                        recording_sessions_as_software__created_by=self.request.user
-                    ),
+                    "recording_sessions_as_software", filter=others
                 ),
             )
 
@@ -1758,6 +2512,7 @@ class FavoriteViewSet(viewsets.ModelViewSet):
 # ----------------------------
 class TrackPageView(GenericAPIView):
     serializer_class = TrackPageSerializer
+    permission_classes = [AllowAny]
 
     @extend_schema(exclude=True)
     def post(self, request):
@@ -1774,11 +2529,9 @@ class TrackPageView(GenericAPIView):
         if not created:
             PageView.objects.filter(pk=obj.pk).update(count=F("count") + 1)
 
-        cache_key = f"pageview-log-generated-{today}"
-
-        if not cache.get(cache_key):
-            call_command("export_page_view", verbosity=0)
-            cache.set(cache_key, True, 60 * 60 * 24)
+        # cache.add is atomic and the cache is shared (Redis): one export per day
+        if cache.add(f"pageview-log-generated-{today}", True, 60 * 60 * 24):
+            export_page_views.delay()
 
         return Response(PageViewSerializer(obj).data, status=status.HTTP_200_OK)
 
@@ -1854,12 +2607,90 @@ class DatasetViewSet(viewsets.ModelViewSet):
     queryset = Dataset.objects.all().order_by("name")
     serializer_class = DatasetSerializer
     filter_backends = [filters.SearchFilter]
-    search_fields = ["name"]
+    # the name, but also what people look for: a file, a session, an animal profile, a DOI
+    search_fields = [
+        "name",
+        "description",
+        "doi",
+        "recording_session_list__name",
+        "recording_session_list__file__name",
+        "recording_session_list__file__doi",
+        "recording_session_list__animal_profiles__name",
+        # what the file rows show as chips (sex, age, duration, cage, bedding)
+        "recording_session_list__protocol__animals_sex",
+        "recording_session_list__protocol__animals_age",
+        "recording_session_list__protocol__context_duration",
+        "recording_session_list__protocol__context_cage",
+        "recording_session_list__protocol__context_bedding",
+    ]
 
     def get_permissions(self):
-        if self.action in ["create", "update", "partial_update", "destroy"]:
+        # get_permissions replaces the permission_classes given to @action, so every
+        # admin-only action must be listed here
+        if self.action in [
+            "create",
+            "update",
+            "partial_update",
+            "destroy",
+            "session_choices",
+        ]:
             return [IsAuthenticated(), IsAdminUser()]
         return [permissions.AllowAny()]
 
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
+
+    @extend_schema(exclude=True)
+    @action(
+        detail=False,
+        methods=["get"],
+        url_path="metadata",
+        permission_classes=[AllowAny],
+    )
+    def metadata_all(self, request):
+        """Metadata JSON of every dataset (public, like the Dataset page)."""
+        return Response(
+            {
+                "datasets": [
+                    build_dataset_metadata(d, request.user)["dataset"]
+                    for d in self.get_queryset()
+                ]
+            }
+        )
+
+    @extend_schema(exclude=True)
+    @action(
+        detail=True, methods=["get"], url_path="metadata", permission_classes=[AllowAny]
+    )
+    def metadata(self, request, pk=None):
+        """Metadata JSON of one dataset: sessions, protocols, animals, equipment, files."""
+        return Response(build_dataset_metadata(self.get_object(), request.user))
+
+    @extend_schema(exclude=True)
+    @action(
+        detail=False,
+        methods=["get"],
+        url_path="session-choices",
+        permission_classes=[IsAuthenticated, IsAdminUser],
+    )
+    def session_choices(self, request):
+        """Sessions an admin can put in a dataset (all of them, not only their own)."""
+        search = request.query_params.get("search", "").strip()
+        sessions = RecordingSession.objects.select_related("laboratory").annotate(
+            files_count=Count("file")
+        )
+        if search:
+            sessions = sessions.filter(
+                Q(name__icontains=search) | Q(laboratory__name__icontains=search)
+            )
+        return Response(
+            [
+                {
+                    "id": rs.id,
+                    "name": rs.name,
+                    "laboratory": rs.laboratory.name if rs.laboratory else None,
+                    "files_count": rs.files_count,
+                }
+                for rs in sessions.order_by("name")[:50]
+            ]
+        )

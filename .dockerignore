@@ -1,0 +1,14 @@
+.git
+.github
+.env
+.env.*
+!.env.example
+.idea
+.ruff_cache
+logs
+media
+staticfiles
+*.pyc
+__pycache__
+node_modules
+nginx/ssl

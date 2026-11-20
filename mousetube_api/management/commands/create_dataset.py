@@ -72,7 +72,7 @@ class Command(BaseCommand):
         if file_path:
             try:
                 with open(file_path, "r") as f:
-                    lines = [line.strip() for line in f.readlines() if line.strip()]
+                    lines = [line.strip() for line in f if line.strip()]
                 # Try converting lines to integers (IDs), fallback to names
                 for line in lines:
                     try:

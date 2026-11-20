@@ -33,6 +33,8 @@ from django.views.static import serve
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 from rest_framework.routers import DefaultRouter
 
+from .account_views import CustomUserViewSet
+from .review import ReviewDecisionView, ReviewListView, ReviewSummaryView
 from .views import (
     AnimalProfileViewSet,
     ContactViewSet,
@@ -41,11 +43,14 @@ from .views import (
     FavoriteViewSet,
     FileAPIView,
     FileDetailAPIView,
+    FileDownloadView,
+    FileFilterOptionsView,
     FileUploadAsyncView,
     HardwareAPIView,
     HardwareDetailAPIView,
     LaboratoryAPIView,
     LinkOrcidView,
+    OntologySearchView,
     ProtocolViewSet,
     PublishSessionView,
     RecordingSessionViewSet,
@@ -62,13 +67,25 @@ from .views import (
     TrackPageView,
     UserProfileDetailAPIView,
     UserProfileListAPIView,
+    app_version,
+    auto_publish_view,
+    file_images,
     file_task_status,
+    file_usv_detections,
     get_task_status,
+    link_check_view,
+    personal_email_domains,
     repository_metadata_payload,
     repository_metadata_schema,
+    upload_limit,
+    usv_detection_detail,
+    usv_detection_preview,
+    usv_tools,
 )
 
 router = DefaultRouter()
+auth_router = DefaultRouter()  # same routes as djoser.urls, with our activation step
+auth_router.register("users", CustomUserViewSet, basename="user")
 router.register(r"protocol", ProtocolViewSet, basename="protocol")
 router.register(
     r"recording-session", RecordingSessionViewSet, basename="recording-session"
@@ -125,6 +142,23 @@ urlpatterns = [
     path("api/file/", FileAPIView.as_view(), name="file"),
     path("api/file/<int:file_id>/status/", file_task_status, name="file-status"),
     path("api/file/upload_async/", FileUploadAsyncView.as_view(), name="file-upload"),
+    path("api/file/upload-limit/", upload_limit, name="file-upload-limit"),
+    path("api/version/", app_version, name="app-version"),
+    path("api/admin/link-check/", link_check_view, name="link-check"),
+    path(
+        "api/recording-session/<int:pk>/auto-publish/",
+        auto_publish_view,
+        name="auto-publish",
+    ),
+    path("api/usv-detection/tools/", usv_tools, name="usv-tools"),
+    path("api/usv-detection/preview/", usv_detection_preview, name="usv-preview"),
+    path("api/usv-detection/<int:pk>/", usv_detection_detail, name="usv-detection"),
+    path("api/file/<int:file_id>/images/", file_images, name="file-images"),
+    path(
+        "api/file/<int:file_id>/usv-detections/",
+        file_usv_detections,
+        name="file-usv-detections",
+    ),
     path(
         "api/file/publish_session/",
         PublishSessionView.as_view(),
@@ -138,6 +172,23 @@ urlpatterns = [
         name="hardware-detail",
     ),
     path("api/country/", CountryAPIView.as_view(), name="country"),
+    path("api/ontology/search/", OntologySearchView.as_view(), name="ontology-search"),
+    path(
+        "api/personal-email-domains/",
+        personal_email_domains,
+        name="personal-email-domains",
+    ),
+    path("api/review/", ReviewSummaryView.as_view(), name="review-summary"),
+    path("api/review/<str:kind>/", ReviewListView.as_view(), name="review-list"),
+    path(
+        "api/review/<str:kind>/decision/",
+        ReviewDecisionView.as_view(),
+        name="review-decision",
+    ),
+    path("api/file/filters/", FileFilterOptionsView.as_view(), name="file-filters"),
+    path(
+        "api/file/<int:pk>/download/", FileDownloadView.as_view(), name="file-download"
+    ),
     path("api/file/<int:pk>/", FileDetailAPIView.as_view(), name="file-detail"),
     path("api/track-page/", TrackPageView.as_view(), name="track-page"),
     path(
@@ -147,7 +198,7 @@ urlpatterns = [
     path(
         "swagger/", SpectacularSwaggerView.as_view(url_name="schema"), name="swagger-ui"
     ),
-    path("auth/", include("djoser.urls")),
+    path("auth/", include(auth_router.urls)),
     path("auth/", include("djoser.urls.jwt")),
     path("accounts/", include("allauth.socialaccount.urls")),
     path("accounts/", include("allauth.urls")),

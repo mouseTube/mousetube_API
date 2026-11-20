@@ -34,6 +34,17 @@ if [ -z "$DB_NAME" ] || [ -z "$DB_USER" ] || [ -z "$DB_PASSWORD" ]; then
     exit 1
 fi
 
+# DEBUG unset counts as false for Django: RESET_DB is only allowed when DEBUG is explicitly true
+case "$(echo "$DEBUG" | tr '[:upper:]' '[:lower:]')" in
+    true|1|yes|on) ;;
+    *)
+        if [ "$RESET_DB" = "true" ]; then
+            echo "❌ RESET_DB=true is refused unless DEBUG=true (it would drop the production database)."
+            exit 1
+        fi
+        ;;
+esac
+
 if [ "$RESET_DB" = "true" ]; then
     echo "🚀 RESET_DB=true → Recreating the database..."
     mariadb -h db -u root -p"$DB_ROOT_PASS" <<EOF
@@ -50,11 +61,24 @@ else
     mariadb -h db -u root -p"$DB_ROOT_PASS" -e "GRANT ALL PRIVILEGES ON $DB_NAME.* TO '$DB_USER'@'localhost'; FLUSH PRIVILEGES;"
 fi
 
-echo "🛠️ Running makemigrations..."
-python3 manage.py makemigrations mousetube_api --noinput
+case "$(echo "$DEBUG" | tr '[:upper:]' '[:lower:]')" in
+    true|1|yes|on) ;;
+    *)
+        if [ "${DRF_NUM_PROXIES:-0}" = "0" ]; then
+            echo "⚠️  DRF_NUM_PROXIES is 0: behind a reverse proxy (nginx, HAProxy) every visitor has the same address for Django, so the rate limits apply to the whole site. Set it to the number of proxies."
+        fi
+        ;;
+esac
 
+# the migrations are versioned (mousetube_api/migrations): the container only applies them.
+# After a change of the models, run `makemigrations` and commit the file.
 echo "📦 Applying migrations..."
 python3 manage.py migrate --noinput
+
+# the conversions of existing rows that a change of structure needs are done by this command
+# (safe to run every time)
+echo "🔧 Upgrading existing data..."
+python3 manage.py normalize_data
 
 # 🚨 Explicit check of critical tables before loading data
 echo "🔍 Verifying that all required tables exist before loading fixtures..."
@@ -86,11 +110,12 @@ else
     echo "⚠️ Fixture file not found or not defined. Skipping fixture loading."
 fi
 
+# ✅ Always collect static files so nginx can serve /static/ (admin CSS, DRF browsable API)
+echo "🧪 Collecting static files..."
+python3 manage.py collectstatic --noinput
+
 # ✅ Starting the server
 if [ "$(echo "$DEBUG" | tr '[:upper:]' '[:lower:]')" = "false" ]; then
-    echo "🧪 Collecting static files..."
-    python3 manage.py collectstatic --noinput
-
     echo "🚀 Starting Gunicorn server..."
     exec gunicorn mousetube_api.asgi:application --bind 0.0.0.0:8000 --timeout 420 -k uvicorn.workers.UvicornWorker
 else

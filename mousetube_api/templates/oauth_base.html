@@ -1,0 +1,45 @@
+{% comment %}Standalone page shared by the ORCID sign-in screens (same look as the website).{% endcomment %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block head_title %}mouseTube{% endblock %}</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; min-height: 100vh; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; padding: 32px 12px;
+      background: #fff; color: #212121;
+      font-family: Roboto, "Helvetica Neue", Arial, sans-serif; line-height: 1.5;
+    }
+    .logo { width: 300px; max-width: 80%; margin-bottom: 16px; }
+    .card {
+      width: 100%; max-width: 480px; padding: 28px; border-radius: 20px;
+      box-shadow: 0 4px 16px #00000015; text-align: center;
+    }
+    h1 { font-size: 1.4rem; font-weight: 500; margin: 12px 0 8px; }
+    p { margin: 0 0 16px; font-size: 0.95rem; }
+    .muted { color: #666; font-size: 0.85rem; }
+    .icon { font-size: 48px; line-height: 1; }
+    .btn {
+      display: block; width: 100%; padding: 13px 16px; border-radius: 12px; border: 0;
+      font: inherit; font-weight: 500; letter-spacing: .03em; cursor: pointer;
+      text-decoration: none; text-align: center;
+    }
+    .btn-primary { background: #1867c0; color: #fff; }
+    .btn-primary:hover, .btn-primary:focus-visible { background: #14549d; }
+    .btn-orcid { background: #4caf50; color: #fff; }
+    .btn-orcid:hover, .btn-orcid:focus-visible { background: #3d8b40; }
+    .btn-link { background: none; color: #1867c0; margin-top: 8px; }
+    .btn:focus-visible { outline: 3px solid #1867c0aa; outline-offset: 2px; }
+    ul { text-align: left; font-size: 0.9rem; padding-left: 20px; margin: 0 0 16px; }
+  </style>
+</head>
+<body>
+  <img class="logo" src="{{ FRONT_URL }}/logo_mousetube_big.png" alt="mouseTube">
+  <main class="card">
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

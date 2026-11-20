@@ -1,0 +1,50 @@
+{% extends "admin/base_site.html" %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">Home</a> &rsaquo;
+  <a href="{% url 'admin:auth_user_changelist' %}">{{ opts.verbose_name_plural|capfirst }}</a> &rsaquo;
+  Reject account requests
+</div>
+{% endblock %}
+
+{% block content %}
+<p>
+  {% if requests %}
+    The following {{ requests|length }} request(s) will be <strong>deleted</strong> and each
+    person will receive an e-mail.
+  {% else %}
+    None of the selected accounts can be rejected here.
+  {% endif %}
+</p>
+{% if skipped %}
+<p class="help">
+  {{ skipped }} selected account(s) are ignored: only inactive accounts that never logged in,
+  without staff rights, can be rejected.
+</p>
+{% endif %}
+
+{% if requests %}
+<ul>
+  {% for u in requests %}<li>{{ u.username }} &lt;{{ u.email }}&gt;</li>{% endfor %}
+</ul>
+
+<form method="post">
+  {% csrf_token %}
+  {% for u in requests %}
+    <input type="hidden" name="{{ action_checkbox_name }}" value="{{ u.pk }}">
+  {% endfor %}
+  <input type="hidden" name="action" value="reject_accounts">
+  <input type="hidden" name="apply" value="1">
+  <p>
+    <label for="reason"><strong>Reason</strong> (optional, added to the e-mail):</label><br>
+    <textarea id="reason" name="reason" rows="4" cols="70"
+      placeholder="For example: please register with your institutional email address."></textarea>
+  </p>
+  <input type="submit" class="default" value="Reject and notify">
+  <a href="{% url 'admin:auth_user_changelist' %}?account_request=review" class="button cancel-link">Cancel</a>
+</form>
+{% else %}
+<a href="{% url 'admin:auth_user_changelist' %}" class="button">Back to the list</a>
+{% endif %}
+{% endblock %}

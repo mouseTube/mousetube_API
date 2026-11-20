@@ -1,0 +1,14 @@
+{% extends "oauth_base.html" %}
+{% block head_title %}ORCID login failed - mouseTube{% endblock %}
+{% block content %}
+  <div class="icon" aria-hidden="true">&#9888;&#65039;</div>
+  <h1>The ORCID login did not complete</h1>
+  <p>Nothing was changed. This usually has one of these causes:</p>
+  <ul>
+    <li>You went back or waited too long on the ORCID page: start again.</li>
+    <li>Your browser blocks cookies for this site: allow them, then start again.</li>
+    <li>ORCID is temporarily unavailable: try again in a few minutes.</li>
+  </ul>
+  <a class="btn btn-primary" href="{{ FRONT_URL }}/account/login">Back to the login page</a>
+  <p class="muted" style="margin-top:16px">If it keeps failing, contact the mouseTube team.</p>
+{% endblock %}

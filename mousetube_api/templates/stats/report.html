@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Visits {{ year }} · mouseTube admin</title>
+  <link rel="icon" href="https://avatars.githubusercontent.com/u/150816394?v=4" type="image/x-icon">
+  <style>
+    :root {
+      --red: #c62828;
+      --ink: #111;
+      --muted: #666;
+      --line: #e4e4e4;
+      --soft: #f6f6f6;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Roboto, "Helvetica Neue", Arial, sans-serif;
+      color: var(--ink);
+      background: #fff;
+      line-height: 1.5;
+    }
+    .topbar {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 24px; height: 56px; background: #000; color: #fff;
+    }
+    .brand { font-size: 1.25rem; font-weight: 700; letter-spacing: -0.01em; }
+    .brand span { color: #e53935; }
+    .topbar a { color: rgba(255,255,255,.85); text-decoration: none; font-weight: 600; font-size: .95rem; }
+    .topbar a:hover { color: #fff; text-decoration: underline; }
+    .hero { background: linear-gradient(180deg, #fff 0%, var(--soft) 100%); border-bottom: 1px solid #ececec; }
+    .wrap { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
+    .hero .wrap { padding-top: 36px; padding-bottom: 28px; }
+    .eyebrow { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; color: #555;
+      font-size: .78rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+    .title-bar { width: 40px; height: 4px; border-radius: 4px; background: var(--red); }
+    h1 { margin: 0; font-size: clamp(1.8rem, 4vw, 2.6rem); line-height: 1.15; font-weight: 800; letter-spacing: -0.02em; }
+    .lead { margin: 12px 0 0; max-width: 40rem; color: #555; font-size: 1.05rem; }
+    .updated { margin-top: 8px; color: var(--muted); font-size: .85rem; }
+    main.wrap { padding-top: 24px; padding-bottom: 48px; }
+
+    .card { border: 1.5px solid var(--line); border-radius: 16px; background: #fff; padding: 18px 20px; }
+    .controls { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 16px 24px; }
+    .field label { display: block; margin-bottom: 4px; font-size: .75rem; font-weight: 700;
+      letter-spacing: .05em; text-transform: uppercase; color: #555; }
+    .presets { display: flex; flex-wrap: wrap; gap: 8px; }
+    .chip { border: 1.5px solid #c9c9c9; background: #fff; color: var(--ink); border-radius: 999px;
+      padding: 6px 14px; font: inherit; font-size: .9rem; cursor: pointer;
+      transition: background-color .15s, border-color .15s, color .15s; }
+    .chip:hover { border-color: var(--red); }
+    .chip[aria-pressed="true"] { background: var(--red); border-color: var(--red); color: #fff; }
+    input[type="date"], select { font: inherit; padding: 8px 10px; border: 1.5px solid #bdbdbd; border-radius: 12px; background: #fff; color: var(--ink); }
+    select { max-width: 280px; }
+    input:focus-visible, select:focus-visible, .chip:focus-visible, .row:focus-visible { outline: 2px solid var(--red); outline-offset: 2px; }
+
+    .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin-top: 16px; }
+    .kpi { position: relative; overflow: hidden; border-left: 5px solid var(--red); }
+    .kpi .label { font-size: .75rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: #555; }
+    .kpi .value { margin-top: 4px; font-size: 1.9rem; font-weight: 800; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+    .kpi .value.small { font-size: 1.15rem; line-height: 1.3; }
+    .kpi .note { margin-top: 2px; color: var(--muted); font-size: .85rem; }
+    .up { color: #2e7d32; font-weight: 700; } .down { color: var(--red); font-weight: 700; }
+
+    .grid { display: grid; grid-template-columns: 1fr; gap: 16px; margin-top: 16px; align-items: start; }
+    @media (min-width: 900px) { .grid { grid-template-columns: 1.7fr 1fr; } }
+    h2 { margin: 0 0 12px; font-size: 1rem; font-weight: 800; }
+    .chart-box { position: relative; }
+    svg { display: block; width: 100%; height: auto; }
+    .axis text { fill: #666; font-size: 13px; }
+    .tip { position: absolute; pointer-events: none; transform: translate(-50%, -110%); background: #111; color: #fff;
+      padding: 6px 10px; border-radius: 10px; font-size: .8rem; white-space: nowrap; opacity: 0; transition: opacity .1s; }
+    .empty { padding: 36px 8px; text-align: center; color: var(--muted); }
+
+    .pages { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+    .row { display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; padding: 8px 10px; border-radius: 12px; cursor: pointer; }
+    .row:hover { background: var(--soft); }
+    .row[aria-pressed="true"] { background: #fbeaea; }
+    .row .path { font-weight: 600; overflow-wrap: anywhere; }
+    .row .n { font-variant-numeric: tabular-nums; color: #444; }
+    .row .bar { grid-column: 1 / -1; height: 6px; border-radius: 6px; background: #eee; overflow: hidden; }
+    .row .bar i { display: block; height: 100%; background: var(--red); border-radius: 6px; }
+    .hint { margin-top: 10px; color: var(--muted); font-size: .8rem; }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">Mouse<span>Tube</span></div>
+    <a href="{% url 'admin:index' %}">← Back to the admin</a>
+  </header>
+
+  <section class="hero">
+    <div class="wrap">
+      <div class="eyebrow"><span class="title-bar" aria-hidden="true"></span>Admin · Statistics</div>
+      <h1>Visits to mouseTube</h1>
+      <p class="lead">How many times each page of the site was opened, day by day. Choose a period, or a page to follow it alone.</p>
+      <div class="updated">Report generated on {{ generated }} · data of {{ year }}</div>
+    </div>
+  </section>
+
+  <main class="wrap">
+    <section class="card controls" aria-label="Filters">
+      <div class="field">
+        <label id="period-label">Period</label>
+        <div class="presets" role="group" aria-labelledby="period-label" id="presets"></div>
+      </div>
+      <div class="field"><label for="start">From</label><input type="date" id="start"></div>
+      <div class="field"><label for="end">To</label><input type="date" id="end"></div>
+      <div class="field"><label for="page">Page</label>
+        <select id="page"><option value="">All pages</option></select>
+      </div>
+    </section>
+
+    <section class="kpis" aria-live="polite">
+      <div class="card kpi"><div class="label">Page views</div><div class="value" id="k-total">–</div><div class="note" id="k-delta"></div></div>
+      <div class="card kpi"><div class="label">Per day</div><div class="value" id="k-avg">–</div><div class="note" id="k-days"></div></div>
+      <div class="card kpi"><div class="label">Busiest day</div><div class="value" id="k-peak">–</div><div class="note" id="k-peak-day"></div></div>
+      <div class="card kpi"><div class="label" id="k-top-label">Most visited page</div><div class="value small" id="k-top">–</div><div class="note" id="k-top-n"></div></div>
+    </section>
+
+    <div class="grid">
+      <section class="card" aria-label="Views per day">
+        <h2>Views per day</h2>
+        <div class="chart-box" id="chart-box">
+          <svg id="chart" viewBox="0 0 720 300" role="img" aria-label="Bar chart of the views per day"></svg>
+          <div class="tip" id="tip"></div>
+        </div>
+        <div class="empty" id="empty" hidden>No visit recorded in this period.</div>
+      </section>
+      <section class="card" aria-label="Most visited pages">
+        <h2>Most visited pages</h2>
+        <ul class="pages" id="pages"></ul>
+        <div class="hint">Click a page to follow it alone, click it again to see them all.</div>
+      </section>
+    </div>
+  </main>
+
+  {{ rows|json_script:"rows" }}
+  <script>
+  (function () {
+    const rows = JSON.parse(document.getElementById('rows').textContent); // [{path, date, count}]
+    const $ = (id) => document.getElementById(id);
+    const DAY = 86400000;
+    const fmt = new Intl.NumberFormat('en-GB');
+    const parse = (s) => { const [y, m, d] = s.split('-').map(Number); return Date.UTC(y, m - 1, d); };
+    const iso = (t) => new Date(t).toISOString().slice(0, 10);
+    const nice = (t) => new Date(t).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
+    const short = (t) => new Date(t).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
+    const text = (el, value) => { el.textContent = value; };
+
+    const today = iso(Date.now());
+    const first = rows.length ? rows.reduce((m, r) => (r.date < m ? r.date : m), rows[0].date) : today;
+    const PRESETS = [
+      { id: '7', label: '7 days', days: 7 }, { id: '30', label: '30 days', days: 30 },
+      { id: '90', label: '90 days', days: 90 }, { id: 'year', label: 'This year' }, { id: 'all', label: 'Everything' },
+    ];
+    const state = { page: '', start: iso(parse(today) - 29 * DAY), end: today, preset: '30' };
+
+    // the page list: every page that has views, the most visited first
+    const totals = new Map();
+    rows.forEach((r) => totals.set(r.path, (totals.get(r.path) || 0) + r.count));
+    const pagesByViews = [...totals.entries()].sort((a, b) => b[1] - a[1]);
+    pagesByViews.forEach(([path]) => {
+      const o = document.createElement('option'); o.value = path; o.textContent = path; $('page').appendChild(o);
+    });
+
+    function setPreset(id) {
+      state.preset = id;
+      const p = PRESETS.find((x) => x.id === id);
+      state.end = today;
+      if (p.days) state.start = iso(parse(today) - (p.days - 1) * DAY);
+      else if (id === 'year') state.start = today.slice(0, 4) + '-01-01';
+      else state.start = first;
+      $('start').value = state.start; $('end').value = state.end;
+    }
+    PRESETS.forEach((p) => {
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'chip'; b.dataset.id = p.id; b.textContent = p.label;
+      b.addEventListener('click', () => { setPreset(p.id); render(); });
+      $('presets').appendChild(b);
+    });
+
+    // views per day of a page (or of all) between two dates, the empty days counting as 0
+    function series(start, end, page) {
+      const byDay = new Map();
+      rows.forEach((r) => {
+        if (page && r.path !== page) return;
+        if (r.date < start || r.date > end) return;
+        byDay.set(r.date, (byDay.get(r.date) || 0) + r.count);
+      });
+      const out = [];
+      for (let t = parse(start); t <= parse(end); t += DAY) out.push({ t, n: byDay.get(iso(t)) || 0 });
+      return out;
+    }
+
+    function drawChart(days) {
+      const svg = $('chart'); svg.textContent = '';
+      const W = 720, H = 300, L = 48, R = 8, T = 10, B = 30;
+      const max = Math.max(1, ...days.map((d) => d.n));
+      const step = Math.ceil(max / 4), top = step * 4;
+      const ns = 'http://www.w3.org/2000/svg';
+      const el = (name, attrs, parent = svg) => { const e = document.createElementNS(ns, name);
+        Object.entries(attrs).forEach(([k, v]) => e.setAttribute(k, v)); parent.appendChild(e); return e; };
+      const axis = el('g', { class: 'axis' });
+      for (let i = 0; i <= 4; i++) {
+        const y = T + (H - T - B) * (1 - i / 4);
+        el('line', { x1: L, x2: W - R, y1: y, y2: y, stroke: '#eee' }, axis);
+        const t = el('text', { x: L - 8, y: y + 4, 'text-anchor': 'end' }, axis); t.textContent = fmt.format(step * i);
+      }
+      const slot = (W - L - R) / days.length, bw = Math.max(1, Math.min(28, slot * 0.72));
+      const labels = Math.min(6, days.length);
+      days.forEach((d, i) => {
+        const h = (H - T - B) * (d.n / top), x = L + i * slot + (slot - bw) / 2, y = H - B - h;
+        const bar = el('rect', { x, y, width: bw, height: Math.max(h, d.n ? 2 : 0), rx: Math.min(4, bw / 2), fill: '#c62828', opacity: d.n ? 1 : 0 });
+        bar.dataset.i = i;
+        // a wider invisible target so that thin bars can be hovered
+        const hit = el('rect', { x: L + i * slot, y: T, width: slot, height: H - T - B, fill: 'transparent' });
+        const show = (ev) => {
+          const box = $('chart-box').getBoundingClientRect();
+          const tip = $('tip'); tip.style.opacity = 1;
+          tip.style.left = (ev.clientX - box.left) + 'px'; tip.style.top = (ev.clientY - box.top) + 'px';
+          text(tip, nice(d.t) + ' · ' + fmt.format(d.n) + (d.n === 1 ? ' view' : ' views'));
+          bar.setAttribute('fill', '#8e0000');
+        };
+        hit.addEventListener('mousemove', show);
+        hit.addEventListener('mouseleave', () => { $('tip').style.opacity = 0; bar.setAttribute('fill', '#c62828'); });
+      });
+      for (let k = 0; k < labels; k++) {
+        const i = labels === 1 ? 0 : Math.round((days.length - 1) * k / (labels - 1));
+        const t = el('text', { x: L + i * slot + slot / 2, y: H - 8, 'text-anchor': k === 0 ? 'start' : k === labels - 1 ? 'end' : 'middle' }, axis);
+        t.textContent = short(days[i].t);
+      }
+    }
+
+    function render() {
+      document.querySelectorAll('.chip').forEach((c) => c.setAttribute('aria-pressed', String(c.dataset.id === state.preset)));
+      $('page').value = state.page;
+      if (state.start > state.end) { const s = state.start; state.start = state.end; state.end = s; }
+      const days = series(state.start, state.end, state.page);
+      const total = days.reduce((s, d) => s + d.n, 0);
+      const span = days.length;
+
+      // the same number of days just before: is it going up?
+      const prevEnd = iso(parse(state.start) - DAY), prevStart = iso(parse(state.start) - span * DAY);
+      const prev = series(prevStart, prevEnd, state.page).reduce((s, d) => s + d.n, 0);
+      text($('k-total'), fmt.format(total));
+      const delta = $('k-delta'); delta.className = 'note';
+      if (state.preset === 'all' || prevStart < first && prev === 0) text(delta, 'over the whole period');
+      else if (prev === 0) text(delta, total ? 'no views in the ' + span + ' days before' : '');
+      else {
+        const pct = Math.round((total - prev) / prev * 100);
+        delta.className = 'note ' + (pct >= 0 ? 'up' : 'down');
+        text(delta, (pct >= 0 ? '▲ ' : '▼ ') + Math.abs(pct) + '% vs the ' + span + ' days before');
+      }
+      text($('k-avg'), (total / span).toLocaleString('en-GB', { maximumFractionDigits: 1 }));
+      text($('k-days'), 'over ' + span + ' day' + (span === 1 ? '' : 's'));
+      const peak = days.reduce((m, d) => (d.n > m.n ? d : m), { n: 0, t: 0 });
+      text($('k-peak'), fmt.format(peak.n)); text($('k-peak-day'), peak.n ? nice(peak.t) : '');
+
+      // pages of the period
+      const per = new Map();
+      rows.forEach((r) => { if (r.date >= state.start && r.date <= state.end) per.set(r.path, (per.get(r.path) || 0) + r.count); });
+      const ranked = [...per.entries()].sort((a, b) => b[1] - a[1]);
+      const all = ranked.reduce((s, [, n]) => s + n, 0);
+      if (state.page) {
+        text($('k-top-label'), 'Share of all views');
+        text($('k-top'), all ? Math.round(total / all * 100) + '%' : '–'); text($('k-top-n'), state.page);
+      } else {
+        text($('k-top-label'), 'Most visited page');
+        text($('k-top'), ranked.length ? ranked[0][0] : '–'); text($('k-top-n'), ranked.length ? fmt.format(ranked[0][1]) + ' views' : '');
+      }
+      const list = $('pages'); list.textContent = '';
+      ranked.slice(0, 10).forEach(([path, n]) => {
+        const li = document.createElement('li'); li.className = 'row'; li.tabIndex = 0; li.setAttribute('role', 'button');
+        li.setAttribute('aria-pressed', String(path === state.page));
+        const p = document.createElement('span'); p.className = 'path'; p.textContent = path;
+        const c = document.createElement('span'); c.className = 'n'; c.textContent = fmt.format(n) + ' · ' + Math.round(n / all * 100) + '%';
+        const bar = document.createElement('span'); bar.className = 'bar'; const i = document.createElement('i'); i.style.width = (n / ranked[0][1] * 100) + '%'; bar.appendChild(i);
+        li.append(p, c, bar);
+        const pick = () => { state.page = state.page === path ? '' : path; render(); };
+        li.addEventListener('click', pick);
+        li.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick(); } });
+        list.appendChild(li);
+      });
+      $('empty').hidden = total > 0; $('chart').style.display = total > 0 ? '' : 'none';
+      if (total > 0) drawChart(days);
+    }
+
+    $('page').addEventListener('change', (e) => { state.page = e.target.value; render(); });
+    ['start', 'end'].forEach((id) => $(id).addEventListener('change', (e) => {
+      if (!e.target.value) return;
+      state[id] = e.target.value; state.preset = ''; render();
+    }));
+    setPreset('30'); render();
+  })();
+  </script>
+</body>
+</html>

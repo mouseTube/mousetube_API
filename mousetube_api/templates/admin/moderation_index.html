@@ -1,0 +1,31 @@
+{% extends "admin/index.html" %}
+
+{% block content %}
+<section class="mt-review">
+  <div class="mt-eyebrow"><i aria-hidden="true"></i>To review</div>
+  {% if moderation_total %}
+    <h2 class="mt-title">{{ moderation_total }} thing{{ moderation_total|pluralize }} waiting for your decision</h2>
+    <p class="mt-lead">
+      Open a kind to validate or send back what users submitted. A recording session is validated
+      <strong>together with everything it uses</strong> (equipment, animals, laboratory, references...),
+      so a public session never points to something nobody validated.
+    </p>
+    <div class="mt-cards">
+      {% for row in moderation_rows %}
+        {% if row.count %}
+        <a class="mt-card" href="{{ row.url }}">
+          <span class="mt-card-n">{{ row.count }}</span>
+          <span class="mt-card-l">{{ row.label }}</span>
+          <span class="mt-card-go">Review →</span>
+        </a>
+        {% endif %}
+      {% endfor %}
+    </div>
+  {% else %}
+    <h2 class="mt-title">All caught up</h2>
+    <div class="mt-clear">Nothing waits for your decision.</div>
+  {% endif %}
+  {% if FRONT_URL %}<a class="mt-btn" href="{{ FRONT_URL }}/review">Open the review page</a>{% endif %}
+</section>
+{{ block.super }}
+{% endblock %}

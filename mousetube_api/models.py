@@ -39,6 +39,14 @@ class Laboratory(models.Model):
     institution = models.CharField(max_length=255, blank=True, null=True)
     unit = models.CharField(max_length=255, blank=True, null=True)
     address = models.CharField(max_length=255, blank=True, null=True)
+    organization = models.ForeignKey(
+        "OntologyTerm",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="laboratories",
+        help_text="The organization in the ROR registry.",
+    )
     country = CountryField(blank=True, null=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="draft")
     created_at = models.DateTimeField(auto_now_add=True, null=True)
@@ -70,6 +78,7 @@ class UserProfile(models.Model):
         address (CharField): Physical address of the user.
         country (CountryField): Country of the user.
         orcid (CharField): ORCID researcher identifier.
+        email_public (BooleanField): Whether the e-mail is shown to visitors (default: no).
         administrator (BooleanField): Whether the user has admin privileges.
         date_joined (DateTimeField): Timestamp when the profile was created.
         modified_at (DateTimeField): Last modification timestamp.
@@ -106,6 +115,11 @@ class UserProfile(models.Model):
     ]
     view_mode = models.CharField(
         max_length=10, choices=VIEW_MODE_CHOICES, default="cards"
+    )
+    email_public = models.BooleanField(
+        default=False,
+        help_text="Show the e-mail address next to the recordings of this user "
+        "(hidden from everybody else by default).",
     )
 
     def __str__(self):
@@ -145,7 +159,7 @@ class Contact(models.Model):
         max_length=20,
         choices=[
             ("draft", "Draft"),
-            ("waiting_validation", "Waiting Validation"),
+            ("waiting validation", "Waiting validation"),
             ("validated", "Validated"),
         ],
         default="draft",
@@ -167,6 +181,28 @@ class Contact(models.Model):
         verbose_name_plural = "Contacts"
 
 
+class OntologyTerm(models.Model):
+    """A term of an ontology (or an organization of the ROR registry), checked at the source.
+
+    The identifier is a CURIE (PATO:0000384, NCBITaxon:10090, ROR:0015ws592). Records point
+    to it from the fields where a controlled vocabulary exists, next to their free text.
+    """
+
+    curie = models.CharField(max_length=64, unique=True)
+    label = models.CharField(max_length=255)
+    ontology = models.CharField(
+        max_length=32
+    )  # lower case prefix: pato, ncbitaxon, ror...
+    iri = models.URLField(max_length=255, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.label} ({self.curie})"
+
+    class Meta:
+        ordering = ["ontology", "label"]
+
+
 class Species(models.Model):
     """
     Represents a biological species relevant to the data.
@@ -179,6 +215,14 @@ class Species(models.Model):
     """
 
     name = models.CharField(max_length=255, unique=True)
+    ontology_term = models.ForeignKey(
+        OntologyTerm,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="species",
+        help_text="NCBI Taxonomy term of the species.",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     modified_at = models.DateTimeField(auto_now=True)
     created_by = models.ForeignKey(
@@ -213,13 +257,21 @@ class Strain(models.Model):
 
     STATUS_CHOICES = [
         ("draft", "Draft"),
-        ("waiting_validation", "Waiting Validation"),
+        ("waiting validation", "Waiting validation"),
         ("validated", "Validated"),
     ]
 
     name = models.CharField(max_length=255, unique=True)
     background = models.CharField(max_length=255)
     species = models.ForeignKey(Species, on_delete=models.CASCADE)
+    ontology_term = models.ForeignKey(
+        OntologyTerm,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="strains",
+        help_text="Experimental Factor Ontology (EFO) term of the strain.",
+    )
     bibliography = models.TextField(blank=True, null=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="draft")
     created_at = models.DateTimeField(auto_now_add=True, null=True)
@@ -257,6 +309,7 @@ class AnimalProfile(models.Model):
         age (str, optional): The age of the animal.
         genotype (str, optional): The genotype of the animal.
         treatment (str, optional): The treatment applied to the animal.
+        diet (str, optional): The diet of the animal (EFO term in `diet_term`).
         status (str): The status of the animal profil (draft, waiting validation, validated).
         created_at (DateTimeField): Timestamp when the animal profil was created.
         modified_at (DateTimeField): Last modification timestamp.
@@ -270,7 +323,7 @@ class AnimalProfile(models.Model):
 
     STATUS_CHOICES = [
         ("draft", "Draft"),
-        ("waiting_validation", "Waiting Validation"),
+        ("waiting validation", "Waiting validation"),
         ("validated", "Validated"),
     ]
 
@@ -289,6 +342,39 @@ class AnimalProfile(models.Model):
     )
     genotype = models.CharField(max_length=255)
     treatment = models.CharField(max_length=255, null=True, blank=True)
+    diet = models.CharField(max_length=255, null=True, blank=True)
+    sex_term = models.ForeignKey(
+        OntologyTerm,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="animal_profiles_sex",
+        help_text="PATO term of the sex.",
+    )
+    age_term = models.ForeignKey(
+        OntologyTerm,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="animal_profiles_age",
+        help_text="Developmental stage (MmusDv) when the age class is not precise enough.",
+    )
+    treatment_term = models.ForeignKey(
+        OntologyTerm,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="animal_profiles_treatment",
+        help_text="ChEBI term of the compound of the treatment.",
+    )
+    diet_term = models.ForeignKey(
+        OntologyTerm,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="animal_profiles_diet",
+        help_text="Experimental Factor Ontology (EFO) term of the diet.",
+    )
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="draft")
     created_at = models.DateTimeField(auto_now_add=True, null=True)
     modified_at = models.DateTimeField(auto_now=True, null=True)
@@ -488,10 +574,11 @@ class Protocol(models.Model):
             "night": "N",
             "both": "B",
         }
+        # "unspecified" (a valid choice) has no entry in the maps: code "U", not a KeyError
         self.name = (
-            f"{self.context_number_of_animals}{SEX_MAP[self.animals_sex]}{AGE_MAP[self.animals_age]}{HOUSING_MAP[self.animals_housing]}_"
-            f"{DURATION_MAP[self.context_duration]}_"
-            f"{CAGE_MAP[self.context_cage]}{BEDDING_MAP[self.context_bedding]}{LIGHT_MAP[self.context_light_cycle]}"
+            f"{self.context_number_of_animals}{SEX_MAP.get(self.animals_sex, 'U')}{AGE_MAP[self.animals_age]}{HOUSING_MAP.get(self.animals_housing, 'U')}_"
+            f"{DURATION_MAP.get(self.context_duration, 'U')}_"
+            f"{CAGE_MAP.get(self.context_cage, 'U')}{BEDDING_MAP.get(self.context_bedding, 'U')}{LIGHT_MAP.get(self.context_light_cycle, 'U')}"
         )
         self.status = "validated"
         super().save(*args, **kwargs)
@@ -800,9 +887,13 @@ class RecordingSession(models.Model):
         ("no specific sound isolation", "No specific sound isolation"),
     ]
 
+    # draft -> (sharing asks for a review when the session uses entries nobody
+    # validated yet) waiting validation -> shared -> published (deposited with a DOI)
     STATUS = [
         ("draft", "Draft"),
+        ("waiting validation", "Waiting validation"),
         ("shared", "Shared"),
+        ("published", "Published"),
     ]
 
     name = models.CharField(max_length=255)
@@ -821,10 +912,57 @@ class RecordingSession(models.Model):
     )
     description = models.TextField(blank=True, null=True)
     date = models.DateTimeField(blank=True, null=True)
+    behavior_terms = models.ManyToManyField(
+        OntologyTerm,
+        blank=True,
+        related_name="recording_sessions",
+        help_text="Behaviors recorded, as terms of the Neuro Behavior Ontology.",
+    )
     status = models.CharField(
         max_length=20,
         choices=STATUS,
         default="draft",
+    )
+
+    # what the repository says about the published record of this session: the DOI that stays
+    # the same across versions, and whether the record follows the edits made here
+    ZENODO_STATES = [
+        ("synced", "up to date"),
+        ("pending", "update in progress"),
+        ("blocked", "waits for the validation of new entries"),
+        ("failed", "update failed"),
+    ]
+    concept_doi = models.CharField(max_length=255, blank=True, default="")
+    zenodo_state = models.CharField(
+        max_length=16, choices=ZENODO_STATES, blank=True, default=""
+    )
+    zenodo_message = models.CharField(max_length=500, blank=True, default="")
+
+    # Publication that follows the validation: while the session waits for an administrator, its
+    # author may approve the preview of the publication; once the session is shared, it is
+    # published as approved, unless what would be published is no longer what was approved.
+    AUTO_PUBLISH_STATES = [
+        ("approved", "approved, waits for the validation"),
+        ("stale", "changed since it was approved"),
+        ("publishing", "publishing"),
+        ("done", "published"),
+        ("failed", "failed"),
+    ]
+    auto_publish_state = models.CharField(
+        max_length=12, choices=AUTO_PUBLISH_STATES, blank=True, default=""
+    )
+    auto_publish_message = models.CharField(max_length=500, blank=True, default="")
+    auto_publish_repository = models.ForeignKey(
+        "Repository", null=True, blank=True, on_delete=models.SET_NULL, related_name="+"
+    )
+    auto_publish_payload = models.JSONField(
+        null=True, blank=True, help_text="The metadata the author approved."
+    )
+    auto_publish_digest = models.CharField(
+        max_length=64,
+        blank=True,
+        default="",
+        help_text="What would have been published when it was approved.",
     )
     duration = models.PositiveIntegerField(
         blank=True, null=True, help_text="Duration in seconds"
@@ -1020,6 +1158,28 @@ class Repository(models.Model):
         verbose_name_plural = "Repositories"
 
 
+class PublicationVersion(models.Model):
+    """A version of the record of a session in a repository: each one has its own DOI."""
+
+    recording_session = models.ForeignKey(
+        RecordingSession, on_delete=models.CASCADE, related_name="publication_versions"
+    )
+    number = models.PositiveIntegerField()
+    doi = models.CharField(max_length=255)
+    record_id = models.CharField(
+        max_length=64
+    )  # the deposition / record in the repository
+    url = models.URLField(max_length=255, blank=True, default="")
+    published_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ("recording_session", "number")
+        ordering = ["number"]
+
+    def __str__(self):
+        return f"{self.recording_session} v{self.number} ({self.doi})"
+
+
 class File(models.Model):
     """
     Represents a file associated with an recording session or a subject.
@@ -1101,6 +1261,10 @@ class File(models.Model):
     )
     spectrogram = models.ImageField(blank=True, null=True)
     plot = models.ImageField(blank=True, null=True)
+    deposit_images = models.BooleanField(
+        default=False,
+        help_text="Send the spectrogram and the plot to the repository with the record.",
+    )
     doi = models.CharField(max_length=255, blank=True, null=True)
     number = models.IntegerField(blank=True, null=True)
     is_valid_link = models.BooleanField(default=False)
@@ -1125,6 +1289,8 @@ class File(models.Model):
         default="pending",
     )
     celery_task_id = models.CharField(max_length=255, blank=True, null=True)
+    # what went wrong, in words the user understands (set when status is "error")
+    error_message = models.CharField(max_length=500, blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True, null=True)
     modified_at = models.DateTimeField(auto_now=True, null=True)
     created_by = models.ForeignKey(
@@ -1146,6 +1312,60 @@ class File(models.Model):
     class Meta:
         verbose_name = "File"
         verbose_name_plural = "Files"
+
+
+class UsvDetection(models.Model):
+    """The calls that a detection tool found in a file, as the authors of the file exported them.
+
+    One row per file and tool, kept with the version and the settings of the tool: detectors do not
+    agree, so people choose the one they trust. Each call has the same few columns whatever the tool
+    (start, end, frequencies) and all the variables the tool gave, untouched, in `native`.
+    """
+
+    file = models.ForeignKey(
+        File, on_delete=models.CASCADE, related_name="usv_detections"
+    )
+    tool = models.CharField(max_length=32, help_text="usvseg, deepsqueak...")
+    tool_version = models.CharField(max_length=64, blank=True, default="")
+    parameters = models.TextField(
+        blank=True, default="", help_text="Settings of the run."
+    )
+    reference = models.CharField(
+        max_length=255,
+        blank=True,
+        default="",
+        help_text="Publication of the tool (DOI).",
+    )
+    calls = models.JSONField(default=list)
+    summary = models.JSONField(default=dict)
+    source = models.CharField(
+        max_length=500, blank=True, default="", help_text="Where the results come from."
+    )
+    deposit = models.BooleanField(
+        default=False,
+        help_text="Send the table of the author to the repository with the record.",
+    )
+    original = models.FileField(
+        upload_to="usv_results/",
+        blank=True,
+        default="",
+        help_text="The table as the author gave it: kept only when it is to be sent.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="usv_detections",
+    )
+
+    class Meta:
+        unique_together = ("file", "tool")
+        ordering = ("tool",)
+
+    def __str__(self):
+        return f"{self.tool} on {self.file_id}"
 
 
 class Dataset(models.Model):
