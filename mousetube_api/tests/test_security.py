@@ -4338,9 +4338,9 @@ class AppVersionTests(TestCase):
     """The version shown in the footer comes from pyproject.toml, the only place it is written."""
 
     def test_the_version_route_gives_the_one_of_pyproject_to_everybody(self):
+        import tomllib
         from pathlib import Path
 
-        import tomllib
         from django.conf import settings
 
         with open(Path(settings.BASE_DIR) / "pyproject.toml", "rb") as handle:

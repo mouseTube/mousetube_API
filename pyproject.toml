@@ -49,6 +49,10 @@ include = ["mousetube_api*"]
 mkdocs-material = ">=8.0"
 mkdocstrings = { version = ">=0.11", extras = ["python"] }
 
+[tool.ruff]
+# the API runs on Python 3.13 (Dockerfile): `tomllib` is standard library, whatever the ruff version
+target-version = "py313"
+
 [tool.ruff.lint]
 # Django/DRF class attributes (choices, permission_classes, fields...) are lists by convention.
 ignore = ["RUF012"]
