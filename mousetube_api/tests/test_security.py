@@ -3496,6 +3496,7 @@ class PublishedSessionKeepsLivingTests(FreshCache, TestCase):
         ):
             self._edit(equipment_acquisition_hardware_microphone_ids=[self.mic.pk])
             self.session.refresh_from_db()
+            self.assertEqual(self.session.status, "published")  # stays public
             self.assertEqual(self.session.zenodo_state, "blocked")
             self.assertIn("New mic", self.session.zenodo_message)
             delay.assert_not_called()
@@ -3503,6 +3504,28 @@ class PublishedSessionKeepsLivingTests(FreshCache, TestCase):
         self.session.refresh_from_db()
         self.assertEqual(self.session.zenodo_state, "pending")
         delay.assert_called_once_with(self.session.pk)
+
+    def test_a_shared_session_is_edited_by_its_owner_and_stays_shared(self):
+        RecordingSession.objects.filter(pk=self.session.pk).update(status="shared")
+        self.session.publication_versions.all().delete()
+        response = self._edit(
+            description="better",
+            equipment_acquisition_hardware_microphone_ids=[self.mic.pk],
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+        self.session.refresh_from_db()
+        self.assertEqual(self.session.status, "shared")  # not private again
+        self.assertEqual(self.session.description, "better")
+        # the new microphone is not validated: the others do not read it
+        page = APIClient().get(f"/api/file/{self.old_file.pk}/").content.decode()
+        self.assertNotIn("New mic", page)
+
+    def test_a_session_that_waits_for_a_review_is_still_locked_for_its_owner(self):
+        RecordingSession.objects.filter(pk=self.session.pk).update(
+            status="waiting validation"
+        )
+        self.assertEqual(self._edit(description="again").status_code, 403)
+        self.assertEqual(self._edit(status="draft").status_code, 200)  # withdrawn
 
     def test_updating_the_record_edits_and_publishes_it_again_without_a_new_version(
         self,

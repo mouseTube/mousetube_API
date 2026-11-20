@@ -25,10 +25,12 @@ from mousetube_api.utils import usv
 from mousetube_api.utils.dataset_metadata import visible_sessions
 from mousetube_api.utils.email_domains import is_personal_email
 from mousetube_api.utils.moderation import (
-    SESSION_FROZEN,
     VALIDATED,
     WAITING,
     notify_admin_review,
+    public_profile,
+    public_session_data,
+    sees_everything,
     session_pending_entries,
 )
 from mousetube_api.utils.ontologies import (
@@ -41,6 +43,7 @@ from mousetube_api.utils.orcid_proof import read_orcid_proof
 from mousetube_api.utils.page_views import normalize_page_path
 from mousetube_api.utils.publication import reset_auto_publish, schedule_sync
 from mousetube_api.utils.registration import email_is_verified
+from mousetube_api.utils.session_rights import session_rights
 from mousetube_api.utils.validators import (
     validate_doi,
     validate_doi_link_consistency,
@@ -70,6 +73,14 @@ from .models import (
     UserProfile,
     UsvDetection,
 )
+
+
+def viewer_of(context):
+    """Who reads: the user of the request, or the `viewer` a view gives when it must not hand
+    the request over (the request makes file and image URLs absolute, and the site expects
+    them relative in the lists of files)."""
+    user = getattr(context.get("request"), "user", None)
+    return user if user is not None else context.get("viewer")
 
 
 class ModerationMixin:
@@ -538,6 +549,10 @@ class SoftwareVersionSerializer(ModerationMixin, serializers.ModelSerializer):
 
 
 class StrainSerializer(ModerationMixin, serializers.ModelSerializer):
+    """A strain. One chosen in the ontology (EFO, Rat Strain Ontology) is what the ontology says:
+    its term is checked at the source, so it is validated at once, and there is only one strain
+    per term (asking for it again gives the one that exists)."""
+
     species = SpeciesSerializer(read_only=True)  # lecture complète
     species_id = serializers.PrimaryKeyRelatedField(
         queryset=Species.objects.all(), write_only=True, source="species"
@@ -548,21 +563,6 @@ class StrainSerializer(ModerationMixin, serializers.ModelSerializer):
         model = Strain
         fields = "__all__"
         read_only_fields = ("created_by",)  # set by the server, never by the client
-
-    """A strain. One chosen in the ontology (EFO, Rat Strain Ontology) is what the ontology says:
-    its term is checked at the source, so it is validated at once, and there is only one strain
-    per term (asking for it again gives the one that exists)."""
-
-    def create(self, validated_data):
-        return Strain.objects.create(**validated_data)
-
-    def update(self, instance, validated_data):
-        for attr, value in validated_data.items():
-            setattr(instance, attr, value)
-        instance.save()
-        return instance
-
-
         # the background of a strain of the ontology is its label (see validate)
         extra_kwargs = {"background": {"required": False, "allow_blank": True}}
 
@@ -588,8 +588,8 @@ class StrainSerializer(ModerationMixin, serializers.ModelSerializer):
                 {"background": "The genetic background is required."}
             )
         return data
-# class StrainSerializer(serializers.ModelSerializer):
-#     species = SpeciesSerializer()
+
+    def create(self, validated_data):
         term = validated_data.get("ontology_term")
         if term:
             existing = Strain.objects.filter(ontology_term=term).first()
@@ -599,13 +599,24 @@ class StrainSerializer(ModerationMixin, serializers.ModelSerializer):
                     existing.save(update_fields=["status"])
                 return existing
             validated_data["status"] = VALIDATED  # the ontology is the validation
+        return Strain.objects.create(**validated_data)
+
+    def update(self, instance, validated_data):
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        if validated_data.get("ontology_term"):
+            instance.status = VALIDATED
+        instance.save()
+        return instance
+
+
+# class StrainSerializer(serializers.ModelSerializer):
+#     species = SpeciesSerializer()
 
 #     class Meta:
 #         model = Strain
 #         fields = "__all__"
 
-        if validated_data.get("ontology_term"):
-            instance.status = VALIDATED
 #     def create(self, validated_data):
 #         species_data = validated_data.pop("species")
 #         species = Species.objects.create(**species_data)
@@ -649,6 +660,7 @@ class AnimalProfileSerializer(ModerationMixin, serializers.ModelSerializer):
     sex_term = OntologyTermField("sex")
     age_term = OntologyTermField("age")
     treatment_term = OntologyTermField("treatment")
+    diet_term = OntologyTermField("diet")
 
     class Meta:
         model = AnimalProfile
@@ -660,7 +672,6 @@ class AnimalProfileSerializer(ModerationMixin, serializers.ModelSerializer):
         sex = data.get("sex")
         if sex and not data.get("sex_term") and "sex_term" not in data:
             data["sex_term"] = sex_term(sex)
-    diet_term = OntologyTermField("diet")
         # a mouse age class is a stage of the developmental ontology, unless a more
         # precise stage was chosen
         age = data.get("age")
@@ -800,6 +811,16 @@ class SubjectSerializer(ModerationMixin, serializers.ModelSerializer):
         fields = "__all__"
         read_only_fields = ("created_by",)  # set by the server, never by the client
 
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        if not sees_everything(viewer_of(self.context), instance.created_by_id):
+            profile = data.get("animal_profile")
+            if profile and profile.get("status") != VALIDATED:
+                data["animal_profile"] = None  # not validated: not shown
+            elif profile:
+                public_profile(profile)
+        return data
+
     def create(self, validated_data):
         animal_profile_data = validated_data.pop("animal_profile", None)
         subject = Subject.objects.create(**validated_data)
@@ -849,6 +870,20 @@ def _django_errors(exc):
     return exc.message_dict if hasattr(exc, "error_dict") else exc.messages
 
 
+class OwnPrimaryKeyRelatedField(serializers.PrimaryKeyRelatedField):
+    """Only the objects the signed-in user created (the administrators may use all): what is
+    private to its owner cannot be attached to the session of somebody else."""
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        user = getattr(self.context.get("request"), "user", None)
+        if user is not None and user.is_staff:
+            return queryset
+        if user is None or not user.is_authenticated:
+            return queryset.none()
+        return queryset.filter(created_by=user)
+
+
 class VisiblePrimaryKeyRelatedField(serializers.PrimaryKeyRelatedField):
     """Only the objects the signed-in user may use: published ones and his own.
 
@@ -870,20 +905,6 @@ class VisiblePrimaryKeyRelatedField(serializers.PrimaryKeyRelatedField):
             published = Q(status="validated")
             own = Q(created_by=user)
         else:
-class OwnPrimaryKeyRelatedField(serializers.PrimaryKeyRelatedField):
-    """Only the objects the signed-in user created (the administrators may use all): what is
-    private to its owner cannot be attached to the session of somebody else."""
-
-    def get_queryset(self):
-        queryset = super().get_queryset()
-        user = getattr(self.context.get("request"), "user", None)
-        if user is not None and user.is_staff:
-            return queryset
-        if user is None or not user.is_authenticated:
-            return queryset.none()
-        return queryset.filter(created_by=user)
-
-
             return queryset
         if user is not None and user.is_authenticated:
             published |= own
@@ -1006,6 +1027,8 @@ class RecordingSessionSerializer(serializers.ModelSerializer):
 
     # what an administrator still has to validate before the session can be shared
     pending_entries = serializers.SerializerMethodField()
+    # what the user who asks may do with it (edit, withdraw, share, delete) and why not
+    rights = serializers.SerializerMethodField()
     # only known in the list of one's own sessions (annotated there), None elsewhere
     files_count = serializers.SerializerMethodField()
     files_to_deposit = serializers.SerializerMethodField()
@@ -1061,6 +1084,9 @@ class RecordingSessionSerializer(serializers.ModelSerializer):
     def get_doi(self, obj):
         return getattr(obj, "first_doi", None) or None
 
+    def get_rights(self, obj):
+        return session_rights(obj, viewer_of(self.context))
+
     def get_pending_entries(self, obj):
         request = self.context.get("request")
         view = self.context.get("view")
@@ -1076,7 +1102,7 @@ class RecordingSessionSerializer(serializers.ModelSerializer):
             "update",
             "partial_update",
         )
-        if not (mine and detail) or obj.status == "shared":
+        if not (mine and detail):
             return []
         return [
             {"kind": kind, "id": entry.pk, "name": str(entry), "status": entry.status}
@@ -1206,20 +1232,18 @@ class RecordingSessionSerializer(serializers.ModelSerializer):
         before = instance.status
         requested = validated_data.pop("status", None)
 
-        # waiting for a review, shared or published: the owner can only withdraw his request
+        # waiting for a review: the owner can only withdraw his request
         withdraws = (
             before == WAITING
             and requested == "draft"
             and not validated_data
             and not self.initial_data.keys() - {"status"}
         )
-        if not is_staff and before in SESSION_FROZEN and not withdraws:
-            raise PermissionDenied(
-                "This session is waiting for a review or already shared: "
-                "it can no longer be edited."
-            )
-        if before == "published" and not is_staff:
-            requested = None  # a published session stays published: its record follows
+        rights = session_rights(instance, request.user)
+        if not (rights["can_edit"] or (withdraws and rights["can_withdraw"])):
+            raise PermissionDenied(rights["locked_reason"] or "You cannot edit it.")
+        if before in ("shared", "published") and not is_staff:
+            requested = None  # it stays public; what is not validated is not shown
 
         m2m_fields = self._extract_m2m(validated_data)
         for attr, value in validated_data.items():
@@ -1387,7 +1411,10 @@ class FileNestedSerializer(serializers.ModelSerializer):
         rs = obj.recording_session
         if rs is None:
             return None
+        everything = sees_everything(viewer_of(self.context), rs.created_by_id)
         p = rs.protocol
+        if p and p.status != VALIDATED and not everything:
+            p = None  # nobody validated it: not shown
         chips = (
             [
                 value
@@ -1406,7 +1433,11 @@ class FileNestedSerializer(serializers.ModelSerializer):
         return {
             "name": rs.name,
             "chips": chips,
-            "animal_profiles": [a.name for a in rs.animal_profiles.all()],
+            "animal_profiles": [
+                a.name
+                for a in rs.animal_profiles.all()
+                if everything or a.status == VALIDATED
+            ],
         }
 
     def get_plot_url(self, obj):

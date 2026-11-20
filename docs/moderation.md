@@ -22,6 +22,11 @@ strain, animal profile) goes through the same states:
   puts it in `waiting validation`: it is private and locked until an administrator
   validates it **together with what it uses** (action "Validate the sessions and
   everything they use"), or until the entries are validated one by one.
+  A shared or published session stays editable by its author and stays public. What it uses
+  and nobody validated yet (a new microphone, an animal profile...) is **not shown to the
+  others** (lists of files, datasets, exports, search) until an administrator validates it; the
+  author and the administrators see everything. A session cannot be deposited in a repository
+  while it uses such entries. See `UnvalidatedIsNotPublicTests`, which reads every public route.
 
 ## Administrator's interface (Django admin)
 

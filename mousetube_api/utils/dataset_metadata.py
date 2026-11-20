@@ -35,7 +35,11 @@ from mousetube_api.models import (
     Study,
     Subject,
 )
-from mousetube_api.utils.moderation import SESSION_PUBLIC
+from mousetube_api.utils.moderation import (
+    SESSION_PUBLIC,
+    public_profile,
+    public_session_data,
+)
 from mousetube_api.utils.ontologies import term_ref
 
 HARDWARE_FIELDS = {
@@ -82,15 +86,15 @@ def _animal_profile(a):
         "age": a.age,
         "genotype": a.genotype,
         "treatment": a.treatment,
+        "diet": a.diet,
         "sex_term": term_ref(a.sex_term),
         "age_term": term_ref(a.age_term),
         "treatment_term": term_ref(a.treatment_term),
+        "diet_term": term_ref(a.diet_term),
         "status": a.status,
-        "diet": a.diet,
     }
 
 
-        "diet_term": term_ref(a.diet_term),
 def _hardware(h):
     return {
         "name": h.name,
@@ -181,6 +185,7 @@ def _session(rs):
             "context_cage": p.context_cage,
             "context_bedding": p.context_bedding,
             "context_light_cycle": p.context_light_cycle,
+            "status": p.status,
         },
         "studies": [
             {
@@ -239,6 +244,19 @@ def visible_sessions(dataset, user):
     return sessions.filter(status__in=SESSION_PUBLIC)
 
 
+def _public(session):
+    """A session as visitors read it: what nobody validated is left out."""
+    public_session_data(session)
+    for file in session["file_list"]:
+        for subject in file["subjects"]:
+            profile = subject["animal_profile"]
+            if profile and profile["status"] != "validated":
+                subject["animal_profile"] = None
+            elif profile:
+                public_profile(profile)
+    return session
+
+
 def build_dataset_metadata(dataset, user):
     sessions = (
         visible_sessions(dataset, user)
@@ -261,7 +279,10 @@ def build_dataset_metadata(dataset, user):
             "doi": dataset.doi,
             "link": dataset.link,
             "recording_session_list": [
-                _session(rs) for rs in sessions.order_by("name")
+                _session(rs)
+                if getattr(user, "is_staff", False)
+                else _public(_session(rs))
+                for rs in sessions.order_by("name")
             ],
         }
     }

@@ -32,15 +32,71 @@ WAITING = "waiting validation"
 VALIDATED = "validated"
 
 SESSION_PUBLIC = ("shared", "published")  # what visitors may see
-SESSION_LOCKED = (
-    "waiting validation",
-    "shared",
-    "published",
-)  # not deleted by the owner
-SESSION_FROZEN = (
-    "waiting validation",
-    "shared",
-)  # not edited by the owner: a published session can be, its record follows
+
+
+def sees_everything(user, owner_id):
+    """An administrator and the author see all of a session, validated or not."""
+    return bool(
+        user and user.is_authenticated and (user.is_staff or user.id == owner_id)
+    )
+
+
+# What the others read of a public session: only the entries an administrator validated.
+# These work on the data as the API shows it (dicts with a "status"), see the serializers.
+def _validated(item):
+    return bool(item) and item.get("status") == VALIDATED
+
+
+def validated_only(items):
+    return [item for item in items or [] if _validated(item)]
+
+
+def public_equipment(item):
+    """Hardware or software: only its validated references and contacts."""
+    item["references"] = validated_only(item.get("references"))
+    if "contacts" in item:
+        item["contacts"] = validated_only(item["contacts"])
+    return item
+
+
+def public_profile(profile):
+    """An animal profile without a strain that nobody validated."""
+    if profile.get("strain") and not _validated(profile["strain"]):
+        profile["strain"] = None
+    return profile
+
+
+HARDWARE_KEYS = (
+    "equipment_acquisition_hardware_soundcards",
+    "equipment_acquisition_hardware_speakers",
+    "equipment_acquisition_hardware_amplifiers",
+    "equipment_acquisition_hardware_microphones",
+)
+
+
+def public_session_data(data):
+    """The data of a session for the others: what nobody validated is left out."""
+    for key in ("protocol", "laboratory"):
+        if data.get(key) and not _validated(data[key]):
+            data[key] = None
+    data["animal_profiles"] = [
+        public_profile(p) for p in validated_only(data.get("animal_profiles"))
+    ]
+    for key in HARDWARE_KEYS:
+        data[key] = [public_equipment(h) for h in validated_only(data.get(key))]
+    versions = [
+        v
+        for v in data.get("equipment_acquisition_software") or []
+        if _validated(v.get("software"))
+    ]
+    for version in versions:
+        public_equipment(version["software"])
+    data["equipment_acquisition_software"] = versions
+    data["references"] = validated_only(data.get("references"))
+    # the state of the record and the approval of the author name what waits for validation
+    for private in ("zenodo_message", "auto_publish_state", "auto_publish_message"):
+        data.pop(private, None)
+    return data
 
 
 def _unique(entries):
@@ -108,6 +164,9 @@ def validate_session(session):
     if session.status != "published":
         type(session).objects.filter(pk=session.pk).update(status="shared")
     session.refresh_from_db()
+    from mousetube_api.utils.publication import schedule_auto_publish
+
+    schedule_auto_publish(session)  # published as the author approved, if they did
     return entries, session
 
 
@@ -164,9 +223,6 @@ def send_back(objs, reason=""):
         notify_creator(
             obj,
             f"[mouseTube] Your {what} '{obj}' needs changes",
-    from mousetube_api.utils.publication import schedule_auto_publish
-
-    schedule_auto_publish(session)  # published as the author approved, if they did
             "An administrator sent it back to draft."
             + (f"\n\nReason: {reason}" if reason else "")
             + "\n\nChange it, then submit it again for review.",
@@ -184,6 +240,9 @@ def promote_ready_sessions():
             RecordingSession.objects.filter(pk=session.pk).update(status="shared")
             session.status = "shared"
             promoted.append(session)
+            from mousetube_api.utils.publication import schedule_auto_publish
+
+            schedule_auto_publish(session)
             notify_creator(
                 session,
                 f"[mouseTube] Your recording session '{session.name}' is shared",
@@ -240,9 +299,6 @@ def pending_counts():
     """Entries waiting for a decision, per type, for the administrator's dashboard."""
     from mousetube_api.models import (
         AnimalProfile,
-            from mousetube_api.utils.publication import schedule_auto_publish
-
-            schedule_auto_publish(session)
         Contact,
         Hardware,
         Laboratory,

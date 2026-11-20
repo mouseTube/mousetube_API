@@ -83,21 +83,21 @@ from mousetube_api.utils.file_handler import (
     upload_room,
 )
 from mousetube_api.utils.moderation import (
-    SESSION_LOCKED,
     SESSION_PUBLIC,
     session_pending_entries,
 )
+from mousetube_api.utils.orcid_proof import read_orcid_proof
 from mousetube_api.utils.publication import (
     MAX_APPROVED_PAYLOAD,
     approve_auto_publish,
     reset_auto_publish,
 )
-from mousetube_api.utils.orcid_proof import read_orcid_proof
 from mousetube_api.utils.repository import (
     build_repository_metadata_payload,
     default_repository,
     get_repository_metadata_schema,
 )
+from mousetube_api.utils.session_rights import session_rights
 
 from .celery import app
 from .models import (
@@ -266,11 +266,16 @@ class IsCreatorOrReadOnly(permissions.BasePermission):
             return True  # administrators moderate: they may change or remove anything
         if obj.created_by != request.user:
             return False
+        if isinstance(obj, RecordingSession):  # see utils/session_rights.py
+            return (
+                request.method != "DELETE"
+                or session_rights(obj, request.user)["can_delete"]
+            )
         status = getattr(obj, "status", None)
         if status == "validated":
             return False  # validated by an administrator: it can no longer be changed
-        # a session under review or shared is not deleted by its owner
-        return not (request.method == "DELETE" and status in SESSION_LOCKED)
+        # an entry that waits for a review is not deleted by its owner
+        return not (request.method == "DELETE" and status == "waiting validation")
 
 
 # ----------------------------
@@ -864,6 +869,18 @@ class SubjectViewSet(viewsets.ModelViewSet):
     queryset = Subject.objects.all()
     serializer_class = SubjectSerializer
 
+    def get_queryset(self):
+        # the animals of a file of a draft are private to its author, like the file
+        user = self.request.user
+        if user.is_staff:
+            return Subject.objects.all().order_by("name")
+        visible = Q(files_m2m_temp__recording_session__status__in=SESSION_PUBLIC)
+        if user.is_authenticated:
+            visible |= Q(created_by=user) | Q(
+                files_m2m_temp__recording_session__created_by=user
+            )
+        return Subject.objects.filter(visible).distinct().order_by("name")
+
     def get_permissions(self):
         if self.action == "create":
             return [IsAuthenticated()]
@@ -918,7 +935,7 @@ class ProtocolViewSet(viewsets.ModelViewSet):
         user = self.request.user
         ordering = self.request.query_params.get("ordering")
 
-        qs = Protocol.objects.all()
+        qs = visible_to(Protocol.objects.all(), user)  # validated ones and one's own
 
         if user.is_authenticated:
             favorite_subquery = Favorite.objects.filter(
@@ -997,6 +1014,10 @@ class ProtocolViewSet(viewsets.ModelViewSet):
         )
 
         # If the protocol already existed, do not create but return the existing object
+        # (a protocol has no free text: it is validated whoever made it)
+        if protocol.status != "validated":
+            Protocol.objects.filter(pk=protocol.pk).update(status="validated")
+            protocol.refresh_from_db()
         serializer.instance = protocol
 
 
@@ -1122,6 +1143,10 @@ class AnimalProfileViewSet(viewsets.ModelViewSet):
 # Study
 # ----------------------------
 class StudyViewSet(viewsets.ModelViewSet):
+    """The studies of a person are theirs: each one lists, picks and changes only its own (the
+    administrators see all). They are not reviewed. Their names still show on the sessions that
+    are shared, like the rest of what a session says about itself."""
+
     queryset = Study.objects.all().order_by("name")
     serializer_class = StudySerializer
 
@@ -1146,10 +1171,6 @@ class RecordingSessionViewSet(viewsets.ModelViewSet):
     queryset = RecordingSession.objects.all().order_by("name")
     serializer_class = RecordingSessionSerializer
     permission_classes = [IsAuthenticated, IsCreatorOrReadOnly]
-
-    """The studies of a person are theirs: each one lists, picks and changes only its own (the
-    administrators see all). They are not reviewed. Their names still show on the sessions that
-    are shared, like the rest of what a session says about itself."""
 
     filter_backends = [
         filters.SearchFilter,
@@ -1402,18 +1423,7 @@ class FileAPIView(GenericAPIView):
         if search_query:
             file_fields = ["name", "number", "link", "notes", "doi"]
 
-            recording_session_fields = [
-                "name",
-                "equipment_acquisition_software__software__name",
-                "equipment_acquisition_hardware_soundcards__name",
-                "equipment_acquisition_hardware_speakers__name",
-                "equipment_acquisition_hardware_amplifiers__name",
-                "equipment_acquisition_hardware_microphones__name",
-                "description",
-                "date",
-                "duration",
-            ]
-
+            session_fields = ["name", "description", "date", "duration"]
             subject_fields = ["name", "identifier", "origin", "cohort"]
 
             # the author is the owner of the recording session
@@ -1443,6 +1453,7 @@ class FileAPIView(GenericAPIView):
                 "sex",
                 "genotype",
                 "treatment",
+                "diet",
             ]
 
             laboratory_fields = [
@@ -1455,35 +1466,65 @@ class FileAPIView(GenericAPIView):
 
             study_fields = ["name", "description"]
 
-            def build_query(prefix, fields, term):
+            user = request.user
+            if user.is_staff:
+                mine = Q(pk__isnull=False)
+            elif user.is_authenticated:
+                mine = Q(recording_session__created_by=user)
+            else:
+                mine = Q(pk__isnull=True)
+
+            def validated(path):
+                """What nobody validated is not searched: it is not shown either."""
+                return mine | Q(**{f"{path}status": "validated"})
+
+            def build_query(prefix, fields, term, *needs):
                 q = Q()
                 for f in fields:
-                "diet",
                     lookup = f"{prefix}{f}__icontains" if prefix else f"{f}__icontains"
                     q |= Q(**{lookup: term})
+                for path in needs:
+                    q &= validated(path)
                 return q
+
+            session = "recording_session__"
+            profile = "subjects__animal_profile__"
+            equipment = [
+                f"{session}equipment_acquisition_software__software__",
+                f"{session}equipment_acquisition_hardware_soundcards__",
+                f"{session}equipment_acquisition_hardware_speakers__",
+                f"{session}equipment_acquisition_hardware_amplifiers__",
+                f"{session}equipment_acquisition_hardware_microphones__",
+            ]
 
             # every word must be found somewhere (name, session, author, protocol...)
             for term in search_query.split():
-                files = files.filter(
+                found = (
                     build_query("", file_fields, term)
-                    | build_query("recording_session__", recording_session_fields, term)
+                    | build_query(session, session_fields, term)
                     | build_query("subjects__", subject_fields, term)
+                    | build_query(f"{session}created_by__", author_fields, term)
                     | build_query(
-                        "recording_session__created_by__", author_fields, term
-                    )
-                    | build_query("subjects__", strain_fields, term)
-                    | build_query(
-                        "recording_session__protocol__", protocol_fields, term
+                        "subjects__", strain_fields, term, profile, f"{profile}strain__"
                     )
                     | build_query(
-                        "subjects__animal_profile__", animal_profile_fields, term
+                        f"{session}protocol__",
+                        protocol_fields,
+                        term,
+                        f"{session}protocol__",
                     )
+                    | build_query(profile, animal_profile_fields, term, profile)
                     | build_query(
-                        "recording_session__laboratory__", laboratory_fields, term
+                        f"{session}laboratory__",
+                        laboratory_fields,
+                        term,
+                        f"{session}laboratory__",
                     )
-                    | build_query("recording_session__studies__", study_fields, term)
+                    | build_query(f"{session}studies__", study_fields, term)
                 )
+                for path in equipment:
+                    found |= build_query(path, ["name"], term, path)
+                files = files.filter(found)
             files = files.distinct()
 
         # --- Filtres ---
@@ -1530,6 +1571,7 @@ class FileAPIView(GenericAPIView):
             "subjects__animal_profile__sex_term",
             "subjects__animal_profile__age_term",
             "subjects__animal_profile__treatment_term",
+            "subjects__animal_profile__diet_term",
             "recording_session__behavior_terms",
             "recording_session__studies",
             "recording_session__references",
@@ -1538,6 +1580,7 @@ class FileAPIView(GenericAPIView):
             "recording_session__animal_profiles__sex_term",
             "recording_session__animal_profiles__age_term",
             "recording_session__animal_profiles__treatment_term",
+            "recording_session__animal_profiles__diet_term",
             "recording_session__equipment_acquisition_software__software__references",
             "recording_session__equipment_acquisition_hardware_soundcards__references",
             "recording_session__equipment_acquisition_hardware_speakers__references",
@@ -1576,16 +1619,16 @@ class FileAPIView(GenericAPIView):
     def get(self, request, *args, **kwargs):
         queryset = self.get_queryset()
         paginator = FilePagination()
-            "subjects__animal_profile__diet_term",
         paginated_files = paginator.paginate_queryset(queryset, request)
-        serializer = self.serializer_class(paginated_files, many=True)
+        serializer = self.serializer_class(
+            paginated_files, many=True, context={"viewer": request.user}
+        )
         return paginator.get_paginated_response(serializer.data)
 
     # -----------------------------
     # POST Celery
     # -----------------------------
     def post(self, request, *args, **kwargs):
-            "recording_session__animal_profiles__diet_term",
         if not request.user.is_staff and (
             "plot" in request.data
             or "spectrogram" in request.data
@@ -1641,7 +1684,8 @@ class FileAPIView(GenericAPIView):
             file.save(update_fields=["status"])
 
         return Response(
-            self.serializer_class(file).data, status=status.HTTP_201_CREATED
+            self.serializer_class(file, context={"viewer": request.user}).data,
+            status=status.HTTP_201_CREATED,
         )
 
 
@@ -1779,6 +1823,45 @@ def _link_check_report():
 
 
 @extend_schema(exclude=True)
+@api_view(["POST", "DELETE"])
+@permission_classes([IsAuthenticated])
+def auto_publish_view(request, pk):
+    """The author of a session that waits for validation approves the preview of its publication
+    (POST: the repository and the metadata as they looked at them), so that it is published by
+    itself once an administrator shares it. DELETE takes the approval back."""
+    session = get_object_or_404(RecordingSession, pk=pk)
+    if session.created_by != request.user:
+        return Response({"detail": "Not authorized."}, status=status.HTTP_403_FORBIDDEN)
+    if request.method == "DELETE":
+        reset_auto_publish(session)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+    if session.status != "waiting validation":
+        return Response(
+            {
+                "detail": "Only a session that waits for validation can be approved for "
+                "automatic publication: a shared one is published with its own button."
+            },
+            status=status.HTTP_409_CONFLICT,
+        )
+    repository = get_object_or_404(Repository, pk=request.data.get("repository_id"))
+    payload = request.data.get("payload")
+    if not isinstance(payload, dict) or not payload:
+        return Response({"error": "payload required"}, status=400)
+    if len(json.dumps(payload)) > MAX_APPROVED_PAYLOAD:
+        return Response({"error": "The metadata is too large."}, status=400)
+    try:
+        approve_auto_publish(session, repository, payload)
+    except (NotImplementedError, IndexError, ValueError):
+        return Response(
+            {"error": "This session has nothing to publish yet in this repository."},
+            status=400,
+        )
+    return Response(
+        RecordingSessionSerializer(session, context={"request": request}).data
+    )
+
+
+@extend_schema(exclude=True)
 @api_view(["GET", "POST"])
 @permission_classes([IsAdminUser])
 def link_check_view(request):
@@ -1822,45 +1905,6 @@ def upload_limit(request):
         {
             "limit": upload_room(),
             "max": settings.MAX_UPLOAD_SIZE,
-@extend_schema(exclude=True)
-@api_view(["POST", "DELETE"])
-@permission_classes([IsAuthenticated])
-def auto_publish_view(request, pk):
-    """The author of a session that waits for validation approves the preview of its publication
-    (POST: the repository and the metadata as they looked at them), so that it is published by
-    itself once an administrator shares it. DELETE takes the approval back."""
-    session = get_object_or_404(RecordingSession, pk=pk)
-    if session.created_by != request.user:
-        return Response({"detail": "Not authorized."}, status=status.HTTP_403_FORBIDDEN)
-    if request.method == "DELETE":
-        reset_auto_publish(session)
-        return Response(status=status.HTTP_204_NO_CONTENT)
-    if session.status != "waiting validation":
-        return Response(
-            {
-                "detail": "Only a session that waits for validation can be approved for "
-                "automatic publication: a shared one is published with its own button."
-            },
-            status=status.HTTP_409_CONFLICT,
-        )
-    repository = get_object_or_404(Repository, pk=request.data.get("repository_id"))
-    payload = request.data.get("payload")
-    if not isinstance(payload, dict) or not payload:
-        return Response({"error": "payload required"}, status=400)
-    if len(json.dumps(payload)) > MAX_APPROVED_PAYLOAD:
-        return Response({"error": "The metadata is too large."}, status=400)
-    try:
-        approve_auto_publish(session, repository, payload)
-    except (NotImplementedError, IndexError, ValueError):
-        return Response(
-            {"error": "This session has nothing to publish yet in this repository."},
-            status=400,
-        )
-    return Response(
-        RecordingSessionSerializer(session, context={"request": request}).data
-    )
-
-
             "free": shutil.disk_usage(media).free,
             "reserve": settings.UPLOAD_FREE_SPACE_RESERVE,
         }
@@ -1898,6 +1942,14 @@ class PublishSessionView(APIView):
             return Response(
                 {"detail": "Not authorized."}, status=status.HTTP_403_FORBIDDEN
             )
+        if session_pending_entries(session):
+            return Response(
+                {
+                    "detail": "The session uses entries that wait for an administrator: "
+                    "it can be published once they are validated."
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
         if session.status == "published":
             # a published session has a new version to publish when files were added since
             waiting = File.objects.filter(
@@ -1908,15 +1960,6 @@ class PublishSessionView(APIView):
                     {
                         "detail": "Nothing new to publish: add a file to make a new "
                         "version of the record."
-                    },
-                    status=status.HTTP_409_CONFLICT,
-                )
-            if session_pending_entries(session):
-                return Response(
-                    {
-                        "detail": "The session now uses entries that wait for an "
-                        "administrator: the new version can be published once they "
-                        "are validated."
                     },
                     status=status.HTTP_409_CONFLICT,
                 )
@@ -1988,7 +2031,7 @@ class FileDetailAPIView(GenericAPIView):
             return Response(
                 {"detail": "File not found"}, status=status.HTTP_404_NOT_FOUND
             )
-        serializer = self.serializer_class(file)
+        serializer = self.serializer_class(file, context={"viewer": request.user})
         return Response(serializer.data)
 
     def put(self, request, *args, **kwargs):
@@ -2011,10 +2054,14 @@ class FileDetailAPIView(GenericAPIView):
                 {"detail": "Only administrators can set plot or spectrogram."},
                 status=status.HTTP_403_FORBIDDEN,
             )
-        serializer = self.serializer_class(file, data=request.data)
+        serializer = self.serializer_class(
+            file, data=request.data, context={"viewer": request.user}
+        )
         if serializer.is_valid():
             file = serializer.save()
-            return Response(self.serializer_class(file).data)
+            return Response(
+                self.serializer_class(file, context={"viewer": request.user}).data
+            )
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     def delete(self, request, *args, **kwargs):
