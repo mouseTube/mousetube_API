@@ -309,6 +309,7 @@ class AnimalProfile(models.Model):
         age (str, optional): The age of the animal.
         genotype (str, optional): The genotype of the animal.
         treatment (str, optional): The treatment applied to the animal.
+        diet (str, optional): The diet of the animal (EFO term in `diet_term`).
         status (str): The status of the animal profil (draft, waiting validation, validated).
         created_at (DateTimeField): Timestamp when the animal profil was created.
         modified_at (DateTimeField): Last modification timestamp.
@@ -341,6 +342,7 @@ class AnimalProfile(models.Model):
     )
     genotype = models.CharField(max_length=255)
     treatment = models.CharField(max_length=255, null=True, blank=True)
+    diet = models.CharField(max_length=255, null=True, blank=True)
     sex_term = models.ForeignKey(
         OntologyTerm,
         null=True,
@@ -364,6 +366,14 @@ class AnimalProfile(models.Model):
         on_delete=models.SET_NULL,
         related_name="animal_profiles_treatment",
         help_text="ChEBI term of the compound of the treatment.",
+    )
+    diet_term = models.ForeignKey(
+        OntologyTerm,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="animal_profiles_diet",
+        help_text="Experimental Factor Ontology (EFO) term of the diet.",
     )
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="draft")
     created_at = models.DateTimeField(auto_now_add=True, null=True)

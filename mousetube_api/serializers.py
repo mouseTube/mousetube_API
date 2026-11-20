@@ -549,6 +549,10 @@ class StrainSerializer(ModerationMixin, serializers.ModelSerializer):
         fields = "__all__"
         read_only_fields = ("created_by",)  # set by the server, never by the client
 
+    """A strain. One chosen in the ontology (EFO, Rat Strain Ontology) is what the ontology says:
+    its term is checked at the source, so it is validated at once, and there is only one strain
+    per term (asking for it again gives the one that exists)."""
+
     def create(self, validated_data):
         return Strain.objects.create(**validated_data)
 
@@ -559,13 +563,49 @@ class StrainSerializer(ModerationMixin, serializers.ModelSerializer):
         return instance
 
 
+        # the background of a strain of the ontology is its label (see validate)
+        extra_kwargs = {"background": {"required": False, "allow_blank": True}}
+
+    def validate(self, data):
+        term = data.get("ontology_term")
+        if term and not data.get("background"):
+            data["background"] = term.label
+        if (
+            term
+            and self.instance is not None
+            and Strain.objects.filter(ontology_term=term)
+            .exclude(pk=self.instance.pk)
+            .exists()
+        ):
+            raise serializers.ValidationError(
+                {"ontology_term": "A strain already uses this term: choose it instead."}
+            )
+        background = data.get("background", getattr(self.instance, "background", ""))
+        if not background and not (
+            term or getattr(self.instance, "ontology_term", None)
+        ):
+            raise serializers.ValidationError(
+                {"background": "The genetic background is required."}
+            )
+        return data
 # class StrainSerializer(serializers.ModelSerializer):
 #     species = SpeciesSerializer()
+        term = validated_data.get("ontology_term")
+        if term:
+            existing = Strain.objects.filter(ontology_term=term).first()
+            if existing:  # one strain per term: nobody makes a second one
+                if existing.status != VALIDATED:
+                    existing.status = VALIDATED
+                    existing.save(update_fields=["status"])
+                return existing
+            validated_data["status"] = VALIDATED  # the ontology is the validation
 
 #     class Meta:
 #         model = Strain
 #         fields = "__all__"
 
+        if validated_data.get("ontology_term"):
+            instance.status = VALIDATED
 #     def create(self, validated_data):
 #         species_data = validated_data.pop("species")
 #         species = Species.objects.create(**species_data)
@@ -620,6 +660,7 @@ class AnimalProfileSerializer(ModerationMixin, serializers.ModelSerializer):
         sex = data.get("sex")
         if sex and not data.get("sex_term") and "sex_term" not in data:
             data["sex_term"] = sex_term(sex)
+    diet_term = OntologyTermField("diet")
         # a mouse age class is a stage of the developmental ontology, unless a more
         # precise stage was chosen
         age = data.get("age")
@@ -829,6 +870,20 @@ class VisiblePrimaryKeyRelatedField(serializers.PrimaryKeyRelatedField):
             published = Q(status="validated")
             own = Q(created_by=user)
         else:
+class OwnPrimaryKeyRelatedField(serializers.PrimaryKeyRelatedField):
+    """Only the objects the signed-in user created (the administrators may use all): what is
+    private to its owner cannot be attached to the session of somebody else."""
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        user = getattr(self.context.get("request"), "user", None)
+        if user is not None and user.is_staff:
+            return queryset
+        if user is None or not user.is_authenticated:
+            return queryset.none()
+        return queryset.filter(created_by=user)
+
+
             return queryset
         if user is not None and user.is_authenticated:
             published |= own
@@ -867,7 +922,7 @@ class RecordingSessionSerializer(serializers.ModelSerializer):
         required=False,
         allow_null=True,
     )
-    study_ids = VisiblePrimaryKeyRelatedField(
+    study_ids = OwnPrimaryKeyRelatedField(
         queryset=Study.objects.all(),
         source="studies",
         many=True,
@@ -1172,13 +1227,14 @@ class RecordingSessionShortSerializer(serializers.ModelSerializer):
         fields = ("id", "name")
 
 
-class StudySerializer(ModerationMixin, serializers.ModelSerializer):
+class StudySerializer(serializers.ModelSerializer):
     recording_sessions = RecordingSessionShortSerializer(many=True, required=False)
 
     class Meta:
         model = Study
         fields = "__all__"
-        read_only_fields = ("created_by",)  # set by the server, never by the client
+        # set by the server, never by the client; a study is private to its owner: no review
+        read_only_fields = ("created_by", "status")
 
     def validate(self, data):
         start = data.get("start_date", getattr(self.instance, "start_date", None))

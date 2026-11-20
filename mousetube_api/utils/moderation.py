@@ -56,8 +56,8 @@ def _unique(entries):
 def session_pending_entries(session):
     """What the session uses and nobody validated yet, as (kind, object) pairs.
 
-    Looks at the protocol, laboratory, studies, animal profiles and their strains, the
-    equipment (with the references and contacts of the software and hardware) and the
+    Looks at the protocol, laboratory, animal profiles and their strains, the
+    equipment (the studies are private to their owner and are not reviewed) (with the references and contacts of the software and hardware) and the
     references of the session itself.
     """
     profiles = list(session.animal_profiles.select_related("strain"))
@@ -72,7 +72,6 @@ def session_pending_entries(session):
     software = [v.software for v in session.equipment_acquisition_software.all()]
 
     candidates = [("protocol", session.protocol), ("laboratory", session.laboratory)]
-    candidates += [("study", s) for s in session.studies.all()]
     candidates += [("animal profile", p) for p in profiles]
     candidates += [("strain", p.strain) for p in profiles]
     candidates += [("hardware", h) for h in hardware]
@@ -245,7 +244,6 @@ def pending_counts():
         Reference,
         Software,
         Strain,
-        Study,
     )
 
     rows = []
@@ -256,7 +254,6 @@ def pending_counts():
         Laboratory,
         Reference,
         Contact,
-        Study,
         Strain,
         AnimalProfile,
     ):

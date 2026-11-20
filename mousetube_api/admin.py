@@ -385,9 +385,9 @@ class LaboratoryAdmin(ModerationAdminMixin, admin.ModelAdmin):
     search_fields = ("name", "institution", "unit")
 
 
-class StudyAdmin(ModerationAdminMixin, admin.ModelAdmin):
-    list_display = ("name", "start_date", "end_date", "status")
-    list_filter = ("status",)
+class StudyAdmin(admin.ModelAdmin):
+    # a study is private to its owner: it is not reviewed
+    list_display = ("name", "created_by", "start_date", "end_date")
     search_fields = ("name",)
 
 

@@ -1063,7 +1063,16 @@ class AnimalProfileFilter(django_filters.FilterSet):
 
     class Meta:
         model = AnimalProfile
-        fields = ["sex", "age", "genotype", "status", "strain", "treatment", "species"]
+        fields = [
+            "sex",
+            "age",
+            "genotype",
+            "status",
+            "strain",
+            "treatment",
+            "diet",
+            "species",
+        ]
 
 
 class AnimalProfileViewSet(viewsets.ModelViewSet):
@@ -1113,14 +1122,13 @@ class StudyViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
-        return visible_to(Study.objects.all(), user).order_by("name")
+        studies = Study.objects.all().order_by("name")
+        return studies if user.is_staff else studies.filter(created_by=user)
 
     def get_permissions(self):
-        if self.action == "create":
-            return [IsAuthenticated()]
         if self.action in ["update", "partial_update", "destroy"]:
             return [IsAuthenticated(), IsCreatorOrReadOnly()]
-        return [permissions.AllowAny()]
+        return [IsAuthenticated()]
 
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
@@ -1133,6 +1141,10 @@ class RecordingSessionViewSet(viewsets.ModelViewSet):
     queryset = RecordingSession.objects.all().order_by("name")
     serializer_class = RecordingSessionSerializer
     permission_classes = [IsAuthenticated, IsCreatorOrReadOnly]
+
+    """The studies of a person are theirs: each one lists, picks and changes only its own (the
+    administrators see all). They are not reviewed. Their names still show on the sessions that
+    are shared, like the rest of what a session says about itself."""
 
     filter_backends = [
         filters.SearchFilter,
@@ -1441,6 +1453,7 @@ class FileAPIView(GenericAPIView):
             def build_query(prefix, fields, term):
                 q = Q()
                 for f in fields:
+                "diet",
                     lookup = f"{prefix}{f}__icontains" if prefix else f"{f}__icontains"
                     q |= Q(**{lookup: term})
                 return q
@@ -1558,6 +1571,7 @@ class FileAPIView(GenericAPIView):
     def get(self, request, *args, **kwargs):
         queryset = self.get_queryset()
         paginator = FilePagination()
+            "subjects__animal_profile__diet_term",
         paginated_files = paginator.paginate_queryset(queryset, request)
         serializer = self.serializer_class(paginated_files, many=True)
         return paginator.get_paginated_response(serializer.data)
@@ -1566,6 +1580,7 @@ class FileAPIView(GenericAPIView):
     # POST Celery
     # -----------------------------
     def post(self, request, *args, **kwargs):
+            "recording_session__animal_profiles__diet_term",
         if not request.user.is_staff and (
             "plot" in request.data
             or "spectrogram" in request.data

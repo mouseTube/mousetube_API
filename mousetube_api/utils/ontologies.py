@@ -37,6 +37,11 @@ FIELDS = {
         "name": "Mouse Developmental Stages",
     },
     "treatment": {"source": "ols", "ontologies": ["chebi"], "name": "ChEBI"},
+    "diet": {
+        "source": "ols",
+        "ontologies": ["efo"],
+        "name": "Experimental Factor Ontology (EFO)",
+    },
     "behavior": {
         "source": "ols",
         "ontologies": ["nbo"],
@@ -290,7 +295,7 @@ def term_ref(term):
 
 
 def session_terms(session):
-    """The vocabulary terms a recording session points to (species, sex, stage, treatment,
+    """The vocabulary terms a recording session points to (species, sex, stage, treatment, diet,
     behaviors), each once, in a stable order."""
     terms = []
     for profile in session.animal_profiles.select_related(
@@ -299,6 +304,7 @@ def session_terms(session):
         "sex_term",
         "age_term",
         "treatment_term",
+        "diet_term",
     ):
         species = profile.strain.species if profile.strain else None
         terms += [
@@ -307,6 +313,7 @@ def session_terms(session):
             profile.sex_term,
             profile.age_term,
             profile.treatment_term,
+            profile.diet_term,
         ]
     terms += list(session.behavior_terms.all())
     seen, kept = set(), []

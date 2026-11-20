@@ -1,7 +1,7 @@
 # Moderation: statuses and review
 
 Everything users add to the catalogs (software, hardware, laboratory, reference, contact,
-study, strain, animal profile) goes through the same states:
+strain, animal profile) goes through the same states:
 
 `draft` -> `waiting validation` -> `validated`
 
@@ -9,6 +9,12 @@ study, strain, animal profile) goes through the same states:
   validates. A validated entry cannot be changed by its owner any more.
 - Only validated entries are visible to everybody; drafts and entries waiting for review
   are visible to their owner only.
+- **Studies are not reviewed.** A study is private to the person who made it: each user lists,
+  chooses and changes only their own studies (administrators see all), and a session can only be
+  given studies of its author. Nothing waits for validation, and a session is shared without it.
+  The name of the studies of a shared session is still shown with it, like the rest of what the
+  session says about itself.
+- A strain chosen in the ontology is validated when it is created (see [vocabularies](ontologies.md)).
 - Protocols have no free text (a protocol *is* its attributes), so they are validated
   automatically.
 - A recording session goes `draft` -> `shared` -> `published` (deposited in a repository,
@@ -28,7 +34,7 @@ study, strain, animal profile) goes through the same states:
 ## Review page (website, administrators only)
 
 `/review` on the website does the same decisions in one place: one tab per kind (account
-requests, sessions, software, hardware, laboratories, references, contacts, studies, strains,
+requests, sessions, software, hardware, laboratories, references, contacts, strains,
 animal profiles) with the number waiting, the oldest first. Each item can be validated or
 sent back with a reason, one by one or several at once; an account request is activated or
 rejected (only a brand-new one can be rejected). A session is validated with everything it

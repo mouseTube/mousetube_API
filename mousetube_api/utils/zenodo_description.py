@@ -105,6 +105,12 @@ def _animal(profile):
                     if profile.treatment_term
                     else esc(profile.treatment or ""),
                 ),
+                (
+                    "Diet",
+                    term(profile.diet_term)
+                    if profile.diet_term
+                    else esc(profile.diet or ""),
+                ),
             ]
         ),
     ]

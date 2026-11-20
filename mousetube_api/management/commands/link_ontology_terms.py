@@ -16,13 +16,14 @@ LABEL_MATCHES = [
     (Strain, "name", "ontology_term", "strain"),
     (AnimalProfile, "age", "age_term", "age"),
     (AnimalProfile, "treatment", "treatment_term", "treatment"),
+    (AnimalProfile, "diet", "diet_term", "diet"),
 ]
 
 
 class Command(BaseCommand):
     help = (
         "Link the data already in the database to ontology terms when the match is "
-        "certain: exact label for species, age and treatment; the match the ROR registry "
+        "certain: exact label for species, age, treatment and diet; the match the ROR registry "
         "is sure about for laboratories. Shows what it would do unless --apply is given."
     )
 

@@ -1250,7 +1250,6 @@ class ModerationTests(FreshCache, TestCase):
             Reference,
             Software,
             Strain,
-            Study,
         )
 
         models = {
@@ -1259,7 +1258,6 @@ class ModerationTests(FreshCache, TestCase):
             "contact": Contact,
             "laboratory": Laboratory,
             "reference": Reference,
-            "study": Study,
             "strain": Strain,
             "animalprofile": AnimalProfile,
         }
@@ -1269,7 +1267,6 @@ class ModerationTests(FreshCache, TestCase):
             "contact": {"last_name": "C", "email": "c@igbmc.fr", "country": "FR"},
             "laboratory": {"name": "L", "country": "FR"},
             "reference": {"name": "R"},
-            "study": {"name": "St"},
             "strain": {"name": "Sn", "background": "b", "species_id": self.species.id},
             "animalprofile": {
                 "name": "AP",
@@ -1614,6 +1611,7 @@ def _fake_vocabularies(url, params=None, **kwargs):
             "NBO:0000037": ("vocalization behavior", "nbo"),
             "CHEBI:27732": ("caffeine", "chebi"),
             "EFO:0022397": ("C57BL/6", "efo"),
+            "EFO:0004000": ("high fat diet", "efo"),
             "RS:0000681": ("SD", "rs"),
         }
         known = terms.get(params.get("obo_id"))
@@ -1775,6 +1773,47 @@ class OntologyTests(FreshCache, TestCase):
             )
             self.assertEqual(changed.json()["age_term"]["curie"], "MmusDv:0000110")
 
+    def test_the_diet_of_an_animal_points_to_its_term_of_the_experimental_factor_ontology(
+        self,
+    ):
+        from unittest import mock
+
+        with mock.patch(self.PATCH, side_effect=_fake_vocabularies):
+            created = self._profile(diet="high fat", diet_term={"curie": "EFO:0004000"})
+            self.assertEqual(created.status_code, 201, created.content)
+            body = created.json()
+            self.assertEqual(body["diet"], "high fat")
+            self.assertEqual(body["diet_term"]["label"], "high fat diet")
+            self.assertEqual(body["diet_term"]["ontology"], "efo")
+            # a term of another vocabulary is not a diet
+            wrong = self._profile(name="AP2", diet_term={"curie": "CHEBI:27732"})
+        self.assertEqual(wrong.status_code, 400)
+        # the diet is optional
+        self.assertEqual(self._profile(name="AP3").status_code, 201)
+
+    def test_a_diet_goes_out_in_the_dataset_metadata_and_the_zenodo_description(self):
+        from mousetube_api.models import AnimalProfile, OntologyTerm
+        from mousetube_api.utils.dataset_metadata import _animal_profile
+
+        term = OntologyTerm.objects.create(
+            curie="EFO:0004000",
+            label="high fat diet",
+            ontology="efo",
+            iri="http://www.ebi.ac.uk/efo/EFO_0004000",
+        )
+        profile = AnimalProfile.objects.create(
+            name="AP-diet",
+            strain=self.strain,
+            sex="male",
+            genotype="+/+",
+            diet="high fat",
+            diet_term=term,
+            created_by=self.user,
+        )
+        exported = _animal_profile(profile)
+        self.assertEqual(exported["diet"], "high fat")
+        self.assertEqual(exported["diet_term"]["curie"], "EFO:0004000")
+
     def test_a_precise_stage_chosen_by_the_user_is_kept(self):
         from unittest import mock
 
@@ -1859,6 +1898,87 @@ class OntologyTests(FreshCache, TestCase):
                 format="json",
             )
         self.assertEqual(wrong.status_code, 400)
+
+    def test_a_strain_chosen_in_the_ontology_is_validated_at_once_and_made_once(self):
+        from unittest import mock
+
+        from mousetube_api.models import Species, Strain
+
+        species = Species.objects.get(name="Mus musculus")
+        other = get_user_model().objects.create_user("other", "x@igbmc.fr", "x")
+        other_client = APIClient()
+        other_client.force_authenticate(other)
+
+        def make(client, name, **extra):
+            return client.post(
+                "/api/strain/",
+                {"name": name, "species_id": species.id, **extra},
+                format="json",
+            )
+
+        with mock.patch(self.PATCH, side_effect=_fake_vocabularies):
+            first = make(
+                self.client_u, "C57BL/6", ontology_term={"curie": "EFO:0022397"}
+            )
+            self.assertEqual(first.status_code, 201, first.content)
+            body = first.json()
+            self.assertEqual(
+                body["status"], "validated"
+            )  # the ontology is the validation
+            self.assertEqual(body["background"], "C57BL/6")  # no background to type
+            # someone else asking for the same term gets that strain, not a second one
+            again = make(
+                other_client, "another name", ontology_term={"curie": "EFO:0022397"}
+            )
+        self.assertEqual(again.json()["id"], body["id"])
+        self.assertEqual(
+            Strain.objects.filter(ontology_term__curie="EFO:0022397").count(), 1
+        )
+
+    def test_a_strain_written_by_hand_still_needs_its_background_and_a_review(self):
+        from mousetube_api.models import Species
+
+        species = Species.objects.get(name="Mus musculus")
+        missing = self.client_u.post(
+            "/api/strain/", {"name": "by hand", "species_id": species.id}, format="json"
+        )
+        self.assertEqual(missing.status_code, 400)
+        self.assertIn("background", missing.json())
+        ok = self.client_u.post(
+            "/api/strain/",
+            {"name": "by hand", "background": "mixed", "species_id": species.id},
+            format="json",
+        )
+        self.assertEqual(ok.status_code, 201)
+        self.assertEqual(ok.json()["status"], "draft")
+
+    def test_giving_a_term_to_a_strain_validates_it_unless_another_strain_has_it(self):
+        from unittest import mock
+
+        from mousetube_api.models import Species, Strain
+
+        species = Species.objects.get(name="Mus musculus")
+        mine = Strain.objects.create(
+            name="mine", background="x", species=species, created_by=self.user
+        )
+        with mock.patch(self.PATCH, side_effect=_fake_vocabularies):
+            changed = self.client_u.patch(
+                f"/api/strain/{mine.id}/",
+                {"ontology_term": {"curie": "EFO:0022397"}},
+                format="json",
+            )
+            self.assertEqual(changed.status_code, 200, changed.content)
+            self.assertEqual(changed.json()["status"], "validated")
+            second = Strain.objects.create(
+                name="second", background="y", species=species, created_by=self.user
+            )
+            clash = self.client_u.patch(
+                f"/api/strain/{second.id}/",
+                {"ontology_term": {"curie": "EFO:0022397"}},
+                format="json",
+            )
+        self.assertEqual(clash.status_code, 400)
+        self.assertIn("ontology_term", clash.json())
 
     def test_a_rat_strain_comes_from_the_rat_strain_ontology(self):
         from unittest import mock
@@ -4515,3 +4635,77 @@ def mock_no_pause():
     from unittest import mock
 
     return mock.patch("mousetube_api.utils.link_check.time.sleep", lambda s: None)
+
+
+class PrivateStudiesTests(FreshCache, TestCase):
+    """A study belongs to the person who made it: nobody else lists it, picks it or reads it."""
+
+    def setUp(self):
+        super().setUp()
+        User = get_user_model()
+        self.alice = User.objects.create_user("alice", "a@igbmc.fr", "x")
+        self.bob = User.objects.create_user("bob", "b@igbmc.fr", "x")
+        self.admin = User.objects.create_user("boss", "c@igbmc.fr", "x", is_staff=True)
+        self.client_a, self.client_b, self.client_admin = (
+            APIClient(),
+            APIClient(),
+            APIClient(),
+        )
+        self.client_a.force_authenticate(self.alice)
+        self.client_b.force_authenticate(self.bob)
+        self.client_admin.force_authenticate(self.admin)
+        made = self.client_a.post("/api/study/", {"name": "Alice study"}, format="json")
+        self.assertEqual(made.status_code, 201, made.content)
+        self.study = made.json()
+
+    def _names(self, client):
+        return [s["name"] for s in client.get("/api/study/").json()["results"]]
+
+    def test_a_study_is_listed_and_opened_by_its_owner_and_the_administrators_only(
+        self,
+    ):
+        self.assertEqual(self._names(self.client_a), ["Alice study"])
+        self.assertEqual(self._names(self.client_admin), ["Alice study"])
+        self.assertEqual(self._names(self.client_b), [])
+        url = f"/api/study/{self.study['id']}/"
+        self.assertEqual(self.client_a.get(url).status_code, 200)
+        self.assertEqual(self.client_b.get(url).status_code, 404)
+        self.assertEqual(APIClient().get("/api/study/").status_code, 401)
+        self.assertEqual(self.client_b.delete(url).status_code, 404)
+
+    def test_a_study_needs_no_review_and_its_owner_changes_it_whenever_they_want(self):
+        url = f"/api/study/{self.study['id']}/"
+        changed = self.client_a.patch(url, {"name": "Renamed"}, format="json")
+        self.assertEqual(changed.status_code, 200)
+        self.assertEqual(changed.json()["name"], "Renamed")
+        # the status is not something to write: nothing to submit, nothing for an admin to validate
+        self.client_a.patch(url, {"status": "waiting validation"}, format="json")
+        self.assertEqual(self.client_a.get(url).json()["status"], "draft")
+
+    def test_only_the_own_studies_can_be_attached_to_a_session(self):
+        mine = self.client_a.post(
+            "/api/recording-session/",
+            {"name": "A session", "is_multiple": True, "study_ids": [self.study["id"]]},
+            format="json",
+        )
+        self.assertEqual(mine.status_code, 201, mine.content)
+        self.assertEqual([s["name"] for s in mine.json()["studies"]], ["Alice study"])
+        theirs = self.client_b.post(
+            "/api/recording-session/",
+            {"name": "B session", "is_multiple": True, "study_ids": [self.study["id"]]},
+            format="json",
+        )
+        self.assertEqual(theirs.status_code, 400)
+
+    def test_a_session_is_shared_without_any_review_of_its_studies(self):
+        from mousetube_api.models import RecordingSession, Study
+        from mousetube_api.utils.moderation import session_pending_entries
+
+        session = RecordingSession.objects.create(
+            name="s", is_multiple=True, created_by=self.alice
+        )
+        session.studies.add(Study.objects.create(name="draft one", status="draft"))
+        self.assertEqual(
+            [kind for kind, _ in session_pending_entries(session)].count("study"), 0
+        )
+

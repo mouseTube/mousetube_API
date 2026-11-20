@@ -23,7 +23,6 @@ from mousetube_api.models import (
     Reference,
     Software,
     Strain,
-    Study,
 )
 from mousetube_api.utils.moderation import (
     WAITING,
@@ -66,12 +65,11 @@ ENTRIES = {
         Contact,
         ["email", "institution", "unit", "address", "country"],
     ),
-    "studies": ("Studies", Study, ["description", "start_date", "end_date"]),
     "strains": ("Strains", Strain, ["background", "species", "bibliography"]),
     "animal-profiles": (
         "Animal profiles",
         AnimalProfile,
-        ["strain", "sex", "age", "genotype", "treatment", "description"],
+        ["strain", "sex", "age", "genotype", "treatment", "diet", "description"],
     ),
 }
 KINDS = ["accounts", *ENTRIES]

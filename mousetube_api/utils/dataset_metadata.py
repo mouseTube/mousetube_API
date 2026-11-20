@@ -86,9 +86,11 @@ def _animal_profile(a):
         "age_term": term_ref(a.age_term),
         "treatment_term": term_ref(a.treatment_term),
         "status": a.status,
+        "diet": a.diet,
     }
 
 
+        "diet_term": term_ref(a.diet_term),
 def _hardware(h):
     return {
         "name": h.name,
@@ -393,7 +395,7 @@ class DatasetImporter:
             {
                 "sex": d.get("sex") or "male",
                 "genotype": d.get("genotype") or "",
-                **_clean(d, "age", "description", "treatment"),
+                **_clean(d, "age", "description", "treatment", "diet"),
                 "status": "validated",
                 "created_by": self.created_by,
             },
