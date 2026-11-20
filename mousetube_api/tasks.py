@@ -189,11 +189,11 @@ def delete_file_from_repository(self, file_id, repository_id=None):
         raise
 
 
-@shared_task(bind=True)
-def publish_session_deposition(self, recording_session_id, repository_id, payload=None):
-    """
-    Publish a deposition for a recording session.
-    """
+def deposit_session(recording_session_id, repository_id, payload=None, progress=None):
+    """Publish the deposit of a session in its repository; returns (message, doi).
+
+    Shared by the task of the Publish button and by the publication after validation."""
+    progress = progress or (lambda percent: None)
     repository = Repository.objects.get(id=repository_id)
     rs = RecordingSession.objects.get(id=recording_session_id)
     files = File.objects.filter(recording_session=rs)
@@ -206,12 +206,12 @@ def publish_session_deposition(self, recording_session_id, repository_id, payloa
     to_deposit = files.filter(Q(doi__isnull=True) | Q(doi=""))
     if not to_deposit.exists():
         RecordingSession.objects.filter(id=rs.id).update(status="published")
-        return {
-            "message": f"✅ Session {rs.id}: every file already has its DOI.",
-            "progress": 100,
-        }
+        return (
+            f"✅ Session {rs.id}: every file already has its DOI.",
+            None,
+        )
 
-    self.update_state(state="STARTED", meta={"progress": 20})
+    progress(20)
 
     try:
         doi = publish_repository_deposition(repository, rs, payload)
@@ -220,7 +220,7 @@ def publish_session_deposition(self, recording_session_id, repository_id, payloa
     except Exception as exc:
         logger.exception("Deposit of session %s failed", rs.id)
         raise UploadError(explain(exc)) from exc
-    self.update_state(state="STARTED", meta={"progress": 60})
+    progress(60)
 
     # the deposit does not validate anything: the session was shared, so what it uses was
     # validated by an administrator before
@@ -229,9 +229,45 @@ def publish_session_deposition(self, recording_session_id, repository_id, payloa
     # update file is_valid_link attribut if status is "done"
     files.filter(status="done").update(is_valid_link=True)
 
-    self.update_state(state="STARTED", meta={"progress": 90})
+    progress(90)
+    return f"✅ Session {rs.id} published with DOI {doi}.", doi
 
-    return {"message": f"✅ Session {rs.id} published with DOI {doi}.", "progress": 100}
+
+@shared_task(bind=True)
+def publish_session_deposition(self, recording_session_id, repository_id, payload=None):
+    """
+    Publish a deposition for a recording session.
+    """
+    message, _doi = deposit_session(
+        recording_session_id,
+        repository_id,
+        payload,
+        progress=lambda p: self.update_state(state="STARTED", meta={"progress": p}),
+    )
+    return {"message": message, "progress": 100}
+
+
+@shared_task
+def auto_publish_session(recording_session_id):
+    """Publish a session that was validated, as its author approved the preview."""
+    from mousetube_api.utils import publication
+
+    session = RecordingSession.objects.get(id=recording_session_id)
+    if (
+        session.auto_publish_state != "publishing"
+        or session.auto_publish_repository_id is None
+    ):
+        return "nothing to publish"
+    try:
+        message, doi = deposit_session(
+            session.id, session.auto_publish_repository_id, session.auto_publish_payload
+        )
+    except Exception as exc:
+        logger.exception("Automatic publication of session %s failed", session.id)
+        publication.finish_auto_publish(session.id, error=explain(exc))
+        return "failed"
+    publication.finish_auto_publish(session.id, doi=doi or "")
+    return message
 
 
 def _transient(exc):

@@ -4709,3 +4709,199 @@ class PrivateStudiesTests(FreshCache, TestCase):
             [kind for kind, _ in session_pending_entries(session)].count("study"), 0
         )
 
+
+@override_settings(CACHES=LOCMEM)
+class AutoPublishTests(FreshCache, TestCase):
+    """A session that waits for validation is published by itself once it is shared, as its
+    author approved the preview, unless what would be published changed."""
+
+    def setUp(self):
+        super().setUp()
+        from django.core import mail
+
+        from mousetube_api.models import File, Laboratory
+
+        User = get_user_model()
+        self.owner = User.objects.create_user("owner", "own@igbmc.fr", "x")
+        self.other = User.objects.create_user("other", "oth@igbmc.fr", "x")
+        self.repository = Repository.objects.create(name="Zenodo")
+        lab = Laboratory.objects.create(
+            name="New lab", status="draft", created_by=self.owner
+        )
+        self.session = RecordingSession.objects.create(
+            name="Waiting one",
+            is_multiple=True,
+            status="waiting validation",
+            laboratory=lab,
+            created_by=self.owner,
+        )
+        File.objects.create(
+            name="a.wav",
+            recording_session=self.session,
+            status="done",
+            created_by=self.owner,
+        )
+        self.client_owner = APIClient()
+        self.client_owner.force_authenticate(self.owner)
+        self.url = f"/api/recording-session/{self.session.id}/auto-publish/"
+        self.preview = {"title": "Waiting one", "description": "d"}
+        from unittest import mock
+
+        patcher = mock.patch(
+            "mousetube_api.utils.repository.build_repository_metadata_payload",
+            lambda repository, session, files=None: dict(self.preview),
+        )
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        mail.outbox.clear()
+
+    def _approve(self, **body):
+        return self.client_owner.post(
+            self.url,
+            {"repository_id": self.repository.id, "payload": {"title": "T"}, **body},
+            format="json",
+        )
+
+    def _validate(self):
+        from mousetube_api.utils.moderation import approve_sessions
+
+        self.session.refresh_from_db()
+        with self.captureOnCommitCallbacks(execute=True):
+            approve_sessions([self.session])
+        self.session.refresh_from_db()
+
+    def test_the_author_approves_the_preview_of_a_session_that_waits_and_nobody_else(
+        self,
+    ):
+        response = self._approve()
+        self.assertEqual(response.status_code, 200, response.content)
+        body = response.json()
+        self.assertEqual(body["auto_publish_state"], "approved")
+        for private in (
+            "auto_publish_payload",
+            "auto_publish_digest",
+            "auto_publish_repository",
+        ):
+            self.assertNotIn(
+                private, body
+            )  # what was approved is not read back by the page
+        other = APIClient()
+        other.force_authenticate(self.other)
+        self.assertEqual(other.post(self.url, {}, format="json").status_code, 403)
+        self.assertEqual(APIClient().post(self.url, {}, format="json").status_code, 401)
+
+    def test_a_session_that_is_not_waiting_is_published_with_its_own_button_instead(
+        self,
+    ):
+        RecordingSession.objects.filter(pk=self.session.pk).update(status="shared")
+        self.assertEqual(self._approve().status_code, 409)
+        RecordingSession.objects.filter(pk=self.session.pk).update(
+            status="waiting validation"
+        )
+        self.assertEqual(
+            self._approve(payload={}).status_code, 400
+        )  # something to approve
+
+    def test_a_session_nobody_approved_is_not_published_when_it_is_validated(self):
+        from unittest import mock
+
+        with mock.patch("mousetube_api.tasks.auto_publish_session.delay") as delay:
+            self._validate()
+        self.assertEqual(self.session.status, "shared")
+        delay.assert_not_called()
+
+    def test_the_validation_publishes_what_the_author_approved(self):
+        from unittest import mock
+
+        self._approve()
+        with mock.patch("mousetube_api.tasks.auto_publish_session.delay") as delay:
+            self._validate()
+        self.assertEqual(self.session.status, "shared")
+        self.assertEqual(self.session.auto_publish_state, "publishing")
+        delay.assert_called_once_with(self.session.id)
+
+    def test_nothing_goes_out_when_what_would_be_published_changed_and_the_author_is_told(
+        self,
+    ):
+        from unittest import mock
+
+        from django.core import mail
+
+        self._approve()
+        self.preview["description"] = "corrected by an administrator"
+        with mock.patch("mousetube_api.tasks.auto_publish_session.delay") as delay:
+            self._validate()
+        delay.assert_not_called()
+        self.assertEqual(self.session.status, "shared")
+        self.assertEqual(self.session.auto_publish_state, "stale")
+        told = [m for m in mail.outbox if "not published yet" in m.subject]
+        self.assertEqual(len(told), 1)
+        self.assertEqual(told[0].to, ["own@igbmc.fr"])
+
+    def test_the_task_publishes_with_the_approved_metadata_and_tells_the_author_the_doi(
+        self,
+    ):
+        from unittest import mock
+
+        from django.core import mail
+
+        from mousetube_api.tasks import auto_publish_session
+
+        self._approve()
+        with mock.patch("mousetube_api.tasks.auto_publish_session.delay"):
+            self._validate()
+        mail.outbox.clear()
+        with mock.patch(
+            "mousetube_api.tasks.deposit_session",
+            return_value=("ok", "10.5072/zenodo.9"),
+        ) as deposit:
+            auto_publish_session(self.session.id)
+        self.assertEqual(
+            deposit.call_args.args[2], {"title": "T"}
+        )  # the approved payload
+        self.session.refresh_from_db()
+        self.assertEqual(self.session.auto_publish_state, "done")
+        self.assertIsNone(self.session.auto_publish_payload)
+        self.assertIn("10.5072/zenodo.9", mail.outbox[0].body)
+
+    def test_a_failed_publication_leaves_the_session_shared_and_says_why(self):
+        from unittest import mock
+
+        from django.core import mail
+
+        from mousetube_api.tasks import auto_publish_session
+        from mousetube_api.utils.file_handler import UploadError
+
+        self._approve()
+        with mock.patch("mousetube_api.tasks.auto_publish_session.delay"):
+            self._validate()
+        mail.outbox.clear()
+        with mock.patch(
+            "mousetube_api.tasks.deposit_session",
+            side_effect=UploadError("Zenodo is busy"),
+        ):
+            auto_publish_session(self.session.id)
+        self.session.refresh_from_db()
+        self.assertEqual(self.session.status, "shared")
+        self.assertEqual(self.session.auto_publish_state, "failed")
+        self.assertIn("Zenodo is busy", self.session.auto_publish_message)
+        self.assertIn("could not be published", mail.outbox[0].subject)
+
+    def test_withdrawing_the_request_or_changing_their_mind_removes_the_approval(self):
+        self._approve()
+        withdrawn = self.client_owner.patch(
+            f"/api/recording-session/{self.session.id}/",
+            {"status": "draft"},
+            format="json",
+        )
+        self.assertEqual(withdrawn.status_code, 200, withdrawn.content)
+        self.session.refresh_from_db()
+        self.assertEqual(self.session.auto_publish_state, "")
+        self.assertIsNone(self.session.auto_publish_payload)
+        RecordingSession.objects.filter(pk=self.session.pk).update(
+            status="waiting validation"
+        )
+        self._approve()
+        self.assertEqual(self.client_owner.delete(self.url).status_code, 204)
+        self.session.refresh_from_db()
+        self.assertEqual(self.session.auto_publish_state, "")

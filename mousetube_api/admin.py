@@ -178,8 +178,10 @@ class RecordingSessionAdmin(admin.ModelAdmin):
             schedule_sync(session)  # its record follows, once what it uses is validated
         entries = session_pending_entries(session)
         if not entries:
+            self._publish_as_approved(session)
             return
         changed, _shared = approve_entries([obj for _kind, obj in entries])
+        self._publish_as_approved(session)
         self.message_user(
             request,
             f"The session is {session.status}: the {changed} entr"
@@ -188,6 +190,14 @@ class RecordingSessionAdmin(admin.ModelAdmin):
             f"{'was' if changed == 1 else 'were'} validated with it.",
             messages.INFO,
         )
+
+    @staticmethod
+    def _publish_as_approved(session):
+        """A session saved as shared here goes out as its author approved, like a validated one."""
+        from .utils.publication import schedule_auto_publish
+
+        session.refresh_from_db()
+        schedule_auto_publish(session)
 
     @admin.display(description="Entries nobody validated yet")
     def entries_to_validate(self, obj):

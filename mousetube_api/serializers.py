@@ -39,7 +39,7 @@ from mousetube_api.utils.ontologies import (
 )
 from mousetube_api.utils.orcid_proof import read_orcid_proof
 from mousetube_api.utils.page_views import normalize_page_path
-from mousetube_api.utils.publication import schedule_sync
+from mousetube_api.utils.publication import reset_auto_publish, schedule_sync
 from mousetube_api.utils.registration import email_is_verified
 from mousetube_api.utils.validators import (
     validate_doi,
@@ -1015,7 +1015,31 @@ class RecordingSessionSerializer(serializers.ModelSerializer):
     class Meta:
         model = RecordingSession
         fields = "__all__"
-        read_only_fields = ("concept_doi", "zenodo_state", "zenodo_message")
+        read_only_fields = (
+            "concept_doi",
+            "zenodo_state",
+            "zenodo_message",
+            # the publication after validation is set by its own route, never by the client
+            "auto_publish_state",
+            "auto_publish_message",
+            "auto_publish_repository",
+            "auto_publish_payload",
+            "auto_publish_digest",
+        )
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        for private in (
+            "auto_publish_repository",
+            "auto_publish_payload",
+            "auto_publish_digest",
+        ):
+            data.pop(
+                private, None
+            )  # what the author approved is not for the page to read
+        if not sees_everything(viewer_of(self.context), instance.created_by_id):
+            public_session_data(data)  # the others read only what is validated
+        return data
 
     def get_publication_versions(self, obj):
         return [
@@ -1216,7 +1240,11 @@ class RecordingSessionSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(_django_errors(exc)) from None
         if instance.status == WAITING and before != WAITING:
             notify_admin_review(instance)
-        if before == "published":
+        if instance.status == "draft" and instance.auto_publish_state:
+            reset_auto_publish(
+                instance
+            )  # a withdrawn request takes its approval with it
+        if instance.status == "published":
             schedule_sync(instance)  # the record in the repository follows the edit
         return instance
 

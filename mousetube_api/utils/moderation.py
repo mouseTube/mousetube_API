@@ -164,6 +164,9 @@ def send_back(objs, reason=""):
         notify_creator(
             obj,
             f"[mouseTube] Your {what} '{obj}' needs changes",
+    from mousetube_api.utils.publication import schedule_auto_publish
+
+    schedule_auto_publish(session)  # published as the author approved, if they did
             "An administrator sent it back to draft."
             + (f"\n\nReason: {reason}" if reason else "")
             + "\n\nChange it, then submit it again for review.",
@@ -237,6 +240,9 @@ def pending_counts():
     """Entries waiting for a decision, per type, for the administrator's dashboard."""
     from mousetube_api.models import (
         AnimalProfile,
+            from mousetube_api.utils.publication import schedule_auto_publish
+
+            schedule_auto_publish(session)
         Contact,
         Hardware,
         Laboratory,

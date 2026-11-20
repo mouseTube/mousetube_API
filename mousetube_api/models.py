@@ -937,6 +937,33 @@ class RecordingSession(models.Model):
         max_length=16, choices=ZENODO_STATES, blank=True, default=""
     )
     zenodo_message = models.CharField(max_length=500, blank=True, default="")
+
+    # Publication that follows the validation: while the session waits for an administrator, its
+    # author may approve the preview of the publication; once the session is shared, it is
+    # published as approved, unless what would be published is no longer what was approved.
+    AUTO_PUBLISH_STATES = [
+        ("approved", "approved, waits for the validation"),
+        ("stale", "changed since it was approved"),
+        ("publishing", "publishing"),
+        ("done", "published"),
+        ("failed", "failed"),
+    ]
+    auto_publish_state = models.CharField(
+        max_length=12, choices=AUTO_PUBLISH_STATES, blank=True, default=""
+    )
+    auto_publish_message = models.CharField(max_length=500, blank=True, default="")
+    auto_publish_repository = models.ForeignKey(
+        "Repository", null=True, blank=True, on_delete=models.SET_NULL, related_name="+"
+    )
+    auto_publish_payload = models.JSONField(
+        null=True, blank=True, help_text="The metadata the author approved."
+    )
+    auto_publish_digest = models.CharField(
+        max_length=64,
+        blank=True,
+        default="",
+        help_text="What would have been published when it was approved.",
+    )
     duration = models.PositiveIntegerField(
         blank=True, null=True, help_text="Duration in seconds"
     )

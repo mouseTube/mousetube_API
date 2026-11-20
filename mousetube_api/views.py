@@ -87,6 +87,11 @@ from mousetube_api.utils.moderation import (
     SESSION_PUBLIC,
     session_pending_entries,
 )
+from mousetube_api.utils.publication import (
+    MAX_APPROVED_PAYLOAD,
+    approve_auto_publish,
+    reset_auto_publish,
+)
 from mousetube_api.utils.orcid_proof import read_orcid_proof
 from mousetube_api.utils.repository import (
     build_repository_metadata_payload,
@@ -1817,6 +1822,45 @@ def upload_limit(request):
         {
             "limit": upload_room(),
             "max": settings.MAX_UPLOAD_SIZE,
+@extend_schema(exclude=True)
+@api_view(["POST", "DELETE"])
+@permission_classes([IsAuthenticated])
+def auto_publish_view(request, pk):
+    """The author of a session that waits for validation approves the preview of its publication
+    (POST: the repository and the metadata as they looked at them), so that it is published by
+    itself once an administrator shares it. DELETE takes the approval back."""
+    session = get_object_or_404(RecordingSession, pk=pk)
+    if session.created_by != request.user:
+        return Response({"detail": "Not authorized."}, status=status.HTTP_403_FORBIDDEN)
+    if request.method == "DELETE":
+        reset_auto_publish(session)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+    if session.status != "waiting validation":
+        return Response(
+            {
+                "detail": "Only a session that waits for validation can be approved for "
+                "automatic publication: a shared one is published with its own button."
+            },
+            status=status.HTTP_409_CONFLICT,
+        )
+    repository = get_object_or_404(Repository, pk=request.data.get("repository_id"))
+    payload = request.data.get("payload")
+    if not isinstance(payload, dict) or not payload:
+        return Response({"error": "payload required"}, status=400)
+    if len(json.dumps(payload)) > MAX_APPROVED_PAYLOAD:
+        return Response({"error": "The metadata is too large."}, status=400)
+    try:
+        approve_auto_publish(session, repository, payload)
+    except (NotImplementedError, IndexError, ValueError):
+        return Response(
+            {"error": "This session has nothing to publish yet in this repository."},
+            status=400,
+        )
+    return Response(
+        RecordingSessionSerializer(session, context={"request": request}).data
+    )
+
+
             "free": shutil.disk_usage(media).free,
             "reserve": settings.UPLOAD_FREE_SPACE_RESERVE,
         }
