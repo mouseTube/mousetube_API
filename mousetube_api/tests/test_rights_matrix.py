@@ -217,3 +217,30 @@ class CatalogRightsTests(TestCase):
             .status_code,
             200,
         )
+
+
+class SoftwareUsedByOthersTests(TestCase):
+    """A software that the sessions of other people use is not changed under their feet."""
+
+    def test_the_author_and_the_administrators_cannot_change_or_delete_it(self):
+        from mousetube_api.models import RecordingSession
+
+        User = get_user_model()
+        author = User.objects.create_user("sa", "sa@igbmc.fr", "x")
+        other = User.objects.create_user("so", "so@igbmc.fr", "x")
+        admin = User.objects.create_user("sm", "sm@igbmc.fr", "x", is_staff=True)
+        software = Software.objects.create(
+            name="Rec", type="acquisition", status="draft", created_by=author
+        )
+        session = RecordingSession.objects.create(
+            name="theirs", is_multiple=True, created_by=other
+        )
+        session.equipment_acquisition_software.add(software.versions.first())
+        for user in (author, admin):
+            client = APIClient()
+            client.force_authenticate(user)
+            url = f"/api/software/{software.pk}/"
+            self.assertEqual(
+                client.patch(url, {"description": "x"}, format="json").status_code, 403
+            )
+            self.assertEqual(client.delete(url).status_code, 403)
