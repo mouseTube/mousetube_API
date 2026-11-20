@@ -70,14 +70,13 @@ case "$(echo "$DEBUG" | tr '[:upper:]' '[:lower:]')" in
         ;;
 esac
 
-echo "🛠️ Running makemigrations..."
-python3 manage.py makemigrations mousetube_api --noinput
-
+# the migrations are versioned (mousetube_api/migrations): the container only applies them.
+# After a change of the models, run `makemigrations` and commit the file.
 echo "📦 Applying migrations..."
 python3 manage.py migrate --noinput
 
-# migrations are generated here and not versioned, so they only change the structure:
-# the conversions of existing rows are done by this command (safe to run every time)
+# the conversions of existing rows that a change of structure needs are done by this command
+# (safe to run every time)
 echo "🔧 Upgrading existing data..."
 python3 manage.py normalize_data
 

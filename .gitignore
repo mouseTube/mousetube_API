@@ -19,7 +19,6 @@ build/
 !static/json/
 !static/json/schemas/
 !static/json/schemas/*.json
-migrations/
 
 logs/
 *.log

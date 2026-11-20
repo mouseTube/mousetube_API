@@ -32,4 +32,4 @@ Copy the example and fill it in (`cp .env.example .env`): see also the [README](
 
 ## Docker-only variables
 
-`RESET_DB=true` recreates the database. It is refused unless `DEBUG=true` (an unset `DEBUG` counts as false). Migrations are generated and applied when the container starts (`makemigrations`, `migrate`) and are not versioned; the conversions of existing rows that a structure change needs are done by `python manage.py normalize_data`, which the container runs after `migrate` (it is safe to run again).
+`RESET_DB=true` recreates the database. It is refused unless `DEBUG=true` (an unset `DEBUG` counts as false). The migrations are versioned (`mousetube_api/migrations/`) and applied when the container starts (`migrate`); the conversions of existing rows that a structure change needs are done by `python manage.py normalize_data`, which the container runs after `migrate` (it is safe to run again).
