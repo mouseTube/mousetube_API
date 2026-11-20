@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>mouseTube database schema</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="schema.css">
+</head>
+<body>
+<header class="top">
+  <h1 id="title"></h1>
+  <p class="sub" id="sub"></p>
+</header>
+<div class="bar" id="bar" role="toolbar">
+  <div class="legend" id="legend"></div>
+  <div class="ctl">
+    <label for="jump" id="jumpLabel" style="position:absolute;left:-9999px"></label>
+    <select id="jump"><option value=""></option></select>
+    <button id="zout">−</button>
+    <button id="zin">+</button>
+    <button id="zfit"></button>
+  </div>
+</div>
+<p class="note" id="note"></p>
+<div id="viewport"><div id="stage"><div id="canvas"></div><svg id="links" aria-hidden="true"></svg></div></div>
+<script src="schema.js"></script>
+</body>
+</html>
