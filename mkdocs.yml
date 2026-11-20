@@ -1,0 +1,179 @@
+site_name: mouseTube documentation
+site_description: How to use mouseTube, the open database of rodent ultrasonic vocalizations, and how it works (database, rights, API).
+site_url: https://mousetube.github.io/mousetube_API/
+repo_url: https://github.com/mouseTube/mousetube_API
+repo_name: mouseTube/mousetube_API
+edit_uri: edit/main/docs/
+copyright: mouseTube. Code under GPL v3.0, documentation under CC BY 4.0.
+use_directory_urls: true
+
+theme:
+  name: material
+  language: en
+  logo: assets/logo.png
+  favicon: assets/favicon.png
+  font:
+    text: Roboto
+    code: Roboto Mono
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - navigation.indexes
+    - navigation.footer
+    - search.suggest
+    - search.highlight
+    - toc.follow
+    - content.code.copy
+    - content.action.edit
+
+extra_css:
+  - stylesheets/mousetube.css
+
+markdown_extensions:
+  - abbr
+  - admonition
+  - attr_list
+  - def_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.keys
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+
+plugins:
+  - search
+  - i18n:
+      docs_structure: suffix
+      fallback_to_default: true
+      reconfigure_material: true
+      reconfigure_search: true
+      languages:
+        - locale: en
+          default: true
+          name: English
+          build: true
+        - locale: fr
+          name: Français
+          build: true
+          site_name: Documentation mouseTube
+          nav_translations:
+            Home: Accueil
+            User guide: Guide utilisateur
+            Developers: Développeurs
+            Create an account: Créer un compte
+            Find recordings: Trouver des enregistrements
+            Datasets, software, hardware: Jeux de données, logiciels, matériel
+            Add a vocalization: Ajouter une vocalisation
+            Share and validation: Partage et validation
+            Publish with a DOI: Publier avec un DOI
+            Your account: Votre compte
+            FAQ and glossary: FAQ et glossaire
+            Database schema: Schéma de la base
+            Rights and statuses: Droits et statuts
+            REST API: API REST
+            Recipes: Recettes
+            Features: Fonctionnalités
+            Account requests: Demandes de compte
+            Moderation: Modération
+            Datasets: Jeux de données
+            Published sessions and versions: Sessions publiées et versions
+            Vocabularies: Vocabulaires
+            USV detections: Détections d'USV
+            Checking the links: Vérification des liens
+            Operate: Exploitation
+            Configuration: Configuration
+            Updating a deployment: Mettre à jour un déploiement
+            Python reference: Référence Python
+            Rights and moderation: Droits et modération
+            Files and repositories: Fichiers et dépôts
+            Accounts: Comptes
+            Tasks and utilities: Tâches et utilitaires
+            Contributing: Contribuer
+  - autorefs:
+      resolve_closest: true
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [.]
+          options:
+            docstring_style: google
+            docstring_options:
+              returns_named_value: false
+            show_source: false
+            show_root_heading: false
+            show_root_toc_entry: false
+            show_root_full_path: false
+            show_symbol_type_heading: true
+            show_symbol_type_toc: true
+            heading_level: 3
+            members_order: source
+
+nav:
+  - Home: index.md
+  - User guide:
+      - user/index.md
+      - Create an account: user/getting-started.md
+      - Find recordings: user/find.md
+      - Datasets, software, hardware: user/equipment.md
+      - Add a vocalization: user/add.md
+      - Share and validation: user/share.md
+      - Publish with a DOI: user/publish.md
+      - Your account: user/account.md
+      - FAQ and glossary: user/faq.md
+  - Developers:
+      - dev/index.md
+      - Database schema: dev/schema.md
+      - Rights and statuses: dev/rights.md
+      - REST API:
+          - dev/api/index.md
+          - Recipes: dev/api/recipes.md
+      - Features:
+          - Account requests: dev/accounts.md
+          - Moderation: dev/moderation.md
+          - Datasets: dev/datasets.md
+          - Published sessions and versions: dev/publication.md
+          - Vocabularies: dev/ontologies.md
+          - USV detections: dev/usv-detections.md
+          - Checking the links: dev/link-check.md
+      - Operate:
+          - Configuration: dev/configuration.md
+          - Updating a deployment: dev/deployment.md
+      - Python reference:
+          - dev/python/index.md
+          - Rights and moderation: dev/python/rights-moderation.md
+          - Vocabularies: dev/python/vocabularies.md
+          - Files and repositories: dev/python/files-repositories.md
+          - Datasets: dev/python/datasets.md
+          - Accounts: dev/python/accounts.md
+          - Tasks and utilities: dev/python/tasks.md
+      - Contributing: dev/contributing.md
