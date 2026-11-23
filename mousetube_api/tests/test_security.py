@@ -1088,14 +1088,15 @@ class CreationPipelineTests(FreshCache, TestCase):
             "/api/file/", {**payload, "name": "b.wav"}, format="json"
         )
         self.assertEqual(intruder.status_code, 403)
+        # the file of a draft is invisible to him: he gets "not found", not "forbidden"
         self.assertEqual(
-            self.bob_client.delete(f"/api/file/{file_id}/").status_code, 403
+            self.bob_client.delete(f"/api/file/{file_id}/").status_code, 404
         )
         self.assertEqual(
             self.bob_client.put(
                 f"/api/file/{file_id}/", payload, format="json"
             ).status_code,
-            403,
+            404,
         )
         self.assertEqual(
             self.alice_client.delete(f"/api/file/{file_id}/").status_code, 204

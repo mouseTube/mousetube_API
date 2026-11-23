@@ -63,12 +63,14 @@ def pending_review_count():
 
 
 def email_is_verified(user):
+    """True when the user confirmed the e-mail address of their account."""
     return EmailAddress.objects.filter(
         user=user, email=user.email, verified=True
     ).exists()
 
 
 def send_account_activated_email(user):
+    """Tell the user that an administrator activated their account (never fails the activation)."""
     try:
         send_mail(
             "[mouseTube] Your account is active",

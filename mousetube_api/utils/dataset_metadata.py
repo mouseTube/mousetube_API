@@ -258,6 +258,18 @@ def _public(session):
 
 
 def build_dataset_metadata(dataset, user):
+    """The metadata JSON of a dataset, as `user` may read it.
+
+    Visitors and users only get the shared and published sessions, and what nobody validated yet is left
+    out of them; administrators get everything. E-mails of contacts are never exported.
+
+    Args:
+        dataset (Dataset): the dataset to describe.
+        user (User | None): who asks.
+
+    Returns:
+        dict: `{"dataset": {"name", "description", "doi", "link", "recording_session_list": [...]}}`.
+    """
     sessions = (
         visible_sessions(dataset, user)
         .select_related("protocol", "laboratory")
@@ -362,6 +374,12 @@ def _download_image(url):
 
 
 class DatasetImporter:
+    """Imports datasets written in the format of the mouseTube 0.5 export (see `import_datasets`).
+
+    Every row is found or created, so running the import twice does not duplicate anything. The
+    counters of what was created and what existed are in `stats`.
+    """
+
     def __init__(self, created_by=None, images_from=None):
         self.created_by = created_by
         self.images_from = images_from  # site that serves the 0.5 /media/ images
@@ -707,6 +725,17 @@ def datasets_from_payload(payload):
 
 @transaction.atomic
 def import_datasets(payload, created_by=None, dry_run=False, images_from=None):
+    """Import the datasets of a metadata JSON (the 0.5 format) into the database.
+
+    Args:
+        payload (dict | list): the parsed JSON.
+        created_by (User | None): author given to what is created.
+        dry_run (bool): do everything, then roll back, and only report.
+        images_from (str | None): site that serves the 0.5 images, to download them.
+
+    Returns:
+        Stats: `{model name: {"created": n, "existing": n}}`.
+    """
     # no download in a dry run: nothing would be kept anyway
     importer = DatasetImporter(
         created_by=created_by, images_from=None if dry_run else images_from

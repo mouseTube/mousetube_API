@@ -1,0 +1,62 @@
+# FAQ and glossary
+
+## Questions
+
+??? question "Do I need an account to download recordings?"
+    No. Browsing, searching and downloading are open to everybody. You need an account to add data.
+
+??? question "Why can't I register with my Gmail address?"
+    mouseTube asks for an **institutional** e-mail address (university, research institute, hospital) because
+    an administrator checks that the data come from researchers. Use your work address.
+
+??? question "I confirmed my e-mail but I still cannot sign in."
+    An administrator has to activate your account. You are told by e-mail. The login page also tells you where
+    your request stands.
+
+??? question "Why is my session not public after I shared it?"
+    It uses something nobody validated yet, so it **waits for validation** and stays private. The Visibility card
+    lists what is waiting. See [Share and validation](share.md).
+
+??? question "I cannot edit my session."
+    A session **waiting for validation** is locked while an administrator reads it. **Withdraw** it from
+    *My vocalizations*, edit it, then share it again. A shared or published session is not locked.
+
+??? question "I cannot change a laboratory, a strain or a piece of equipment I created."
+    Once an administrator **validated** it, it is shared by everybody and locked. Ask an administrator to
+    correct it.
+
+??? question "A microphone I added is not shown on my public session."
+    It is not validated yet: it is hidden from the others (you still see it) until an administrator validates
+    it.
+
+??? question "Where are the audio files stored?"
+    In a **repository**, most often Zenodo. mouseTube keeps the description and the links. Use the Download
+    button or the DOI.
+
+??? question "Can I put my files somewhere else and just describe them on mouseTube?"
+    Yes. Give the **download link** and the **DOI** of the file when you add it: mouseTube records them without
+    depositing anything.
+
+??? question "How do I cite my data?"
+    Publish the session to get a **DOI**, then cite it like any dataset. See [Publish with a DOI](publish.md).
+
+??? question "Can I use mouseTube from a program?"
+    Yes, with the REST API. See the [developer documentation](../dev/api/index.md).
+
+## Glossary
+
+<dl>
+<dt>Animal profile</dt><dd>The kind of animals recorded: strain, sex, age, genotype, treatment and diet.</dd>
+<dt>Controlled vocabulary / ontology</dt><dd>A reference list of terms with an identifier (for example <code>EFO:0000606</code> for the C57BL/6J strain) so that everybody names things the same way. mouseTube checks the terms at their source.</dd>
+<dt>Dataset</dt><dd>A curated collection of sessions with its metadata.</dd>
+<dt>Draft</dt><dd>Private work in progress, seen only by its author.</dd>
+<dt>DOI</dt><dd>Digital Object Identifier: a permanent link to a deposit, to cite.</dd>
+<dt>Protocol</dt><dd>How the recording was set up, written as a code built from its fields.</dd>
+<dt>Published</dt><dd>Shared and deposited in a repository, with a DOI.</dd>
+<dt>Recording session</dt><dd>A set of recordings made under the same experimental conditions.</dd>
+<dt>Repository</dt><dd>A service that stores the files and gives them a DOI (Zenodo).</dd>
+<dt>Shared</dt><dd>Public, readable by everybody.</dd>
+<dt>USV</dt><dd>Ultrasonic vocalization: a call above the range of human hearing, emitted by rodents.</dd>
+<dt>Validated</dt><dd>Checked by a mouseTube administrator. Only validated entries are shown to everybody.</dd>
+<dt>Waiting validation</dt><dd>Sent for review: private and locked until an administrator decides.</dd>
+</dl>

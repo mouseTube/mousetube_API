@@ -1,7 +1,7 @@
 # Configuration
 
 The settings read `.env` at the root of the project, then `/etc/mousetube/mousetube.env` if there is no `.env`.
-Copy the example and fill it in (`cp .env.example .env`): see also the [README](../README.md#2-create-a-env-file).
+Copy the example and fill it in (`cp .env.example .env`): see also the [README](https://github.com/mouseTube/mousetube_API#2-create-a-env-file).
 
 ## Environment variables
 

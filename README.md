@@ -4,7 +4,7 @@
 [![Python 3.13](https://img.shields.io/badge/Python-3.13-blue.svg)](https://www.python.org/downloads/)
 [![Django 5.2](https://img.shields.io/badge/Django-5.2%20LTS-blue.svg)](https://www.djangoproject.com/download/)
 [![Django REST framework 3.18](https://img.shields.io/badge/Django%20REST%20framework-3.18-blue.svg)](https://www.django-rest-framework.org/)
-[![Documentation](https://img.shields.io/badge/docs-available-brightgreen)](docs/README.md)
+[![Documentation](https://img.shields.io/badge/docs-available-brightgreen)](https://mousetube.github.io/mousetube_API/)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 
 <p align="center">
@@ -38,7 +38,7 @@ Copy the example and fill it in:
 cp .env.example .env
 ```
 
-For local development you only need `DEBUG=true`, the database settings (`DB_NAME`, `DB_USER`, `DB_PASSWORD`; with Docker also `DB_ROOT_PASS`) and `CELERY_BROKER_URL`. Without `EMAIL_HOST`, e-mails are printed in the logs. All the variables (production, e-mail, ORCID, Zenodo, upload limits...) are described in [docs/configuration.md](docs/configuration.md).
+For local development you only need `DEBUG=true`, the database settings (`DB_NAME`, `DB_USER`, `DB_PASSWORD`; with Docker also `DB_ROOT_PASS`) and `CELERY_BROKER_URL`. Without `EMAIL_HOST`, e-mails are printed in the logs. All the variables (production, e-mail, ORCID, Zenodo, upload limits...) are described in [docs/dev/configuration.md](docs/dev/configuration.md).
 
 ### 3. Install and start MariaDB
 
@@ -125,7 +125,7 @@ python manage.py test mousetube_api.tests
 
    This starts MariaDB, Redis, the API (http://localhost:8000), Celery, the website (http://localhost:3000) and nginx. The database and Redis ports are only published on `127.0.0.1`.
 
-`RESET_DB=true` (recreates the database, only with `DEBUG=true`) and the other Docker-only variables are in [docs/configuration.md](docs/configuration.md#docker-only-variables).
+`RESET_DB=true` (recreates the database, only with `DEBUG=true`) and the other Docker-only variables are in [docs/dev/configuration.md](docs/dev/configuration.md#docker-only-variables).
 
 ### Docker Stop and Clean Up
 
@@ -155,5 +155,9 @@ docker image prune -a
 
 ## Documentation
 
-The `docs/` folder describes the configuration, how to update a deployment and the main features:
-[configuration](docs/configuration.md), [updating a deployment](docs/deployment.md), [account requests](docs/accounts.md), [moderation](docs/moderation.md), [datasets](docs/datasets.md), [published sessions and versions](docs/publication.md), [vocabularies](docs/ontologies.md), [USV detections](docs/usv-detections.md), [checking the links](docs/link-check.md).
+The documentation is published at **https://mousetube.github.io/mousetube_API/** (English and French):
+
+- the **[user guide](https://mousetube.github.io/mousetube_API/user/)**: create an account, find recordings, add a vocalization, share and publish;
+- the **[developer documentation](https://mousetube.github.io/mousetube_API/dev/)**: the [database schema](https://mousetube.github.io/mousetube_API/dev/schema/), the exact [rights on every object by status](https://mousetube.github.io/mousetube_API/dev/rights/), the [REST API](https://mousetube.github.io/mousetube_API/dev/api/) with [recipes](https://mousetube.github.io/mousetube_API/dev/api/recipes/), the [Python reference](https://mousetube.github.io/mousetube_API/dev/python/), [configuration](docs/dev/configuration.md) and [updating a deployment](docs/dev/deployment.md).
+
+The sources are in `docs/` (Markdown, built with [MkDocs Material](https://squidfunk.github.io/mkdocs-material/)): `pip install -r requirements-docs.txt && mkdocs serve`. See [Contributing](docs/dev/contributing.md).

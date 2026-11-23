@@ -1,3 +1,5 @@
+"""Validation of the values users type: DOI and URL."""
+
 import re
 
 from rest_framework import serializers

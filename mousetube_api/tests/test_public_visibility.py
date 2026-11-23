@@ -284,3 +284,54 @@ class ProtocolCatalogTests(TestCase):
         self.assertIn(response.status_code, (200, 201), response.content)
         self.draft.refresh_from_db()
         self.assertEqual(self.draft.status, "validated")
+
+
+class FileOfADraftTests(TestCase):
+    """A file belongs to its session: private while the session is, whoever knows its number."""
+
+    def setUp(self):
+        cache.clear()
+        User = get_user_model()
+        self.author = User.objects.create_user("fa", "fa@igbmc.fr", "x")
+        self.other = User.objects.create_user("fo", "fo@igbmc.fr", "x")
+        self.admin = User.objects.create_user("fm", "fm@igbmc.fr", "x", is_staff=True)
+        self.files = {}
+        for status in ("draft", "waiting validation", "shared"):
+            session = RecordingSession.objects.create(
+                name=f"s {status}", is_multiple=True, created_by=self.author
+            )
+            RecordingSession.objects.filter(pk=session.pk).update(status=status)
+            self.files[status] = File.objects.create(
+                name=f"{status}.wav",
+                recording_session=session,
+                status="done",
+                created_by=self.author,
+            )
+
+    def _get(self, user, status, suffix=""):
+        client = APIClient()
+        if user:
+            client.force_authenticate(user)
+        return client.get(f"/api/file/{self.files[status].pk}/{suffix}").status_code
+
+    def test_the_detail_of_a_private_file_is_for_its_author_and_the_administrators(
+        self,
+    ):
+        for status in ("draft", "waiting validation"):
+            self.assertEqual(self._get(None, status), 404, status)
+            self.assertEqual(self._get(self.other, status), 404, status)
+            self.assertEqual(self._get(self.author, status), 200, status)
+            self.assertEqual(self._get(self.admin, status), 200, status)
+
+    def test_the_detail_of_a_file_of_a_public_session_is_open(self):
+        self.assertEqual(self._get(None, "shared"), 200)
+
+    def test_nobody_else_can_change_or_delete_a_file_they_cannot_see(self):
+        client = APIClient()
+        client.force_authenticate(self.other)
+        pk = self.files["draft"].pk
+        self.assertEqual(
+            client.put(f"/api/file/{pk}/", {"name": "x"}, format="json").status_code,
+            404,
+        )
+        self.assertEqual(client.delete(f"/api/file/{pk}/").status_code, 404)

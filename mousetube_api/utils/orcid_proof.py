@@ -7,6 +7,10 @@ MAX_AGE = 1800  # seconds: enough to fill in the registration form
 
 
 def make_orcid_proof(orcid):
+    """A signed proof that the holder of `orcid` proved it through ORCID, valid for a short time.
+
+    The registration form sends it back so that an ORCID iD is never typed freely.
+    """
     return signing.dumps(orcid, salt=_SALT)
 
 

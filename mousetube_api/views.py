@@ -340,13 +340,9 @@ class LaboratoryAPIView(viewsets.ModelViewSet):
 
         queryset = Laboratory.objects.all().order_by("name")
 
-        if not user.is_authenticated:
-            queryset = queryset.filter(status="validated")
-        else:
-            if status_query:
-                queryset = queryset.filter(status=status_query)
-            else:
-                queryset = queryset.filter(Q(created_by=user) | Q(status="validated"))
+        queryset = visible_to(queryset, user)
+        if status_query and user.is_authenticated:
+            queryset = queryset.filter(status=status_query)
 
         if search_query:
             search_fields = ["name", "unit", "institution", "address", "status"]
@@ -522,15 +518,9 @@ class ReferenceAPIView(GenericAPIView):
 
         queryset = Reference.objects.all().order_by("name")
 
-        if not self.request.user.is_authenticated:
-            queryset = queryset.filter(status="validated")
-        else:
-            if status_query:
-                queryset = queryset.filter(status=status_query)
-            else:
-                queryset = queryset.filter(
-                    Q(created_by=self.request.user) | Q(status="validated")
-                )
+        queryset = visible_to(queryset, self.request.user)
+        if status_query and self.request.user.is_authenticated:
+            queryset = queryset.filter(status=status_query)
 
         if search_query:
             search_fields = ["name", "description", "doi", "status"]
@@ -736,15 +726,9 @@ class HardwareAPIView(GenericAPIView):
         status_query = request.GET.get("status", "")
         hardware = Hardware.objects.all().order_by("name")
 
-        if not request.user.is_authenticated:
-            hardware = hardware.filter(status="validated")
-        else:
-            hardware = hardware.filter(
-                Q(status="validated") | Q(created_by=request.user)
-            )
-
-            if status_query:
-                hardware = hardware.filter(status=status_query)
+        hardware = visible_to(hardware, request.user)
+        if status_query and request.user.is_authenticated:
+            hardware = hardware.filter(status=status_query)
 
         # Search
         if search_query:
@@ -2020,10 +2004,8 @@ class FileDetailAPIView(GenericAPIView):
         return [AllowAny()]
 
     def get_object(self, pk):
-        try:
-            return File.objects.get(pk=pk)
-        except File.DoesNotExist:
-            return None
+        # the file of a draft or of a session under review exists only for its author
+        return visible_files(self.request.user).filter(pk=pk).first()
 
     def get(self, request, *args, **kwargs):
         file = self.get_object(kwargs["pk"])
@@ -2186,13 +2168,9 @@ class ContactViewSet(viewsets.ModelViewSet):
 
         qs = Contact.objects.all().order_by("last_name")
 
-        if not user.is_authenticated:
-            qs = qs.filter(status="validated")
-        else:
-            if status_query:
-                qs = qs.filter(status=status_query)
-            else:
-                qs = qs.filter(Q(created_by=user) | Q(status="validated"))
+        qs = visible_to(qs, user)
+        if status_query and user.is_authenticated:
+            qs = qs.filter(status=status_query)
 
         if search_query:
             search_fields = ["last_name", "first_name", "institution", "status"]
@@ -2265,14 +2243,10 @@ class SoftwareViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         qs = Software.objects.all()
 
-        if not self.request.user.is_authenticated:
-            qs = qs.filter(status="validated")
-        else:
-            qs = qs.filter(Q(status="validated") | Q(created_by=self.request.user))
-
-            status_query = self.request.GET.get("status")
-            if status_query:
-                qs = qs.filter(status=status_query)
+        qs = visible_to(qs, self.request.user)
+        status_query = self.request.GET.get("status")
+        if status_query and self.request.user.is_authenticated:
+            qs = qs.filter(status=status_query)
 
         search_query = self.request.GET.get("search", "")
         if search_query:

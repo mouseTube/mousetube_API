@@ -1,0 +1,9 @@
+# Jeux de données
+
+Un jeu de données est un ensemble de sessions d'enregistrement ; la page montre les fichiers de ces sessions.
+
+- **JSON de métadonnées (public) :** `GET /api/dataset/<id>/metadata/` donne un jeu, `GET /api/dataset/metadata/` tous. Il liste les sessions avec protocole, laboratoire, animaux, matériel, références et fichiers (DOI, dépôt). Les e-mails des contacts ne sont jamais inclus.
+- **Ajouter un jeu (administrateurs seulement) :** dans l'admin, *Mousetube_Api > Datasets > Add*, ou sur le site, page *Dataset*, bouton *Add a dataset*. L'API (`POST /api/dataset/`) refuse tous les autres.
+- **Modifier ou supprimer un jeu (administrateurs seulement) :** sur la page *Dataset*, le crayon modifie le nom, la description et les sessions (`PATCH /api/dataset/<id>/` avec `recording_session_ids`), la corbeille le supprime après confirmation (`DELETE`). Un fichier appartient à sa session : ajouter une session ajoute tous ses fichiers et la retirer les enlève du jeu seulement : les sessions et les fichiers restent dans les vocalisations. Supprimer un jeu ne retire rien d'autre.
+- **Ce que voient les visiteurs :** seulement les sessions *shared* ou *published*. Un brouillon placé dans un jeu par un administrateur reste privé (dans la page et dans le JSON de métadonnées) jusqu'à son partage ; les administrateurs voient tout.
+- **Images d'un fichier (administrateurs seulement) :** chaque fichier de la page a un spectrogramme et une courbe. Le bouton de sa ligne les met, les remplace ou les retire (`POST` / `DELETE /api/file/<id>/images/?field=plot`), quel que soit le créateur du fichier ; ce doivent être de vraies images (PNG, JPEG, WebP), 10 Mo au plus. Une case *Also send these images to Zenodo* (décochée par défaut) les met dans la notice quand la session est publiée, voir [sessions publiées](publication.md).

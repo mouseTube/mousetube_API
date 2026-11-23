@@ -6,6 +6,8 @@ SECRET_PAGES = ("/activate", "/password")
 
 
 def normalize_page_path(path):
+    """The path a page view is counted under: pages whose address holds a secret (activation, password
+    reset) are counted under their prefix only."""
     for prefix in SECRET_PAGES:
         if path == prefix or path.startswith(prefix + "/"):
             return prefix

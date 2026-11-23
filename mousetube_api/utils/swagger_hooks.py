@@ -1,3 +1,6 @@
+"""Hooks of the OpenAPI schema (what Swagger shows)."""
+
+
 def remove_auth_paths(endpoints):
     """
     endpoints: list of tuples (path, path_regex, method, callback)

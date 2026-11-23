@@ -1,3 +1,5 @@
+"""Calls to the Zenodo API: create, fill, edit and publish a deposit, and its new versions."""
+
 import json
 import os
 import re
@@ -213,11 +215,11 @@ def prepare_deposition_for_session(recording_session, new_file=None):
     Excludes files with status 'pending', 'processing', or 'error'.
 
     Args:
-        recording_session: RecordingSession instance.
-        new_file: optional File instance that triggered the deposition update.
+        recording_session (RecordingSession): the session to deposit.
+        new_file (File | None): the file that triggered the deposition update, if any.
 
     Returns:
-        deposition_id: Zenodo deposition ID.
+        str: the Zenodo deposition ID.
     """
     # 🔹 Get valid files
     files = [

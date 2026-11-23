@@ -1,0 +1,1624 @@
+{
+ "ui": {
+  "lang": "fr",
+  "title": "Schéma de la base mouseTube",
+  "sub": "Tables de <code>mousetube_api/models.py</code>, avec chaque champ décrit dans sa carte. {count} Touchez ou survolez une table pour isoler ses liaisons.",
+  "count": "{tables} tables, {links} liaisons tracées.",
+  "groups": {
+   "acc": "Comptes",
+   "voc": "Ontologies",
+   "ani": "Animaux",
+   "eq": "Protocole et matériel",
+   "ses": "Session",
+   "fil": "Fichiers et dépôt",
+   "oth": "Autres"
+  },
+  "fk": "clé étrangère (rond : côté « plusieurs », triangle : table visée)",
+  "m2m": "plusieurs à plusieurs",
+  "toolbar": "Légende et zoom",
+  "jump": "Aller à une table…",
+  "jumpLabel": "Aller à une table",
+  "zout": "Dézoomer",
+  "zin": "Zoomer",
+  "zfit": "Ajuster",
+  "table": "Table {id}",
+  "note": "Chaque fiche porte aussi <code>created_by</code> vers <code>User</code> : ces liaisons ne sont pas tracées, pour garder le schéma lisible. Les lignes grisées de chaque carte sont les champs qui pointent vers une autre table. Les statuts de modération suivent le même cycle partout : <code>draft</code>, <code>waiting validation</code>, <code>validated</code> (une session ajoute <code>shared</code> et <code>published</code>). Les droits de chacun selon le statut sont décrits dans la page « Droits et statuts ».",
+  "badges": {
+   "u": "unique",
+   "n": "null",
+   "f": "fk",
+   "m": "m2m",
+   "o": "1–1"
+  },
+  "generic": "generic"
+ },
+ "tables": [
+  {
+   "id": "User",
+   "g": "acc",
+   "col": 0,
+   "sub": "auth.User · Django",
+   "note": "Compte de connexion. Modèle standard de Django, défini hors de models.py.",
+   "fields": [
+    [
+     "username",
+     "char(150)",
+     "u",
+     "Identifiant de connexion."
+    ],
+    [
+     "email",
+     "email",
+     "",
+     "Adresse e-mail, confirmée par un lien avant activation du compte."
+    ],
+    [
+     "first_name · last_name",
+     "char(150) ×2",
+     "",
+     "Prénom et nom. Peuvent être préremplis depuis ORCID."
+    ],
+    [
+     "password",
+     "char(128)",
+     "",
+     "Mot de passe haché."
+    ],
+    [
+     "is_active",
+     "bool",
+     "",
+     "Compte activé. Faux tant que l’e-mail n’est pas confirmé et que l’administrateur n’a pas accepté la demande."
+    ],
+    [
+     "is_staff",
+     "bool",
+     "",
+     "Administrateur : accès à la page Review et à l’admin. Non modifiable par l’API."
+    ],
+    [
+     "is_superuser",
+     "bool",
+     "",
+     "Tous les droits Django."
+    ],
+    [
+     "last_login",
+     "datetime",
+     "n",
+     "Dernière connexion. Un compte déjà connecté ne peut pas être rejeté depuis Review."
+    ],
+    [
+     "date_joined",
+     "datetime",
+     "",
+     "Création du compte."
+    ]
+   ]
+  },
+  {
+   "id": "UserProfile",
+   "g": "acc",
+   "col": 0,
+   "note": "Informations complémentaires d’un compte.",
+   "fields": [
+    [
+     "user",
+     "fk → User",
+     "fo",
+     "Compte propriétaire du profil (un seul profil par compte). Supprimé avec lui (CASCADE).",
+     "User"
+    ],
+    [
+     "description",
+     "text",
+     "n",
+     "Présentation libre."
+    ],
+    [
+     "phone",
+     "char(255)",
+     "n",
+     "Téléphone."
+    ],
+    [
+     "laboratory",
+     "fk → Laboratory",
+     "fn",
+     "Laboratoire de rattachement. CASCADE : supprimer le laboratoire supprime le profil.",
+     "Laboratory"
+    ],
+    [
+     "address",
+     "char(255)",
+     "n",
+     "Adresse postale."
+    ],
+    [
+     "country",
+     "country",
+     "n",
+     "Pays (code ISO à deux lettres)."
+    ],
+    [
+     "orcid",
+     "char(255)",
+     "n",
+     "Identifiant ORCID. Lié par une preuve signée, jamais saisi librement."
+    ],
+    [
+     "administrator",
+     "bool",
+     "n",
+     "Indicateur d’administrateur porté par le profil."
+    ],
+    [
+     "date_joined",
+     "datetime",
+     "n",
+     "Création du profil."
+    ],
+    [
+     "modified_at",
+     "datetime",
+     "n",
+     "Dernière modification."
+    ],
+    [
+     "created_by",
+     "fk → User",
+     "n",
+     "Utilisateur qui a créé le profil (SET NULL)."
+    ],
+    [
+     "view_mode",
+     "char(10)",
+     "",
+     "Affichage préféré des listes : cards ou table."
+    ],
+    [
+     "email_public",
+     "bool",
+     "",
+     "Montre l’e-mail à côté des enregistrements de la personne. Faux par défaut."
+    ]
+   ]
+  },
+  {
+   "id": "Laboratory",
+   "g": "acc",
+   "col": 0,
+   "note": "Laboratoire ou unité de recherche.",
+   "fields": [
+    [
+     "name",
+     "char(255)",
+     "",
+     "Nom du laboratoire."
+    ],
+    [
+     "institution",
+     "char(255)",
+     "n",
+     "Établissement de tutelle."
+    ],
+    [
+     "unit",
+     "char(255)",
+     "n",
+     "Unité ou département."
+    ],
+    [
+     "address",
+     "char(255)",
+     "n",
+     "Adresse."
+    ],
+    [
+     "organization",
+     "fk → OntologyTerm",
+     "fn",
+     "Organisation dans le registre ROR (SET NULL).",
+     "OntologyTerm"
+    ],
+    [
+     "country",
+     "country",
+     "n",
+     "Pays (code ISO à deux lettres)."
+    ],
+    [
+     "status",
+     "char(20)",
+     "",
+     "Étape de modération : draft, waiting validation, validated. Les autres utilisateurs ne se voient proposer que les fiches validées."
+    ],
+    [
+     "created_at · modified_at",
+     "datetime ×2",
+     "",
+     "Dates de création et de dernière modification, remplies automatiquement."
+    ],
+    [
+     "created_by",
+     "fk → User",
+     "n",
+     "Auteur de la fiche. Reste vide si son compte est supprimé (SET NULL)."
+    ]
+   ]
+  },
+  {
+   "id": "Contact",
+   "g": "acc",
+   "col": 0,
+   "note": "Personne à contacter pour un logiciel. Les e-mails des contacts ne sont jamais exportés.",
+   "fields": [
+    [
+     "last_name",
+     "char(255)",
+     "n",
+     "Nom."
+    ],
+    [
+     "first_name",
+     "char(255)",
+     "n",
+     "Prénom."
+    ],
+    [
+     "email",
+     "email",
+     "",
+     "Adresse e-mail (obligatoire)."
+    ],
+    [
+     "unit",
+     "char(255)",
+     "n",
+     "Unité."
+    ],
+    [
+     "institution",
+     "char(255)",
+     "n",
+     "Établissement."
+    ],
+    [
+     "address",
+     "char(255)",
+     "n",
+     "Adresse."
+    ],
+    [
+     "country",
+     "country",
+     "n",
+     "Pays (code ISO à deux lettres)."
+    ],
+    [
+     "status",
+     "char(20)",
+     "",
+     "Étape de modération : draft, waiting validation, validated. Les autres utilisateurs ne se voient proposer que les fiches validées."
+    ],
+    [
+     "created_at · modified_at",
+     "datetime ×2",
+     "",
+     "Dates de création et de dernière modification, remplies automatiquement."
+    ],
+    [
+     "created_by",
+     "fk → User",
+     "n",
+     "Auteur de la fiche. Reste vide si son compte est supprimé (SET NULL)."
+    ]
+   ]
+  },
+  {
+   "id": "Favorite",
+   "g": "oth",
+   "col": 0,
+   "note": "Favori d’un utilisateur, vers n’importe quelle fiche autorisée.",
+   "fields": [
+    [
+     "user",
+     "fk → User",
+     "f",
+     "Utilisateur qui met en favori (CASCADE).",
+     "User"
+    ],
+    [
+     "content_type",
+     "fk → ContentType",
+     "f",
+     "Type de la fiche visée (table de Django). Autorisés : protocol, hardware, software, animalprofile, strain, laboratory, reference, contact."
+    ],
+    [
+     "object_id",
+     "uint",
+     "",
+     "Identifiant de la fiche visée."
+    ],
+    [
+     "content_object",
+     "generic",
+     "",
+     "Lien vers la fiche visée, calculé à partir des deux champs précédents."
+    ],
+    [
+     "created_at",
+     "datetime",
+     "",
+     "Date de l’ajout."
+    ]
+   ],
+   "cons": "<b>Unique</b> : (user, content_type, object_id)."
+  },
+  {
+   "id": "OntologyTerm",
+   "g": "voc",
+   "col": 1,
+   "note": "Terme d’ontologie ou organisation ROR, vérifié à la source. Les fiches y pointent à côté de leur texte libre.",
+   "fields": [
+    [
+     "curie",
+     "char(64)",
+     "u",
+     "Identifiant compact : PATO:0000384, NCBITaxon:10090, ROR:0015ws592."
+    ],
+    [
+     "label",
+     "char(255)",
+     "",
+     "Libellé du terme."
+    ],
+    [
+     "ontology",
+     "char(32)",
+     "",
+     "Préfixe en minuscules : pato, ncbitaxon, ror…"
+    ],
+    [
+     "iri",
+     "url",
+     "",
+     "Adresse du terme dans l’ontologie."
+    ],
+    [
+     "created_at",
+     "datetime",
+     "",
+     "Date de la première utilisation."
+    ]
+   ]
+  },
+  {
+   "id": "Species",
+   "g": "ani",
+   "col": 1,
+   "note": "Espèce animale.",
+   "fields": [
+    [
+     "name",
+     "char(255)",
+     "u",
+     "Nom commun ou scientifique."
+    ],
+    [
+     "ontology_term",
+     "fk → OntologyTerm",
+     "fn",
+     "Terme NCBI Taxonomy de l’espèce (SET NULL).",
+     "OntologyTerm"
+    ],
+    [
+     "created_at · modified_at",
+     "datetime ×2",
+     "",
+     "Dates de création et de dernière modification, remplies automatiquement."
+    ],
+    [
+     "created_by",
+     "fk → User",
+     "n",
+     "Auteur de la fiche. Reste vide si son compte est supprimé (SET NULL)."
+    ]
+   ]
+  },
+  {
+   "id": "Strain",
+   "g": "ani",
+   "col": 1,
+   "note": "Souche d’animal.",
+   "fields": [
+    [
+     "name",
+     "char(255)",
+     "u",
+     "Nom de la souche."
+    ],
+    [
+     "background",
+     "char(255)",
+     "",
+     "Fond génétique."
+    ],
+    [
+     "species",
+     "fk → Species",
+     "f",
+     "Espèce de la souche (CASCADE).",
+     "Species"
+    ],
+    [
+     "ontology_term",
+     "fk → OntologyTerm",
+     "fn",
+     "Terme EFO (ou RS pour le rat) de la souche (SET NULL).",
+     "OntologyTerm"
+    ],
+    [
+     "bibliography",
+     "text",
+     "n",
+     "Références bibliographiques sur la souche."
+    ],
+    [
+     "status",
+     "char(20)",
+     "",
+     "Étape de modération : draft, waiting validation, validated. Les autres utilisateurs ne se voient proposer que les fiches validées."
+    ],
+    [
+     "created_at · modified_at",
+     "datetime ×2",
+     "",
+     "Dates de création et de dernière modification, remplies automatiquement."
+    ],
+    [
+     "created_by",
+     "fk → User",
+     "n",
+     "Auteur de la fiche. Reste vide si son compte est supprimé (SET NULL)."
+    ]
+   ]
+  },
+  {
+   "id": "AnimalProfile",
+   "g": "ani",
+   "col": 1,
+   "note": "Profil type des animaux utilisés dans un enregistrement.",
+   "fields": [
+    [
+     "name",
+     "char(255)",
+     "u",
+     "Nom du profil."
+    ],
+    [
+     "description",
+     "text",
+     "n",
+     "Description libre."
+    ],
+    [
+     "strain",
+     "fk → Strain",
+     "f",
+     "Souche des animaux (CASCADE).",
+     "Strain"
+    ],
+    [
+     "sex",
+     "char(6)",
+     "",
+     "male ou female."
+    ],
+    [
+     "age",
+     "char(32)",
+     "",
+     "Classe d’âge : pup, juvenile ou adult (défaut adult)."
+    ],
+    [
+     "genotype",
+     "char(255)",
+     "",
+     "Génotype."
+    ],
+    [
+     "treatment",
+     "char(255)",
+     "n",
+     "Traitement appliqué."
+    ],
+    [
+     "sex_term",
+     "fk → OntologyTerm",
+     "fn",
+     "Terme PATO du sexe (SET NULL).",
+     "OntologyTerm"
+    ],
+    [
+     "age_term",
+     "fk → OntologyTerm",
+     "fn",
+     "Stade de développement MmusDv, quand la classe d’âge est trop vague.",
+     "OntologyTerm"
+    ],
+    [
+     "treatment_term",
+     "fk → OntologyTerm",
+     "fn",
+     "Terme ChEBI du composé du traitement.",
+     "OntologyTerm"
+    ],
+    [
+     "diet",
+     "char(255)",
+     "n",
+     "Régime alimentaire, en texte libre."
+    ],
+    [
+     "diet_term",
+     "fk → OntologyTerm",
+     "fn",
+     "Terme EFO du régime (SET NULL).",
+     "OntologyTerm"
+    ],
+    [
+     "status",
+     "char(20)",
+     "",
+     "Étape de modération : draft, waiting validation, validated. Les autres utilisateurs ne se voient proposer que les fiches validées."
+    ],
+    [
+     "created_at · modified_at",
+     "datetime ×2",
+     "",
+     "Dates de création et de dernière modification, remplies automatiquement."
+    ],
+    [
+     "created_by",
+     "fk → User",
+     "n",
+     "Auteur de la fiche. Reste vide si son compte est supprimé (SET NULL)."
+    ]
+   ]
+  },
+  {
+   "id": "Subject",
+   "g": "ani",
+   "col": 1,
+   "note": "Un animal individuel.",
+   "fields": [
+    [
+     "name",
+     "char(255)",
+     "u",
+     "Nom de l’animal."
+    ],
+    [
+     "identifier",
+     "char(255)",
+     "n",
+     "Identifiant propre au laboratoire."
+    ],
+    [
+     "cohort",
+     "char(255)",
+     "n",
+     "Groupe auquel l’animal appartient."
+    ],
+    [
+     "origin",
+     "char(255)",
+     "n",
+     "Provenance de l’animal."
+    ],
+    [
+     "animal_profile",
+     "fk → AnimalProfile",
+     "fn",
+     "Profil de l’animal (CASCADE).",
+     "AnimalProfile"
+    ],
+    [
+     "created_at · modified_at",
+     "datetime ×2",
+     "",
+     "Dates de création et de dernière modification, remplies automatiquement."
+    ],
+    [
+     "created_by",
+     "fk → User",
+     "n",
+     "Auteur de la fiche. Reste vide si son compte est supprimé (SET NULL)."
+    ]
+   ]
+  },
+  {
+   "id": "Reference",
+   "g": "eq",
+   "col": 2,
+   "note": "Référence : article, tutoriel ou site.",
+   "fields": [
+    [
+     "name",
+     "char(255)",
+     "",
+     "Titre de la référence."
+    ],
+    [
+     "description",
+     "text",
+     "n",
+     "Description."
+    ],
+    [
+     "url",
+     "url",
+     "n",
+     "Adresse de la référence."
+    ],
+    [
+     "doi",
+     "char(255)",
+     "n",
+     "DOI de la référence."
+    ],
+    [
+     "status",
+     "char(20)",
+     "",
+     "Étape de modération : draft, waiting validation, validated. Les autres utilisateurs ne se voient proposer que les fiches validées."
+    ],
+    [
+     "created_at · modified_at",
+     "datetime ×2",
+     "",
+     "Dates de création et de dernière modification, remplies automatiquement."
+    ],
+    [
+     "created_by",
+     "fk → User",
+     "n",
+     "Auteur de la fiche. Reste vide si son compte est supprimé (SET NULL)."
+    ]
+   ]
+  },
+  {
+   "id": "Software",
+   "g": "eq",
+   "col": 2,
+   "note": "Logiciel d’acquisition, d’analyse ou des deux.",
+   "fields": [
+    [
+     "name",
+     "char(255)",
+     "",
+     "Nom du logiciel."
+    ],
+    [
+     "type",
+     "char(255)",
+     "n",
+     "acquisition, analysis ou acquisition and analysis. Seuls les deux types « acquisition » servent à l’enregistrement."
+    ],
+    [
+     "made_by",
+     "text",
+     "",
+     "Qui l’a développé."
+    ],
+    [
+     "description",
+     "text",
+     "",
+     "Fonctions du logiciel."
+    ],
+    [
+     "technical_requirements",
+     "text",
+     "",
+     "Configuration nécessaire."
+    ],
+    [
+     "references",
+     "M2M → Reference",
+     "m",
+     "Références et tutoriels liés.",
+     "Reference"
+    ],
+    [
+     "contacts",
+     "M2M → Contact",
+     "m",
+     "Personnes à contacter.",
+     "Contact"
+    ],
+    [
+     "status",
+     "char(50)",
+     "n",
+     "Étape de modération (draft, waiting validation, validated)."
+    ],
+    [
+     "created_at · modified_at",
+     "datetime ×2",
+     "",
+     "Dates de création et de dernière modification, remplies automatiquement."
+    ],
+    [
+     "created_by",
+     "fk → User",
+     "n",
+     "Auteur de la fiche. Reste vide si son compte est supprimé (SET NULL)."
+    ]
+   ]
+  },
+  {
+   "id": "SoftwareVersion",
+   "g": "eq",
+   "col": 2,
+   "note": "Une version précise d’un logiciel. Supprimer la dernière version supprime le logiciel.",
+   "fields": [
+    [
+     "software",
+     "fk → Software",
+     "f",
+     "Logiciel concerné (CASCADE).",
+     "Software"
+    ],
+    [
+     "version",
+     "char(255)",
+     "n",
+     "Numéro de version."
+    ],
+    [
+     "release_date",
+     "date",
+     "n",
+     "Date de sortie."
+    ],
+    [
+     "created_at · modified_at",
+     "datetime ×2",
+     "",
+     "Dates de création et de modification."
+    ],
+    [
+     "created_by",
+     "fk → User",
+     "n",
+     "Auteur de la fiche (SET NULL)."
+    ]
+   ]
+  },
+  {
+   "id": "Hardware",
+   "g": "eq",
+   "col": 2,
+   "note": "Matériel d’acquisition ou de diffusion.",
+   "fields": [
+    [
+     "name",
+     "char(255)",
+     "",
+     "Nom du matériel."
+    ],
+    [
+     "type",
+     "char(255)",
+     "n",
+     "soundcard, microphone, speaker ou amplifier."
+    ],
+    [
+     "made_by",
+     "text",
+     "",
+     "Fabricant."
+    ],
+    [
+     "description",
+     "text",
+     "",
+     "Détails."
+    ],
+    [
+     "references",
+     "M2M → Reference",
+     "m",
+     "Références et publications liées.",
+     "Reference"
+    ],
+    [
+     "status",
+     "char(50)",
+     "n",
+     "Étape de modération (draft, waiting validation, validated)."
+    ],
+    [
+     "created_at · modified_at",
+     "datetime ×2",
+     "",
+     "Dates de création et de dernière modification, remplies automatiquement."
+    ],
+    [
+     "created_by",
+     "fk → User",
+     "n",
+     "Auteur de la fiche. Reste vide si son compte est supprimé (SET NULL)."
+    ]
+   ]
+  },
+  {
+   "id": "Protocol",
+   "g": "eq",
+   "col": 2,
+   "note": "Protocole expérimental. Son nom est calculé à l’enregistrement.",
+   "fields": [
+    [
+     "name",
+     "char(255)",
+     "u",
+     "Généré à partir des champs ci-dessous, non modifiable. Exemple : 2MAG_S_HCBD (2 animaux, mâles, adultes, groupés, court terme, cage d’origine, litière, jour)."
+    ],
+    [
+     "animals_sex",
+     "char(32)",
+     "",
+     "male(s), female(s), male(s) & female(s) ou unspecified."
+    ],
+    [
+     "animals_age",
+     "char(32)",
+     "",
+     "pup, juvenile, adult ou unspecified."
+    ],
+    [
+     "animals_housing",
+     "char(32)",
+     "",
+     "grouped, isolated, grouped & isolated ou unspecified."
+    ],
+    [
+     "context_number_of_animals",
+     "char(15)",
+     "",
+     "1, 2, 3, 4, >4 ou unspecified."
+    ],
+    [
+     "context_duration",
+     "char(32)",
+     "",
+     "short term (<1h), mid term (<1day), long term (>=1day) ou unspecified."
+    ],
+    [
+     "context_cage",
+     "char(64)",
+     "",
+     "unfamiliar test cage, familiar test cage, home cage ou unspecified."
+    ],
+    [
+     "context_bedding",
+     "char(16)",
+     "",
+     "bedding, no bedding ou unspecified."
+    ],
+    [
+     "context_light_cycle",
+     "char(15)",
+     "",
+     "day, night, both ou unspecified."
+    ],
+    [
+     "status",
+     "char(20)",
+     "",
+     "Forcé à validated à chaque enregistrement : un protocole est un code, pas une saisie à modérer."
+    ],
+    [
+     "created_at · modified_at",
+     "datetime ×2",
+     "",
+     "Dates de création et de dernière modification, remplies automatiquement."
+    ],
+    [
+     "created_by",
+     "fk → User",
+     "n",
+     "Auteur de la fiche. Reste vide si son compte est supprimé (SET NULL)."
+    ]
+   ]
+  },
+  {
+   "id": "Study",
+   "g": "eq",
+   "col": 2,
+   "note": "Étude ou projet de recherche. Privée à son auteur : personne d’autre ne la liste ni ne la choisit, et elle n’est jamais relue par un administrateur.",
+   "fields": [
+    [
+     "name",
+     "char(255)",
+     "",
+     "Nom de l’étude."
+    ],
+    [
+     "description",
+     "text",
+     "n",
+     "Description."
+    ],
+    [
+     "start_date · end_date",
+     "date ×2",
+     "n",
+     "Dates de début et de fin."
+    ],
+    [
+     "status",
+     "char(20)",
+     "",
+     "Reste draft : une étude n’est pas modérée. Son nom s’affiche tout de même sur une session partagée."
+    ],
+    [
+     "created_at · modified_at",
+     "datetime ×2",
+     "",
+     "Dates de création et de dernière modification, remplies automatiquement."
+    ],
+    [
+     "created_by",
+     "fk → User",
+     "n",
+     "Auteur de la fiche. Reste vide si son compte est supprimé (SET NULL)."
+    ]
+   ]
+  },
+  {
+   "id": "RecordingSession",
+   "g": "ses",
+   "col": 3,
+   "note": "Une session d’enregistrement : le centre du schéma. C’est elle qui rassemble le protocole, les animaux, le matériel et les fichiers, puis qui est publiée.",
+   "fields": [
+    [
+     "name",
+     "char(255)",
+     "",
+     "Nom de la session, unique par auteur."
+    ],
+    [
+     "is_multiple",
+     "bool",
+     "",
+     "Session plurielle, sans date de début précise."
+    ],
+    [
+     "protocol",
+     "fk → Protocol",
+     "fn",
+     "Protocole suivi (SET NULL). Obligatoire pour publier.",
+     "Protocol"
+    ],
+    [
+     "studies",
+     "M2M → Study",
+     "m",
+     "Études auxquelles la session appartient.",
+     "Study"
+    ],
+    [
+     "description",
+     "text",
+     "n",
+     "Description libre."
+    ],
+    [
+     "date",
+     "datetime",
+     "n",
+     "Date de début. Obligatoire quand la session n’est pas plurielle."
+    ],
+    [
+     "behavior_terms",
+     "M2M → OntologyTerm",
+     "m",
+     "Comportements enregistrés, en termes de la Neuro Behavior Ontology.",
+     "OntologyTerm"
+    ],
+    [
+     "status",
+     "char(20)",
+     "",
+     "draft, waiting validation (en attente de relecture), shared (publique) ou published (publique et déposée avec un DOI)."
+    ],
+    [
+     "concept_doi",
+     "char(255)",
+     "",
+     "DOI global de la notice : le même pour toutes ses versions."
+    ],
+    [
+     "zenodo_state",
+     "char(16)",
+     "",
+     "Notice publiée : synced (à jour), pending (mise à jour en cours), blocked (attend la validation de nouvelles entrées) ou failed."
+    ],
+    [
+     "zenodo_message",
+     "char(500)",
+     "",
+     "Explication lisible de l’état, par exemple la cause d’un échec."
+    ],
+    [
+     "auto_publish_state",
+     "char(12)",
+     "",
+     "Publication après validation : approved (aperçu approuvé), publishing, done, stale (ce qui serait publié a changé) ou failed. Vide sans demande."
+    ],
+    [
+     "auto_publish_message",
+     "char(500)",
+     "",
+     "Explication lisible de l’état : cause d’un échec, ou de l’aperçu devenu obsolète."
+    ],
+    [
+     "auto_publish_repository",
+     "fk → Repository",
+     "fn",
+     "Dépôt choisi par l’auteur pour la publication automatique (SET NULL). Jamais montré au public.",
+     "Repository"
+    ],
+    [
+     "auto_publish_payload",
+     "json",
+     "n",
+     "Métadonnées que l’auteur a approuvées. Jamais montré à la page ; effacé une fois publié."
+    ],
+    [
+     "auto_publish_digest",
+     "char(64)",
+     "",
+     "Empreinte de ce qui aurait été publié au moment de l’approbation : sert à voir si cela a changé."
+    ],
+    [
+     "duration",
+     "uint",
+     "n",
+     "Durée en secondes."
+    ],
+    [
+     "laboratory",
+     "fk → Laboratory",
+     "fn",
+     "Laboratoire où la session a eu lieu (SET NULL).",
+     "Laboratory"
+    ],
+    [
+     "animal_profiles",
+     "M2M → AnimalProfile",
+     "m",
+     "Profils des animaux de la session.",
+     "AnimalProfile"
+    ],
+    [
+     "context_temperature_value",
+     "char(16)",
+     "n",
+     "Température pendant l’enregistrement."
+    ],
+    [
+     "context_temperature_unit",
+     "char(4)",
+     "n",
+     "°C (défaut) ou °F."
+    ],
+    [
+     "context_brightness",
+     "float",
+     "n",
+     "Luminosité en lux."
+    ],
+    [
+     "equipment_acquisition_software",
+     "M2M → SoftwareVersion",
+     "m",
+     "Versions de logiciels d’acquisition utilisées.",
+     "SoftwareVersion"
+    ],
+    [
+     "equipment_acquisition_hardware_soundcards",
+     "M2M → Hardware",
+     "m",
+     "Cartes son (matériel de type soundcard).",
+     "Hardware"
+    ],
+    [
+     "equipment_acquisition_hardware_speakers",
+     "M2M → Hardware",
+     "m",
+     "Haut-parleurs (type speaker).",
+     "Hardware"
+    ],
+    [
+     "equipment_acquisition_hardware_amplifiers",
+     "M2M → Hardware",
+     "m",
+     "Amplificateurs (type amplifier).",
+     "Hardware"
+    ],
+    [
+     "equipment_acquisition_hardware_microphones",
+     "M2M → Hardware",
+     "m",
+     "Microphones (type microphone).",
+     "Hardware"
+    ],
+    [
+     "equipment_channels",
+     "char(20)",
+     "n",
+     "Nombre de microphones : mono, stereo ou more than 2."
+    ],
+    [
+     "equipment_sound_isolation",
+     "char(30)",
+     "n",
+     "Isolation phonique : soundproof room, soundproof cage ou no specific sound isolation."
+    ],
+    [
+     "references",
+     "M2M → Reference",
+     "m",
+     "Références liées à la session.",
+     "Reference"
+    ],
+    [
+     "created_at · modified_at",
+     "datetime ×2",
+     "",
+     "Dates de création et de dernière modification, remplies automatiquement."
+    ],
+    [
+     "created_by",
+     "fk → User",
+     "n",
+     "Auteur de la fiche. Reste vide si son compte est supprimé (SET NULL)."
+    ]
+   ],
+   "cons": "<b>Unique</b> : (name, created_by). Chaque enregistrement lance une validation complète (type du matériel, date, protocole avant publication)."
+  },
+  {
+   "id": "File",
+   "g": "fil",
+   "col": 4,
+   "note": "Un fichier d’une session : enregistrement audio, vidéo ou table, déposé sur un dépôt ou simplement lié.",
+   "fields": [
+    [
+     "name",
+     "char(255)",
+     "n",
+     "Nom du fichier."
+    ],
+    [
+     "link",
+     "url",
+     "n",
+     "Adresse de téléchargement."
+    ],
+    [
+     "recording_session",
+     "fk → RecordingSession",
+     "fn",
+     "Session du fichier (CASCADE).",
+     "RecordingSession"
+    ],
+    [
+     "subjects",
+     "M2M → Subject",
+     "m",
+     "Animaux concernés (champ temporaire de migration).",
+     "Subject"
+    ],
+    [
+     "date",
+     "date",
+     "n",
+     "Date du fichier."
+    ],
+    [
+     "duration",
+     "float",
+     "n",
+     "Durée en secondes."
+    ],
+    [
+     "format",
+     "char(10)",
+     "n",
+     "WAV, MP3, FLAC, OGG, AIFF, AVI, MP4, MOV, MKV, CSV, TXT, XLSX, XLS, ZIP, JPEG, PNG, PDF ou JSON."
+    ],
+    [
+     "sampling_rate",
+     "uint",
+     "n",
+     "Fréquence d’échantillonnage."
+    ],
+    [
+     "bit_depth",
+     "smallint",
+     "n",
+     "Profondeur de bits : 8, 16, 24 ou 32."
+    ],
+    [
+     "notes",
+     "text",
+     "n",
+     "Remarques."
+    ],
+    [
+     "size",
+     "biguint",
+     "n",
+     "Taille en octets."
+    ],
+    [
+     "spectrogram",
+     "image",
+     "n",
+     "Image du spectrogramme, remplie par un administrateur."
+    ],
+    [
+     "plot",
+     "image",
+     "n",
+     "Image de la courbe, remplie par un administrateur (utile aux datasets)."
+    ],
+    [
+     "deposit_images",
+     "bool",
+     "",
+     "Envoie le spectrogramme et la courbe au dépôt avec la notice."
+    ],
+    [
+     "doi",
+     "char(255)",
+     "n",
+     "DOI du fichier."
+    ],
+    [
+     "number",
+     "int",
+     "n",
+     "Nombre de vocalisations du fichier."
+    ],
+    [
+     "is_valid_link",
+     "bool",
+     "",
+     "Le lien répond. Mis à jour par la vérification des liens."
+    ],
+    [
+     "downloads",
+     "int",
+     "",
+     "Nombre de téléchargements (une fois par visiteur, fichier et heure)."
+    ],
+    [
+     "repository",
+     "fk → Repository",
+     "fn",
+     "Dépôt où le fichier est stocké (SET NULL).",
+     "Repository"
+    ],
+    [
+     "external_id",
+     "char(255)",
+     "n",
+     "Identifiant du fichier chez le dépôt (Zenodo, Figshare…)."
+    ],
+    [
+     "external_url",
+     "url",
+     "n",
+     "Adresse publique du fichier chez le dépôt."
+    ],
+    [
+     "status",
+     "char(10)",
+     "",
+     "Traitement : pending, processing, done ou error."
+    ],
+    [
+     "celery_task_id",
+     "char(255)",
+     "n",
+     "Tâche de fond qui traite le fichier."
+    ],
+    [
+     "error_message",
+     "char(500)",
+     "",
+     "Cause de l’échec, en mots lisibles (quand status vaut error)."
+    ],
+    [
+     "created_at · modified_at",
+     "datetime ×2",
+     "",
+     "Dates de création et de dernière modification, remplies automatiquement."
+    ],
+    [
+     "created_by",
+     "fk → User",
+     "n",
+     "Auteur de la fiche. Reste vide si son compte est supprimé (SET NULL)."
+    ]
+   ]
+  },
+  {
+   "id": "UsvDetection",
+   "g": "fil",
+   "col": 4,
+   "note": "Appels trouvés par un outil de détection dans un fichier, tels que l’auteur les a exportés.",
+   "fields": [
+    [
+     "file",
+     "fk → File",
+     "f",
+     "Fichier analysé (CASCADE).",
+     "File"
+    ],
+    [
+     "tool",
+     "char(32)",
+     "",
+     "Outil : usvseg, deepsqueak, avisoft, sonotrack, ratrec ou usvtoolbox."
+    ],
+    [
+     "tool_version",
+     "char(64)",
+     "",
+     "Version de l’outil, si connue."
+    ],
+    [
+     "parameters",
+     "text",
+     "",
+     "Réglages de l’exécution."
+    ],
+    [
+     "reference",
+     "char(255)",
+     "",
+     "DOI de la publication de l’outil."
+    ],
+    [
+     "calls",
+     "json",
+     "",
+     "Liste des appels : début, fin, durée, fréquences et variables d’origine (native)."
+    ],
+    [
+     "summary",
+     "json",
+     "",
+     "Chiffres de synthèse : nombre d’appels, cadence, durée médiane, fréquences."
+    ],
+    [
+     "source",
+     "char(500)",
+     "",
+     "D’où viennent les résultats."
+    ],
+    [
+     "deposit",
+     "bool",
+     "",
+     "Envoie le tableau de l’auteur au dépôt avec la notice. Faux par défaut."
+    ],
+    [
+     "original",
+     "file",
+     "",
+     "Tableau d’origine, gardé seulement quand il doit être envoyé."
+    ],
+    [
+     "created_at",
+     "datetime",
+     "",
+     "Date de l’import."
+    ],
+    [
+     "created_by",
+     "fk → User",
+     "n",
+     "Auteur de l’import (SET NULL)."
+    ]
+   ],
+   "cons": "<b>Unique</b> : (file, tool). Un nouvel envoi du même outil remplace le résultat."
+  },
+  {
+   "id": "PublicationVersion",
+   "g": "fil",
+   "col": 4,
+   "note": "Une version de la notice d’une session chez le dépôt. Chaque version a son DOI.",
+   "fields": [
+    [
+     "recording_session",
+     "fk → RecordingSession",
+     "f",
+     "Session publiée (CASCADE).",
+     "RecordingSession"
+    ],
+    [
+     "number",
+     "uint",
+     "",
+     "Numéro de version : 1, 2, 3…"
+    ],
+    [
+     "doi",
+     "char(255)",
+     "",
+     "DOI propre à cette version."
+    ],
+    [
+     "record_id",
+     "char(64)",
+     "",
+     "Identifiant du dépôt ou de la notice chez le dépôt."
+    ],
+    [
+     "url",
+     "url",
+     "",
+     "Adresse publique de la version."
+    ],
+    [
+     "published_at",
+     "datetime",
+     "",
+     "Date de publication."
+    ]
+   ],
+   "cons": "<b>Unique</b> : (recording_session, number)."
+  },
+  {
+   "id": "Repository",
+   "g": "fil",
+   "col": 4,
+   "note": "Dépôt de données externe ou interne (Zenodo par défaut).",
+   "fields": [
+    [
+     "name",
+     "char(255)",
+     "",
+     "Nom du dépôt. Le dépôt par défaut est celui qui s’appelle Zenodo."
+    ],
+    [
+     "description",
+     "text",
+     "n",
+     "Description."
+    ],
+    [
+     "logo",
+     "image",
+     "n",
+     "Logo."
+    ],
+    [
+     "area",
+     "country",
+     "",
+     "Pays ou région du dépôt."
+    ],
+    [
+     "url",
+     "url",
+     "n",
+     "Adresse du site."
+    ],
+    [
+     "url_api",
+     "url",
+     "n",
+     "Adresse de son API."
+    ],
+    [
+     "created_at · modified_at",
+     "datetime ×2",
+     "",
+     "Dates de création et de dernière modification, remplies automatiquement."
+    ],
+    [
+     "created_by",
+     "fk → User",
+     "n",
+     "Auteur de la fiche. Reste vide si son compte est supprimé (SET NULL)."
+    ]
+   ]
+  },
+  {
+   "id": "Dataset",
+   "g": "fil",
+   "col": 5,
+   "note": "Ensemble de sessions regroupées avec leurs métadonnées. Créé et modifié par les administrateurs.",
+   "fields": [
+    [
+     "name",
+     "char(255)",
+     "",
+     "Nom du dataset."
+    ],
+    [
+     "recording_session_list",
+     "M2M → RecordingSession",
+     "m",
+     "Sessions du dataset. Les brouillons des autres restent privés.",
+     "RecordingSession"
+    ],
+    [
+     "description",
+     "text",
+     "n",
+     "Description."
+    ],
+    [
+     "link",
+     "char(255)",
+     "n",
+     "Lien ou identifiant externe."
+    ],
+    [
+     "doi",
+     "char(255)",
+     "n",
+     "DOI du dataset."
+    ],
+    [
+     "created_at · modified_at",
+     "datetime ×2",
+     "",
+     "Dates de création et de dernière modification, remplies automatiquement."
+    ],
+    [
+     "created_by",
+     "fk → User",
+     "n",
+     "Auteur de la fiche. Reste vide si son compte est supprimé (SET NULL)."
+    ]
+   ]
+  },
+  {
+   "id": "PageView",
+   "g": "oth",
+   "col": 5,
+   "note": "Compteur de visites par page et par jour. Aucune liaison.",
+   "fields": [
+    [
+     "path",
+     "char(255)",
+     "",
+     "Chemin de la page, sans paramètres. Les pages à secret (activation, mot de passe) sont masquées."
+    ],
+    [
+     "date",
+     "date",
+     "",
+     "Jour des visites."
+    ],
+    [
+     "count",
+     "uint",
+     "",
+     "Nombre de visites ce jour-là."
+    ]
+   ],
+   "cons": "<b>Unique</b> : (path, date)."
+  }
+ ]
+}
