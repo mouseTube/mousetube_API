@@ -26,7 +26,7 @@ rats, annotées par des experts et analysées par six algorithmes).
   <figcaption>Les logiciels utilisés pour enregistrer ou analyser des vocalisations.</figcaption>
 </figure>
 
-Une liste non exhaustive des logiciels utilisés pour **enregistrer ou analyser** des vocalisations ultrasoniques.
+Une liste non exhaustive des logiciels utilisés pour **enregistrer ou analyser** des vocalisations ultrasonores.
 mouseTube ne les distribue pas : chaque fiche donne son fabricant, son type (**acquisition**, **analyse** ou les
 deux), sa documentation et les personnes à contacter. Connaître le logiciel fait partie des métadonnées
 importantes d'un enregistrement.

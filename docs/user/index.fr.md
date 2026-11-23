@@ -1,6 +1,6 @@
 # Bienvenue sur mouseTube
 
-mouseTube est une base ouverte d'**enregistrements bruts de vocalisations ultrasoniques de rongeurs**. Chaque
+mouseTube est une base ouverte d'**enregistrements bruts de vocalisations ultrasonores de rongeurs**. Chaque
 enregistrement est accompagné de ce qu'il faut pour le comprendre et le réutiliser : le protocole, les animaux,
 le matériel et les personnes qui l'ont réalisé.
 

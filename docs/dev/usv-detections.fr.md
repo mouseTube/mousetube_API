@@ -1,4 +1,4 @@
-# Détections de vocalisations ultrasoniques
+# Détections de vocalisations ultrasonores
 
 Un fichier peut venir avec les résultats des outils de détection qui ont été lancés dessus : les appels que chaque
 outil a trouvés, montrés dans la liste des vocalisations à côté de l'enregistrement. mouseTube ne lance aucun
