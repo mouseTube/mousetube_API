@@ -17,7 +17,7 @@ le matériel et les personnes qui l'ont réalisé.
 
 <div class="grid cards" markdown>
 
--   :material-magnify: **Trouver et télécharger des enregistrements**
+-   :material-magnify: [**Trouver et télécharger des enregistrements**](find.md)
 
     ---
 
@@ -25,7 +25,7 @@ le matériel et les personnes qui l'ont réalisé.
 
     [:octicons-arrow-right-24: Trouver des enregistrements](find.md)
 
--   :material-account-plus-outline: **Créer un compte**
+-   :material-account-plus-outline: [**Créer un compte**](getting-started.md)
 
     ---
 
@@ -34,7 +34,7 @@ le matériel et les personnes qui l'ont réalisé.
 
     [:octicons-arrow-right-24: Pour commencer](getting-started.md)
 
--   :material-plus-circle-outline: **Ajouter une vocalisation**
+-   :material-plus-circle-outline: [**Ajouter une vocalisation**](add.md)
 
     ---
 
@@ -42,7 +42,7 @@ le matériel et les personnes qui l'ont réalisé.
 
     [:octicons-arrow-right-24: Ajouter une vocalisation](add.md)
 
--   :material-share-variant-outline: **Partager et publier**
+-   :material-share-variant-outline: [**Partager et publier**](share.md)
 
     ---
 

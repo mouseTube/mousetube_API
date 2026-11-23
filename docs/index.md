@@ -15,7 +15,7 @@ each of them. These pages explain how to use it, and how it works under the hood
 
 <div class="grid cards" markdown>
 
--   :material-account-voice:{ .lg .middle } **I use mouseTube**
+-   :material-account-voice:{ .lg .middle } [**I use mouseTube**](user/index.md)
 
     ---
 
@@ -23,7 +23,7 @@ each of them. These pages explain how to use it, and how it works under the hood
 
     [:octicons-arrow-right-24: Open the user guide](user/index.md)
 
--   :material-code-braces:{ .lg .middle } **I build with mouseTube**
+-   :material-code-braces:{ .lg .middle } [**I build with mouseTube**](dev/index.md)
 
     ---
 
@@ -37,7 +37,7 @@ each of them. These pages explain how to use it, and how it works under the hood
 
 <div class="grid cards" markdown>
 
--   :material-magnify: **Find recordings**
+-   :material-magnify: [**Find recordings**](user/find.md)
 
     ---
 
@@ -45,7 +45,7 @@ each of them. These pages explain how to use it, and how it works under the hood
 
     [:octicons-arrow-right-24: Find recordings](user/find.md)
 
--   :material-plus-circle-outline: **Add a vocalization**
+-   :material-plus-circle-outline: [**Add a vocalization**](user/add.md)
 
     ---
 
@@ -53,7 +53,7 @@ each of them. These pages explain how to use it, and how it works under the hood
 
     [:octicons-arrow-right-24: Add a vocalization](user/add.md)
 
--   :material-database-outline: **The database schema**
+-   :material-database-outline: [**The database schema**](dev/schema.md)
 
     ---
 
@@ -61,7 +61,7 @@ each of them. These pages explain how to use it, and how it works under the hood
 
     [:octicons-arrow-right-24: Database schema](dev/schema.md)
 
--   :material-shield-lock-outline: **Rights and statuses**
+-   :material-shield-lock-outline: [**Rights and statuses**](dev/rights.md)
 
     ---
 

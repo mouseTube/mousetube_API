@@ -15,7 +15,7 @@ matériel qui les accompagnent. Ces pages expliquent comment l'utiliser, et comm
 
 <div class="grid cards" markdown>
 
--   :material-account-voice:{ .lg .middle } **J'utilise mouseTube**
+-   :material-account-voice:{ .lg .middle } [**J'utilise mouseTube**](user/index.md)
 
     ---
 
@@ -24,7 +24,7 @@ matériel qui les accompagnent. Ces pages expliquent comment l'utiliser, et comm
 
     [:octicons-arrow-right-24: Ouvrir le guide utilisateur](user/index.md)
 
--   :material-code-braces:{ .lg .middle } **Je développe avec mouseTube**
+-   :material-code-braces:{ .lg .middle } [**Je développe avec mouseTube**](dev/index.md)
 
     ---
 
@@ -38,7 +38,7 @@ matériel qui les accompagnent. Ces pages expliquent comment l'utiliser, et comm
 
 <div class="grid cards" markdown>
 
--   :material-magnify: **Trouver des enregistrements**
+-   :material-magnify: [**Trouver des enregistrements**](user/find.md)
 
     ---
 
@@ -46,7 +46,7 @@ matériel qui les accompagnent. Ces pages expliquent comment l'utiliser, et comm
 
     [:octicons-arrow-right-24: Trouver des enregistrements](user/find.md)
 
--   :material-plus-circle-outline: **Ajouter une vocalisation**
+-   :material-plus-circle-outline: [**Ajouter une vocalisation**](user/add.md)
 
     ---
 
@@ -54,7 +54,7 @@ matériel qui les accompagnent. Ces pages expliquent comment l'utiliser, et comm
 
     [:octicons-arrow-right-24: Ajouter une vocalisation](user/add.md)
 
--   :material-database-outline: **Le schéma de la base**
+-   :material-database-outline: [**Le schéma de la base**](dev/schema.md)
 
     ---
 
@@ -62,7 +62,7 @@ matériel qui les accompagnent. Ces pages expliquent comment l'utiliser, et comm
 
     [:octicons-arrow-right-24: Schéma de la base](dev/schema.md)
 
--   :material-shield-lock-outline: **Droits et statuts**
+-   :material-shield-lock-outline: [**Droits et statuts**](dev/rights.md)
 
     ---
 

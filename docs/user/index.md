@@ -12,7 +12,7 @@ what you need to understand and reuse it: the protocol, the animals, the equipme
 
 <div class="grid cards" markdown>
 
--   :material-magnify: **Find and download recordings**
+-   :material-magnify: [**Find and download recordings**](find.md)
 
     ---
 
@@ -20,7 +20,7 @@ what you need to understand and reuse it: the protocol, the animals, the equipme
 
     [:octicons-arrow-right-24: Find recordings](find.md)
 
--   :material-account-plus-outline: **Create an account**
+-   :material-account-plus-outline: [**Create an account**](getting-started.md)
 
     ---
 
@@ -28,7 +28,7 @@ what you need to understand and reuse it: the protocol, the animals, the equipme
 
     [:octicons-arrow-right-24: Getting started](getting-started.md)
 
--   :material-plus-circle-outline: **Add a vocalization**
+-   :material-plus-circle-outline: [**Add a vocalization**](add.md)
 
     ---
 
@@ -36,7 +36,7 @@ what you need to understand and reuse it: the protocol, the animals, the equipme
 
     [:octicons-arrow-right-24: Add a vocalization](add.md)
 
--   :material-share-variant-outline: **Share and publish**
+-   :material-share-variant-outline: [**Share and publish**](share.md)
 
     ---
 

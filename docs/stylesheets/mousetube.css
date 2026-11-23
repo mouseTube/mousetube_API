@@ -150,6 +150,38 @@
   }
 }
 
+/* a card is one big link: the link of its title covers it (the other links of the card stay usable) */
+.md-typeset .grid.cards > ul > li,
+.md-typeset .grid.cards > ol > li {
+  position: relative;
+}
+.md-typeset .grid.cards > ul > li > p:first-child a::after,
+.md-typeset .grid.cards > ol > li > p:first-child a::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 14px;
+}
+.md-typeset .grid.cards > ul > li > p:not(:first-child) a,
+.md-typeset .grid.cards > ol > li > p:not(:first-child) a {
+  position: relative;
+  z-index: 1;
+}
+.md-typeset .grid.cards > ul > li:has(> p:first-child a):hover,
+.md-typeset .grid.cards > ol > li:has(> p:first-child a):hover {
+  cursor: pointer;
+}
+/* the keyboard sees the whole card, not only the words of the title */
+.md-typeset .grid.cards > ul > li > p:first-child a:focus-visible,
+.md-typeset .grid.cards > ol > li > p:first-child a:focus-visible {
+  outline: none;
+}
+.md-typeset .grid.cards > ul > li:has(> p:first-child a:focus-visible),
+.md-typeset .grid.cards > ol > li:has(> p:first-child a:focus-visible) {
+  outline: 2px solid var(--mt-red);
+  outline-offset: 2px;
+}
+
 /* hero of the home page */
 .mt-hero {
   padding: 1.2rem 0 0.4rem;
