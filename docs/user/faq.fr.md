@@ -58,7 +58,7 @@
 <dt>Session d'enregistrement</dt><dd>Un ensemble d'enregistrements faits dans les mêmes conditions expérimentales.</dd>
 <dt>Dépôt</dt><dd>Un service qui stocke les fichiers et leur donne un DOI (Zenodo).</dd>
 <dt>Partagé</dt><dd>Public, lisible par tous.</dd>
-<dt>USV</dt><dd>Vocalisation ultrasonique : un appel au-dessus de ce que l'oreille humaine entend, émis par les rongeurs.</dd>
+<dt>USV</dt><dd>Vocalisation ultrasonore : un appel au-dessus de ce que l'oreille humaine entend, émis par les rongeurs.</dd>
 <dt>Validé</dt><dd>Vérifié par un administrateur de mouseTube. Seules les fiches validées sont montrées à tous.</dd>
 <dt>En attente de validation</dt><dd>Envoyé en relecture : privé et verrouillé jusqu'à la décision d'un administrateur.</dd>
 </dl>

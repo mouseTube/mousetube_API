@@ -7,7 +7,7 @@ hide:
 <div class="mt-hero" markdown>
 <div class="mt-eyebrow">Documentation</div>
 
-# Partager, trouver et réutiliser des *vocalisations* ultrasoniques de rongeurs
+# Partager, trouver et réutiliser des *vocalisations* ultrasonores de rongeurs
 
 <p class="lead">mouseTube est une base ouverte d'enregistrements bruts, avec les protocoles, les animaux et le
 matériel qui les accompagnent. Ces pages expliquent comment l'utiliser, et comment elle fonctionne.</p>
