@@ -24,6 +24,12 @@
     options:
       heading_level: 3
 
+## The schema page of the documentation
+
+::: mousetube_api.utils.schema_docs
+    options:
+      heading_level: 3
+
 ## Validators
 
 ::: mousetube_api.utils.validators

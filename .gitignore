@@ -19,6 +19,8 @@ build/
 !static/json/
 !static/json/schemas/
 !static/json/schemas/*.json
+!docs/assets/schema/
+!docs/assets/schema/*.json
 
 logs/
 *.log

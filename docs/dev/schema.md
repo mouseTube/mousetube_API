@@ -29,9 +29,12 @@ protocol and equipment, session, files and repository).
 - **Every entry has `created_by`** (the author, `User`) and its dates. These links are not drawn.
 
 !!! note "The page follows the models"
-    A test (`test_docs_schema.py`) fails when a table or a field of `models.py` is added, renamed or removed
-    without the page. The data is in `docs/assets/schema/schema-<lang>.json`; edit the English and the French
-    files together.
+    The **structure** (tables, fields, types, null, unique, links) is read from `models.py`; only the
+    **descriptions** are written by hand. After a change of a model, run
+    `python manage.py sync_schema_docs`: it adds the new tables and fields (marked `TODO`), removes the ones
+    that are gone and fixes the types, in `docs/assets/schema/schema-en.json` and `schema-fr.json`. Then write
+    the `TODO` descriptions in both languages. A test (`test_docs_schema.py`) fails until the page follows the
+    models and no `TODO` is left.
 
 ## Statuses used by the tables
 

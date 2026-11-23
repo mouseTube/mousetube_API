@@ -56,9 +56,10 @@ mkdocs build --strict   # ce que lance la CI : un lien cassé ou une page manqua
 - **Deux langues.** Une page `nom.md` est en anglais et `nom.fr.md` sa version française, côte à côte. Une page
   sans fichier français montre l'anglais. Gardez les deux à jour.
 - **Le guide utilisateur** est dans `docs/user/`, la documentation développeur dans `docs/dev/`.
-- **Le schéma de la base** est `docs/assets/schema/schema-en.json` et `schema-fr.json`. Un test échoue quand une
-  table ou un champ de `models.py` n'est pas décrit dans les deux : ajoutez sa description (dans les deux langues)
-  quand vous changez un modèle.
+- **Le schéma de la base** est `docs/assets/schema/schema-en.json` et `schema-fr.json`. Quand vous changez un
+  modèle, lancez `python manage.py sync_schema_docs` (il ajoute les nouvelles tables et champs, retire les anciens,
+  corrige les types), puis écrivez les descriptions `TODO` dans les deux langues. Un test échoue tant que ce n'est
+  pas fait.
 - **La référence Python** est générée depuis les docstrings (`::: mousetube_api.utils.module`). Écrivez une
   docstring quand vous ajoutez une fonction publique ; utilisez `Args:` / `Returns:` quand les paramètres demandent
   à être nommés.

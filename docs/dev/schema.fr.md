@@ -30,9 +30,12 @@ animaux, protocole et matériel, session, fichiers et dépôt).
 - **Chaque fiche a un `created_by`** (l'auteur, `User`) et ses dates. Ces liaisons ne sont pas tracées.
 
 !!! note "La page suit les modèles"
-    Un test (`test_docs_schema.py`) échoue quand une table ou un champ de `models.py` est ajouté, renommé ou
-    supprimé sans la page. Les données sont dans `docs/assets/schema/schema-<lang>.json` ; modifiez les
-    fichiers anglais et français ensemble.
+    La **structure** (tables, champs, types, null, unique, liens) est lue dans `models.py` ; seules les
+    **descriptions** sont écrites à la main. Après un changement de modèle, lancez
+    `python manage.py sync_schema_docs` : il ajoute les nouvelles tables et les nouveaux champs (marqués `TODO`),
+    retire ceux qui ont disparu et corrige les types, dans `docs/assets/schema/schema-en.json` et `schema-fr.json`.
+    Écrivez ensuite les descriptions `TODO` dans les deux langues. Un test (`test_docs_schema.py`) échoue tant que
+    la page ne suit pas les modèles et qu'il reste un `TODO`.
 
 ## Statuts utilisés par les tables
 

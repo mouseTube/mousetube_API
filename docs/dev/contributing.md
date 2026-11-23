@@ -55,9 +55,9 @@ mkdocs build --strict   # what the CI runs: a broken link or a missing page fail
 - **Two languages.** A page `name.md` is English and `name.fr.md` its French version, side by side. A page
   with no French file shows the English one. Keep both in step.
 - **The user guide** is in `docs/user/`, the developer documentation in `docs/dev/`.
-- **The database schema** is `docs/assets/schema/schema-en.json` and `schema-fr.json`. A test fails when a
-  table or a field of `models.py` is not described in both: add its description (in both languages) when you
-  change a model.
+- **The database schema** is `docs/assets/schema/schema-en.json` and `schema-fr.json`. When you change a model,
+  run `python manage.py sync_schema_docs` (it adds the new tables and fields, removes the old ones, fixes the
+  types), then write the `TODO` descriptions in both languages. A test fails until it is done.
 - **The Python reference** is generated from the docstrings (`::: mousetube_api.utils.module`). Write a
   docstring when you add a public function; use `Args:` / `Returns:` when the parameters need naming.
 - **Screenshots** are in `docs/assets/img/` (PNG, about 1200 px wide). Give each one a useful `alt` text.
