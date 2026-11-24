@@ -382,6 +382,8 @@ CELERY_TIMEZONE = "Europe/Paris"
 # CELERY_IMPORTS = "mousetube_api.tasks"
 CELERY_IMPORTS = ["mousetube_api.tasks"]
 CELERY_RESULT_BACKEND = "django-db"
+# one task at a time per slot: with acks_late a prefetched task would wait unacknowledged
+CELERY_WORKER_PREFETCH_MULTIPLIER = 1
 
 # Shared cache (throttling, daily-export flag): the default per-process LocMemCache
 # would give every gunicorn worker its own counters.

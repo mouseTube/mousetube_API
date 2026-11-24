@@ -69,6 +69,10 @@ services:
 
   redis:
     image: redis:7
+    # appendonly + volume: queued tasks survive a restart or a re-creation of the container
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
     restart: always
     expose:
       - "6379"
@@ -95,3 +99,4 @@ services:
 
 volumes:
   mariadb_data:
+  redis_data:
