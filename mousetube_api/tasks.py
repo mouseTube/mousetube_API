@@ -94,7 +94,10 @@ def extract_metadata(file_instance, local_path):
         file_instance.save(update_fields=updated_fields)
 
 
-@shared_task(bind=True, max_retries=1)
+# acks_late: the message leaves Redis only when the task ends, so a worker killed by a
+# reboot gives the task back (after the broker's visibility timeout, 1 h). Safe here
+# because a second run reuses the deposition and skips what already reached it.
+@shared_task(bind=True, max_retries=1, acks_late=True, reject_on_worker_lost=True)
 def process_file(self, file_id, repository_id):
     """
     Process a single file:
