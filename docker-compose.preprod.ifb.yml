@@ -81,15 +81,13 @@ services:
     build:
       context: ./nginx
     volumes:
-      # - ./nginx/ssl/nginx.crt:/etc/letsencrypt/live/${DOMAIN}/fullchain.pem
-      # - ./nginx/ssl/nginx.key:/etc/letsencrypt/live/${DOMAIN}/privkey.pem
       - ./nginx/.htpasswd:/etc/nginx/.htpasswd:ro
       - ./staticfiles:/app/staticfiles
       - ./media:/app/media
       - ./logs/nginx:/var/log/nginx
-    ports:
-      - "80:80"
-      - "443:443"
+    # no published port: haproxy is the entry point, as in production
+    expose:
+      - "80"
     depends_on:
       - frontend
       - web
@@ -97,6 +95,45 @@ services:
       DOMAIN: ${DOMAIN}
     restart: always
 
+  # Makes the self-signed certificate of haproxy in a volume, once. It is made again when it is
+  # missing, when it expires within 30 days, or when DOMAIN is not in it any more (restart haproxy
+  # after that, it reads the certificate when it starts).
+  haproxy-cert:
+    image: alpine/openssl
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        D="${DOMAIN:-mousetube.ifb.local}"
+        F=/certs/mousetube.pem
+        if [ -s "$$F" ] && openssl x509 -checkend 2592000 -noout -in "$$F" >/dev/null 2>&1 \
+           && openssl x509 -noout -ext subjectAltName -in "$$F" | grep -q "DNS:$$D"; then
+          echo "certificate of $$D is there"; exit 0
+        fi
+        openssl req -x509 -newkey rsa:2048 -nodes -days 825 -subj "/CN=$$D" \
+          -addext "subjectAltName=DNS:$$D" -keyout /tmp/key.pem -out /tmp/cert.pem
+        cat /tmp/cert.pem /tmp/key.pem > "$$F"
+        chmod 644 "$$F"   # haproxy runs as another user than root
+        echo "certificate of $$D made"
+    volumes:
+      - haproxy_certs:/certs
+    restart: "no"
+
+  haproxy:
+    image: haproxy:lts-alpine
+    volumes:
+      - ./haproxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+      - haproxy_certs:/certs:ro
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      haproxy-cert:
+        condition: service_completed_successfully
+      nginx:
+        condition: service_started
+    restart: always
+
 volumes:
   mariadb_data:
   redis_data:
+  haproxy_certs:

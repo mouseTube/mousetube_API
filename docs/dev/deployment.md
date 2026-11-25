@@ -21,3 +21,20 @@ and an access token that now lasts one hour and is renewed by the new frontend).
 7. Rebuild the image when a dependency is added (`defusedxml` reads the tables of the detection tools); `--build` does it. The Celery worker must know the tasks of the new version (the check of the links is one).
 8. The tables that authors chose to send to Zenodo are kept in `media/usv_results/` until they are published: include `media/` in the backups.
 9. The version of the API is the one of `pyproject.toml` (the documentation and `GET /api/version/` give it); the one of the website is in its `package.json`. The footer of the site shows both.
+
+## Pre-production: a local HAProxy in front of nginx
+
+`docker-compose.preprod.ifb.yml` starts a `haproxy` container in front of nginx, so that the pre-production has
+the same chain as production (**HAProxy → nginx → Django**). It ends the TLS and sends `X-Forwarded-Proto: https`
+to Django, which needs it to know that the request was https. nginx has no published port any more.
+
+1. The self-signed certificate is made by itself: the `haproxy-cert` service writes it in the `haproxy_certs` volume
+   at the first start, for the name in `DOMAIN` (`mousetube.ifb.local`), and makes it again when it expires within
+   30 days or when `DOMAIN` changes (restart `haproxy` after that, it reads the certificate when it starts).
+   Browsers warn about it until it is accepted.
+2. Start as usual: `docker compose -f docker-compose.preprod.ifb.yml up -d --build`.
+3. Two ways in, one chain: `https://mousetube.ifb.local` reaches port 443; the HAProxy of the IFB (public name) sends
+   http to port 80 with `X-Forwarded-Proto: https`, which `haproxy` passes on untouched. `DRF_NUM_PROXIES` stays `2` on both.
+4. In the `.env` of the API and of the website, use the address people open: `https://mousetube.ifb.local`
+   (`CORS_ALLOWED_ORIGINS`, `CSRF_TRUSTED_ORIGINS`, `FRONT_DOMAIN`, `NUXT_PUBLIC_API_BASE_URL=https://.../api`).
+   Keep the security settings at their defaults: this is https, nothing has to be switched off.
