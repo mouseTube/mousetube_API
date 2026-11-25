@@ -18,6 +18,7 @@ Copy the example and fill it in (`cp .env.example .env`): see also the [README](
 | `CACHE_URL` | no | same Redis server, db `1` | Shared cache used by the rate limits. |
 | `DRF_NUM_PROXIES` | **yes behind proxies** | `0` | Number of reverse proxies in front of Django (HAProxy + nginx = `2`). With `0` every visitor shares the proxy's IP, so the login limit (10/min) applies to the whole site (the container warns at start when it is `0` outside debug). Check that your proxy sets `X-Forwarded-For`. |
 | `SECURE_HSTS_SECONDS` | no | `31536000` | Only applied when `DEBUG` is false. |
+| `SECURE_SSL_REDIRECT`, `SESSION_COOKIE_SECURE`, `CSRF_COOKIE_SECURE`, `FRONT_SCHEME` | no | `true` (redirect: `true` unless `DEBUG`), `true`, `true`, `https` unless `DEBUG` | Only for a site served over plain **http** on an internal network, where no proxy adds https: set the first three to `false` and `FRONT_SCHEME=http`. Without it the API redirects every request to https, the browser drops the session and CSRF cookies (so the admin and ORCID sign-in do not work) and the links of the e-mails start with `https`. Cookies are then `SameSite=Lax`, which is enough when the site and the API are behind the same address. Never in production. |
 | `USE_X_FORWARDED_HOST` | no | `false` | |
 | `ZENODO_API`, `ZENODO_TOKEN` | to publish | sandbox URL, empty | The token is sent as a Bearer header, never in a URL. |
 | `CLIENT_ID`, `CLIENT_SECRET` | for ORCID login | empty | ORCID OAuth application. |
