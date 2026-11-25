@@ -94,7 +94,10 @@ CSRF_TRUSTED_ORIGINS = env.list(
 CORS_ALLOW_CREDENTIALS = True
 X_FRAME_OPTIONS = "DENY"  # "ALLOW-FROM" is obsolete and ignored by browsers
 
-SECURE_SSL_REDIRECT = not DEBUG
+# Each one can be switched off to serve the site over plain http on an internal network
+# (SECURE_SSL_REDIRECT=false SESSION_COOKIE_SECURE=false CSRF_COOKIE_SECURE=false FRONT_SCHEME=http).
+# The defaults are the production ones: redirect to https unless DEBUG, Secure cookies.
+SECURE_SSL_REDIRECT = env.bool("SECURE_SSL_REDIRECT", default=not DEBUG)
 SECURE_HSTS_SECONDS = 0 if DEBUG else env.int("SECURE_HSTS_SECONDS", default=31536000)
 SECURE_HSTS_INCLUDE_SUBDOMAINS = not DEBUG
 SECURE_CONTENT_TYPE_NOSNIFF = True
@@ -318,10 +321,12 @@ SOCIALACCOUNT_EMAIL_VERIFICATION = "none"
 ACCOUNT_CONFIRM_EMAIL_ON_GET = False
 # The SPA is on another origin (localhost:3000 in dev), so cookies must be cross-site.
 # "None" requires Secure; browsers accept Secure cookies on http://localhost.
-SESSION_COOKIE_SECURE = True
-SESSION_COOKIE_SAMESITE = "None"
-CSRF_COOKIE_SECURE = True
-CSRF_COOKIE_SAMESITE = "None"
+# Over plain http (SESSION_COOKIE_SECURE=false) browsers drop "None" cookies: use "Lax",
+# which is enough when the site and the API share one address (behind the same nginx).
+SESSION_COOKIE_SECURE = env.bool("SESSION_COOKIE_SECURE", default=True)
+SESSION_COOKIE_SAMESITE = "None" if SESSION_COOKIE_SECURE else "Lax"
+CSRF_COOKIE_SECURE = env.bool("CSRF_COOKIE_SECURE", default=True)
+CSRF_COOKIE_SAMESITE = "None" if CSRF_COOKIE_SECURE else "Lax"
 
 # Djoser settings
 DJOSER = {
@@ -411,7 +416,9 @@ LOGS_DIR = Path(BASE_DIR) / "logs"
 LOGS_DIR.mkdir(exist_ok=True)
 
 FRONT_DOMAIN = env("FRONT_DOMAIN", default="localhost:3000")
-FRONT_URL = f"{'http' if DEBUG else 'https'}://{FRONT_DOMAIN}"
+# Scheme of the links written in e-mails: https unless DEBUG, or FRONT_SCHEME (http on an internal network).
+FRONT_SCHEME = env("FRONT_SCHEME", default="http" if DEBUG else "https")
+FRONT_URL = f"{FRONT_SCHEME}://{FRONT_DOMAIN}"
 # Where admins open the Django admin from the e-mail they receive.
 ADMIN_BASE_URL = env(
     "ADMIN_BASE_URL", default="http://localhost:8000" if DEBUG else FRONT_URL

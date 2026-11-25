@@ -55,7 +55,13 @@ jobs:
         run: |
           pip install --force-reinstall -e .
 
-      # 🏗️ 8. Build the project (testing packaging)
+      # 🔍 8. Known vulnerabilities in the installed dependencies (fails on any finding)
+      - name: 🔍 pip-audit (dependency vulnerabilities)
+        run: |
+          pip install pip-audit
+          pip-audit --skip-editable
+
+      # 🏗️ 9. Build the project (testing packaging)
       - name: 🏗️ Build the project
         run: |
           python -m build
