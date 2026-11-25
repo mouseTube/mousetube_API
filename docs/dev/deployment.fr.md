@@ -34,8 +34,10 @@ statuts, et un jeton d'accès qui dure maintenant une heure et est renouvelé pa
 chaîne que la production (**HAProxy → nginx → Django**). Il termine le TLS et envoie `X-Forwarded-Proto: https` à
 Django, qui en a besoin pour savoir que la requête était en https. nginx ne publie plus de port.
 
-1. Créez une fois le certificat auto-signé (il n'est pas dans git) : `haproxy/gen-cert.sh mousetube.ifb.local`. Il écrit
-   `haproxy/certs/mousetube.pem` ; le conteneur ne démarre pas sans lui. Les navigateurs le signalent jusqu'à ce qu'on l'accepte.
+1. Le certificat auto-signé se crée tout seul : le service `haproxy-cert` l'écrit dans le volume `haproxy_certs` au
+   premier démarrage, pour le nom de `DOMAIN` (`mousetube.ifb.local`), et le refait quand il expire dans moins de
+   30 jours ou quand `DOMAIN` change (redémarrez `haproxy` ensuite, il lit le certificat au démarrage).
+   Les navigateurs le signalent jusqu'à ce qu'on l'accepte.
 2. Démarrez comme d'habitude : `docker compose -f docker-compose.preprod.ifb.yml up -d --build`.
 3. Deux entrées, une seule chaîne : `https://mousetube.ifb.local` arrive sur le port 443 ; le HAProxy de l'IFB (nom
    public) envoie du http sur le port 80 avec `X-Forwarded-Proto: https`, que `haproxy` transmet tel quel.

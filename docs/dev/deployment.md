@@ -28,8 +28,10 @@ and an access token that now lasts one hour and is renewed by the new frontend).
 the same chain as production (**HAProxy → nginx → Django**). It ends the TLS and sends `X-Forwarded-Proto: https`
 to Django, which needs it to know that the request was https. nginx has no published port any more.
 
-1. Make the self-signed certificate once (it is not in git): `haproxy/gen-cert.sh mousetube.ifb.local`. It writes
-   `haproxy/certs/mousetube.pem`; the container does not start without it. Browsers warn about it until it is accepted.
+1. The self-signed certificate is made by itself: the `haproxy-cert` service writes it in the `haproxy_certs` volume
+   at the first start, for the name in `DOMAIN` (`mousetube.ifb.local`), and makes it again when it expires within
+   30 days or when `DOMAIN` changes (restart `haproxy` after that, it reads the certificate when it starts).
+   Browsers warn about it until it is accepted.
 2. Start as usual: `docker compose -f docker-compose.preprod.ifb.yml up -d --build`.
 3. Two ways in, one chain: `https://mousetube.ifb.local` reaches port 443; the HAProxy of the IFB (public name) sends
    http to port 80 with `X-Forwarded-Proto: https`, which `haproxy` passes on untouched. `DRF_NUM_PROXIES` stays `2` on both.
