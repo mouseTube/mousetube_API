@@ -37,3 +37,4 @@ media
 downloaded_audio
 audio_images
 site/
+haproxy/certs/

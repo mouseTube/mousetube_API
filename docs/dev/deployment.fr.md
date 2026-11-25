@@ -27,3 +27,19 @@ statuts, et un jeton d'accès qui dure maintenant une heure et est renouvelé pa
    publication : incluez `media/` dans les sauvegardes.
 9. La version de l'API est celle de `pyproject.toml` (la documentation et `GET /api/version/` la donnent) ; celle du
    site est dans son `package.json`. Le pied de page du site affiche les deux.
+
+## Préproduction : un HAProxy local devant nginx
+
+`docker-compose.preprod.ifb.yml` lance un conteneur `haproxy` devant nginx, pour que la préproduction ait la même
+chaîne que la production (**HAProxy → nginx → Django**). Il termine le TLS et envoie `X-Forwarded-Proto: https` à
+Django, qui en a besoin pour savoir que la requête était en https. nginx ne publie plus de port.
+
+1. Créez une fois le certificat auto-signé (il n'est pas dans git) : `haproxy/gen-cert.sh mousetube.ifb.local`. Il écrit
+   `haproxy/certs/mousetube.pem` ; le conteneur ne démarre pas sans lui. Les navigateurs le signalent jusqu'à ce qu'on l'accepte.
+2. Démarrez comme d'habitude : `docker compose -f docker-compose.preprod.ifb.yml up -d --build`.
+3. Deux entrées, une seule chaîne : `https://mousetube.ifb.local` arrive sur le port 443 ; le HAProxy de l'IFB (nom
+   public) envoie du http sur le port 80 avec `X-Forwarded-Proto: https`, que `haproxy` transmet tel quel.
+   `DRF_NUM_PROXIES` reste à `2` dans les deux cas.
+4. Dans le `.env` de l'API et celui du site, mettez l'adresse que les gens ouvrent : `https://mousetube.ifb.local`
+   (`CORS_ALLOWED_ORIGINS`, `CSRF_TRUSTED_ORIGINS`, `FRONT_DOMAIN`, `NUXT_PUBLIC_API_BASE_URL=https://.../api`).
+   Gardez les réglages de sécurité par défaut : c'est du https, rien n'est à désactiver.

@@ -81,20 +81,31 @@ services:
     build:
       context: ./nginx
     volumes:
-      # - ./nginx/ssl/nginx.crt:/etc/letsencrypt/live/${DOMAIN}/fullchain.pem
-      # - ./nginx/ssl/nginx.key:/etc/letsencrypt/live/${DOMAIN}/privkey.pem
       - ./nginx/.htpasswd:/etc/nginx/.htpasswd:ro
       - ./staticfiles:/app/staticfiles
       - ./media:/app/media
       - ./logs/nginx:/var/log/nginx
-    ports:
-      - "80:80"
-      - "443:443"
+    # no published port: haproxy is the entry point, as in production
+    expose:
+      - "80"
     depends_on:
       - frontend
       - web
     environment:
       DOMAIN: ${DOMAIN}
+    restart: always
+
+  haproxy:
+    image: haproxy:lts-alpine
+    # run haproxy/gen-cert.sh once to make haproxy/certs/mousetube.pem (self-signed)
+    volumes:
+      - ./haproxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+      - ./haproxy/certs:/certs:ro
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - nginx
     restart: always
 
 volumes:
