@@ -41,6 +41,7 @@ from .models import (
 from .utils.moderation import (
     approve_entries,
     approve_sessions,
+    public_sessions_blocked_by,
     send_back,
     session_pending_entries,
 )
@@ -86,6 +87,9 @@ class ModerationAdminMixin:
             )
         sent = send_back(entries, request.POST.get("reason", "").strip())
         self.message_user(request, f"{len(sent)} sent back to draft.", messages.SUCCESS)
+        blocked = public_sessions_blocked_by(sent)
+        if blocked:
+            self.message_user(request, blocked[1], messages.WARNING)
         return None
 
 

@@ -89,7 +89,7 @@ from mousetube_api.utils.file_handler import (
 )
 from mousetube_api.utils.moderation import (
     SESSION_PUBLIC,
-    session_pending_entries,
+    pending_summary,
 )
 from mousetube_api.utils.orcid_proof import read_orcid_proof
 from mousetube_api.utils.publication import (
@@ -1942,12 +1942,11 @@ class PublishSessionView(APIView):
             return Response(
                 {"detail": "Not authorized."}, status=status.HTTP_403_FORBIDDEN
             )
-        if session_pending_entries(session):
+        blocked = pending_summary(session, request.user)
+        if blocked:
+            detail, entries = blocked
             return Response(
-                {
-                    "detail": "The session uses entries that wait for an administrator: "
-                    "it can be published once they are validated."
-                },
+                {"detail": detail, "entries": entries},
                 status=status.HTTP_409_CONFLICT,
             )
         if session.status == "published":

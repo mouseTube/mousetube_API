@@ -28,6 +28,7 @@ from mousetube_api.utils.moderation import (
     WAITING,
     approve_entries,
     approve_sessions,
+    public_sessions_blocked_by,
     send_back,
     session_pending_entries,
 )
@@ -254,6 +255,7 @@ class ReviewDecisionView(APIView):
         ids = [i for i in ids if isinstance(i, int)][:200]
 
         skipped = []
+        warning = ""
         if kind == "accounts":
             done = self._accounts(ids, action, reason, skipped)
         elif kind == "sessions":
@@ -267,12 +269,16 @@ class ReviewDecisionView(APIView):
             if action == "validate":
                 done, _shared = approve_entries(objs)
             else:
-                done = len(send_back(objs, reason))
+                sent = send_back(objs, reason)
+                done = len(sent)
+                blocked = public_sessions_blocked_by(sent)
+                warning = blocked[1] if blocked else ""
         per_kind = counts()
         return Response(
             {
                 "done": done,
                 "skipped": skipped,
+                "warning": warning,
                 "total": sum(per_kind.values()),
                 "kinds": [
                     {"kind": k, "label": LABELS[k], "count": per_kind[k]} for k in KINDS

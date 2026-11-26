@@ -147,6 +147,45 @@ def session_pending_entries(session):
     )
 
 
+def pending_summary(session, user, limit=5):
+    """What keeps a session from being published, for the person who asks: the entries it uses that
+    nobody validated, with their state and what to do. Returns (sentence, entries) or None."""
+    pending = session_pending_entries(session)
+    if not pending:
+        return None
+    entries = []
+    for kind, obj in pending:
+        mine = obj.created_by_id == user.id
+        if user.is_staff:
+            todo = "validate it in the admin"
+        elif obj.status == WAITING:
+            todo = "an administrator has to validate it"
+        elif mine:
+            todo = "submit it for review"
+        else:
+            todo = "it belongs to another user: ask an administrator"
+        entries.append(
+            {
+                "kind": kind,
+                "id": obj.pk,
+                "name": str(obj),
+                "status": obj.status,
+                "mine": mine,
+                "todo": todo,
+            }
+        )
+    shown = "; ".join(
+        f"{e['kind']} '{e['name']}' ({e['status']}: {e['todo']})"
+        for e in entries[:limit]
+    )
+    more = f"; and {len(entries) - limit} more" if len(entries) > limit else ""
+    sentence = (
+        f"The session uses entries that are not validated yet: {shown}{more}. "
+        "It can be published once they are validated."
+    )
+    return sentence, entries
+
+
 def validate_entries(entries):
     """Mark the given (kind, object) pairs as validated; returns how many changed."""
     changed = 0
@@ -229,6 +268,33 @@ def send_back(objs, reason=""):
             + "\n\nChange it, then submit it again for review.",
         )
     return sent
+
+
+def public_sessions_blocked_by(entries, limit=5):
+    """After entries were sent back to draft: the shared or published sessions that use them (they
+    stay public but nobody can deposit them until the entries are validated again).
+    Returns (number of sessions, a sentence for the administrator), or None when none."""
+    from mousetube_api.models import RecordingSession
+
+    keys = {(obj._meta.label, obj.pk) for obj in entries}
+    if not keys:
+        return None
+    hit = [
+        session
+        for session in RecordingSession.objects.filter(status__in=SESSION_PUBLIC)
+        if any(
+            (obj._meta.label, obj.pk) in keys
+            for _kind, obj in session_pending_entries(session)
+        )
+    ]
+    if not hit:
+        return None
+    names = ", ".join(f"'{s.name}' (#{s.pk})" for s in hit[:limit])
+    more = f" and {len(hit) - limit} more" if len(hit) > limit else ""
+    return len(hit), (
+        f"{len(hit)} public recording session(s) use what was sent back and cannot be "
+        f"published until it is validated again: {names}{more}."
+    )
 
 
 def promote_ready_sessions():

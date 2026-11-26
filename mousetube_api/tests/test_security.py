@@ -1357,6 +1357,80 @@ class ModerationTests(FreshCache, TestCase):
         self.assertEqual(user.json()["status"], "draft")
         self.assertEqual(len(mail.outbox), 0)  # nothing waits for a review
 
+    def test_a_blocked_deposit_names_the_entries_and_what_to_do(self):
+        from unittest import mock
+
+        from mousetube_api.models import Hardware, Laboratory
+
+        validated = self._hardware()
+        Hardware.objects.filter(pk=validated).update(status="validated")
+        session = self._session(
+            equipment_acquisition_hardware_microphone_ids=[validated], status="shared"
+        )
+        repository = Repository.objects.create(name="Zenodo")
+
+        def deposit(client):
+            with mock.patch("mousetube_api.views.publish_session_deposition"):
+                return client.post(
+                    "/api/file/publish_session/",
+                    {
+                        "recording_session_id": session["id"],
+                        "repository_id": repository.id,
+                    },
+                    format="json",
+                )
+
+        # the author adds a draft of his own and a laboratory that waits for a review
+        draft = self.client_a.post(
+            "/api/hardware/", {"name": "my draft", "type": "speaker"}, format="json"
+        ).json()["id"]
+        lab = Laboratory.objects.create(
+            name="Lab", created_by=self.alice, status="waiting validation"
+        )
+        RecordingSession.objects.filter(pk=session["id"]).update(laboratory=lab)
+        self.client_a.patch(
+            f"/api/recording-session/{session['id']}/",
+            {"equipment_acquisition_hardware_speaker_ids": [draft]},
+            format="json",
+        )
+        answer = deposit(self.client_a)
+        self.assertEqual(answer.status_code, 409)
+        detail = answer.json()["detail"]
+        self.assertIn("my draft", detail)
+        self.assertIn("submit it for review", detail)  # his own draft: he submits it
+        self.assertIn("an administrator has to validate it", detail)  # the laboratory
+        states = {e["name"]: (e["status"], e["mine"]) for e in answer.json()["entries"]}
+        self.assertEqual(states["my draft"], ("draft", True))
+        self.assertEqual(states["Lab"], ("waiting validation", True))
+        # the administrator is told how he settles it
+        self.assertIn(
+            "validate it in the admin", deposit(self.client_root).json()["detail"]
+        )
+
+    def test_a_blocked_deposit_on_an_entry_of_somebody_else_says_so(self):
+        from unittest import mock
+
+        from mousetube_api.models import Hardware
+        from mousetube_api.utils.moderation import send_back
+
+        hardware = self._hardware()
+        Hardware.objects.filter(pk=hardware).update(status="validated")
+        session = self._session(
+            equipment_acquisition_hardware_microphone_ids=[hardware], status="shared"
+        )
+        send_back(Hardware.objects.filter(pk=hardware), "fix it")
+        bob = get_user_model().objects.create_user("bob", "b@igbmc.fr", "x")
+        RecordingSession.objects.filter(pk=session["id"]).update(created_by=bob)
+        repository = Repository.objects.create(name="Zenodo")
+        with mock.patch("mousetube_api.views.publish_session_deposition"):
+            answer = self._client(bob).post(
+                "/api/file/publish_session/",
+                {"recording_session_id": session["id"], "repository_id": repository.id},
+                format="json",
+            )
+        self.assertEqual(answer.status_code, 409)
+        self.assertIn("belongs to another user", answer.json()["detail"])
+
     def test_an_administrator_sharing_a_session_validates_what_it_uses(self):
         """He is the one who validates: a shared session never keeps a draft entry, or nobody
         (he included) could deposit it in a repository."""
@@ -1583,6 +1657,64 @@ class ModerationTests(FreshCache, TestCase):
         )
         self.assertEqual(Hardware.objects.get(pk=hardware).status, "draft")
         self.assertIn("Add the reference.", mail.outbox[0].body)
+
+    def test_sending_back_an_entry_tells_the_public_sessions_it_blocks(self):
+        from django.contrib.messages import get_messages
+
+        from mousetube_api.models import Hardware
+
+        used = self._hardware()
+        Hardware.objects.filter(pk=used).update(status="validated")
+        self._session(
+            equipment_acquisition_hardware_microphone_ids=[used], status="shared"
+        )
+        unused = self._hardware()
+        Hardware.objects.filter(pk=unused).update(status="validated")
+        action = {"action": "send_back_to_draft", "apply": "1", "reason": "Fix."}
+        answer = self._admin().post(
+            "/admin/mousetube_api/hardware/",
+            {**action, "_selected_action": [used]},
+            follow=True,
+        )
+        warnings = [m.message for m in get_messages(answer.wsgi_request)]
+        self.assertTrue(
+            any("cannot be published" in m and "'S'" in m for m in warnings)
+        )
+        # an entry no public session uses sends nothing to worry about
+        answer = self.client.post(
+            "/admin/mousetube_api/hardware/",
+            {**action, "_selected_action": [unused]},
+            follow=True,
+        )
+        self.assertFalse(
+            any(
+                "cannot be published" in m.message
+                for m in get_messages(answer.wsgi_request)
+            )
+        )
+
+    def test_the_review_page_warns_when_a_sent_back_entry_blocks_a_public_session(self):
+        from mousetube_api.models import Hardware
+
+        used = self._hardware()
+        Hardware.objects.filter(pk=used).update(status="validated")
+        self._session(
+            equipment_acquisition_hardware_microphone_ids=[used], status="shared"
+        )
+        Hardware.objects.filter(pk=used).update(status="waiting validation")
+        answer = self.client_root.post(
+            "/api/review/hardware/decision/",
+            {"action": "send_back", "ids": [used], "reason": "Fix."},
+            format="json",
+        )
+        self.assertEqual(answer.status_code, 200)
+        self.assertIn("cannot be published", answer.json()["warning"])
+        other = self.client_root.post(
+            "/api/review/hardware/decision/",
+            {"action": "validate", "ids": []},
+            format="json",
+        )
+        self.assertEqual(other.json()["warning"], "")
 
     def test_a_session_is_reviewed_with_everything_it_uses(self):
         from mousetube_api.models import Hardware, RecordingSession
