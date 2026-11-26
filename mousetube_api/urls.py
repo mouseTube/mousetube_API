@@ -34,6 +34,7 @@ from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 from rest_framework.routers import DefaultRouter
 
 from .account_views import CustomUserViewSet
+from .profile_views import MyDataView, MyStatsView, UnlinkOrcidView
 from .review import ReviewDecisionView, ReviewListView, ReviewSummaryView
 from .views import (
     AnimalProfileViewSet,
@@ -223,6 +224,9 @@ urlpatterns = [
     path("accounts/", include("allauth.socialaccount.urls")),
     path("accounts/", include("allauth.urls")),
     path("api/link-orcid/", LinkOrcidView.as_view(), name="link-orcid"),
+    path("api/unlink-orcid/", UnlinkOrcidView.as_view(), name="unlink-orcid"),
+    path("api/my-stats/", MyStatsView.as_view(), name="my-stats"),
+    path("api/my-data/", MyDataView.as_view(), name="my-data"),
 ]
 
 if settings.DEBUG:

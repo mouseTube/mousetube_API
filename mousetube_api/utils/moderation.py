@@ -279,10 +279,14 @@ def notify_admin_review(obj):
         logger.exception("Could not notify the administrator about %r", obj)
 
 
-def notify_creator(obj, subject, text):
-    """E-mail the creator of `obj`, when we have an address for him."""
+def notify_creator(obj, subject, text, kind="validation"):
+    """E-mail the creator of `obj`, when we have an address for him and he did not turn this
+    kind off (`kind`: "validation" or "publication", the choices of his account page)."""
     user = getattr(obj, "created_by", None)
     if not (user and user.email):
+        return
+    profile = getattr(user, "user_profile", None)
+    if profile and not getattr(profile, f"notify_{kind}", True):
         return
     try:
         send_mail(

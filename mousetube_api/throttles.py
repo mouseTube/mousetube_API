@@ -11,6 +11,7 @@ _THROTTLED = (
         "auth",
         "/auth/users/set_password",
     ),  # the current password is asked: not to be guessed
+    ("auth", "/api/unlink-orcid"),  # the password is asked
     ("auth", "/auth/users/change_email"),  # sends a mail, and asks the password
     ("auth", "/auth/users/confirm_email_change"),
     ("register", "/auth/users/"),

@@ -7,6 +7,7 @@ from allauth.socialaccount.adapter import DefaultSocialAccountAdapter
 from allauth.socialaccount.models import SocialApp
 from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import update_last_login
 from django.contrib.sites.shortcuts import get_current_site
 from django.core.exceptions import MultipleObjectsReturned
 from django.http import HttpResponseRedirect
@@ -86,6 +87,9 @@ class MySocialAccountAdapter(DefaultSocialAccountAdapter):
                 query = urlencode({"account_status": state})
                 redirect_url = f"{protocol}://{domain}/account/login?{query}"
                 raise ImmediateHttpResponse(HttpResponseRedirect(redirect_url))
+            update_last_login(
+                None, user
+            )  # the password login does it through the JWT settings
             token = str(RefreshToken.for_user(user).access_token)
 
             # Fragment (#), not query (?): it is never sent to servers, logs or Referer.
