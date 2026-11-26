@@ -187,6 +187,18 @@
      "datetime",
      "n",
      "Sign-ins made up to this moment are no longer valid (log out of all devices, change of password)."
+    ],
+    [
+     "notify_validation",
+     "bool",
+     "",
+     "E-mail when an administrator validates, or sends back, what the user submitted."
+    ],
+    [
+     "notify_publication",
+     "bool",
+     "",
+     "E-mail when the publication of a session on the repository is done or fails."
     ]
    ]
   },

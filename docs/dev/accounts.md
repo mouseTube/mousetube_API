@@ -45,6 +45,24 @@ row of the user locked). It must be used **signed in as the user it was made for
 typed by mistake could take the account, then reset its password. The link is built from `FRONT_URL`, never from the
 `Host` header.
 
+## The account page: ORCID, figures, e-mails, export
+
+All for the signed-in user (`mousetube_api/profile_views.py`):
+
+- `POST /api/unlink-orcid/` with `current_password` empties `UserProfile.orcid` (and the allauth `SocialAccount`, if any).
+  Wrong password: **400**; limited like the login. The iD is then free for another account.
+- `GET /api/my-stats/` answers `date_joined`, `last_login`, `files` and `downloads` (the sum of `File.downloads` of the
+  files the user created). `last_login` is updated at each password sign-in (`SIMPLE_JWT["UPDATE_LAST_LOGIN"]`) and at
+  each ORCID sign-in; a renewal of the token does not count.
+- Notifications: `UserProfile.notify_validation` (decisions of the administrators on what the user submitted) and
+  `notify_publication` (end of a publication), both on by default, written with `PATCH /api/user_profile/<id>/`.
+  `notify_creator(obj, subject, text, kind=...)` checks them; the e-mails about the account (password, address, account
+  request) do not go through it and cannot be turned off.
+- `GET /api/my-data/` sends a JSON file (right of access, GDPR): the account, the profile, and every row the user
+  created (`created_by`) or marked as favorite, by model (`mousetube_api.File`...). The password hash, the revocation date
+  of the sign-ins and other users are not in it. Once a minute per user (**429**). Adding a model with a `created_by` to
+  the user adds it to the export, nothing to do.
+
 ## Log out of all devices
 
 `POST /auth/logout_all/` (signed in) ends **every** sign-in of the user made up to now, the one that asks included; other

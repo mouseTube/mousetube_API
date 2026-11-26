@@ -46,6 +46,24 @@ ligne de l'utilisateur verrouillée). Il doit être utilisé **connecté en tant
 fait** : sinon le propriétaire d'une adresse saisie par erreur pourrait prendre le compte, puis changer son mot de passe.
 Le lien est construit avec `FRONT_URL`, jamais avec l'en-tête `Host`.
 
+## La page du compte : ORCID, chiffres, e-mails, export
+
+Tout est pour l'utilisateur connecté (`mousetube_api/profile_views.py`) :
+
+- `POST /api/unlink-orcid/` avec `current_password` vide `UserProfile.orcid` (et le `SocialAccount` d'allauth, s'il y en
+  a un). Mauvais mot de passe : **400** ; limité comme la connexion. L'iD est alors libre pour un autre compte.
+- `GET /api/my-stats/` répond `date_joined`, `last_login`, `files` et `downloads` (la somme de `File.downloads` des
+  fichiers créés par l'utilisateur). `last_login` est mis à jour à chaque connexion par mot de passe
+  (`SIMPLE_JWT["UPDATE_LAST_LOGIN"]`) et à chaque connexion ORCID ; un renouvellement du jeton ne compte pas.
+- Notifications : `UserProfile.notify_validation` (décisions des administrateurs sur ce que l'utilisateur a soumis) et
+  `notify_publication` (fin d'une publication), actifs par défaut, écrits avec `PATCH /api/user_profile/<id>/`.
+  `notify_creator(obj, subject, text, kind=...)` les vérifie ; les e-mails du compte (mot de passe, adresse, demande de
+  compte) n'y passent pas et ne peuvent pas être désactivés.
+- `GET /api/my-data/` envoie un fichier JSON (droit d'accès, RGPD) : le compte, le profil, et chaque ligne que
+  l'utilisateur a créée (`created_by`) ou mise en favori, par modèle (`mousetube_api.File`...). Le hash du mot de passe,
+  la date de révocation des connexions et les autres utilisateurs n'y sont pas. Une fois par minute et par utilisateur
+  (**429**). Ajouter un modèle avec un `created_by` vers l'utilisateur l'ajoute à l'export, rien à faire.
+
 ## Se déconnecter de partout
 
 `POST /auth/logout_all/` (connecté) met fin à **toutes** les connexions de l'utilisateur faites jusqu'à maintenant, celle

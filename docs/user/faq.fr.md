@@ -13,6 +13,10 @@
     les fichiers d'un seul enregistrement, dépliez un fichier et utilisez **Download all (zip)**. Un jeu de données
     très gros est refusé : téléchargez ses fichiers un par un.
 
+??? question "Puis-je obtenir une copie de mes données ?"
+    Oui. Sur la page de votre compte, onglet **Preferences**, section **My data**, **Download my data** donne un fichier
+    JSON avec votre profil et tout ce que vous avez ajouté.
+
 ??? question "Comment changer mon adresse e-mail ?"
     Sur la page de votre compte, onglet **Profile**, **Change e-mail** : saisissez la nouvelle adresse institutionnelle
     et votre mot de passe actuel. Un lien est envoyé à la nouvelle adresse ; ouvrez-le en étant connecté et l'adresse

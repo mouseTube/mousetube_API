@@ -12,6 +12,10 @@
     (the recordings) or **All files** (with the images and the analyses). To get every file of one record, unfold
     a file and use **Download all (zip)**. A very large dataset is refused: download its files one by one.
 
+??? question "Can I get a copy of my data?"
+    Yes. On your account page, **Preferences** tab, section **My data**, **Download my data** gives a JSON file with your
+    profile and everything you added.
+
 ??? question "How do I change my e-mail address?"
     On your account page, **Profile** tab, **Change e-mail**: type the new institutional address and your current
     password. A link is sent to the new address; open it while signed in and the address changes.
