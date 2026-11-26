@@ -14,7 +14,7 @@ from unittest import mock
 from django.contrib.auth import get_user_model
 from django.core import signing
 from django.core.cache import cache
-from django.test import TestCase, override_settings
+from django.test import AsyncRequestFactory, TestCase, override_settings
 from rest_framework.test import APIClient
 
 from mousetube_api import views
@@ -321,6 +321,22 @@ class DatasetZip(Base):
         self.assertEqual(archive.read("b c/b c_ratrec.csv"), b"DDD")
         self.assertTrue(self.free())
 
+    def test_the_asynchronous_server_streams_the_same_zip(self):
+        """Production runs an asynchronous server: a request that has a scope gets an asynchronous
+        stream, not the one of the other tests."""
+        request = AsyncRequestFactory().get(self.url(), {"token": self.token()})
+        response = views.DatasetDownloadView.as_view()(request, pk=self.dataset.pk)
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.is_async)
+
+        async def read():
+            return b"".join([chunk async for chunk in response.streaming_content])
+
+        archive = zipfile.ZipFile(io.BytesIO(asyncio.run(read())))
+        self.assertEqual(archive.testzip(), None)
+        self.assertEqual(archive.read("a/a.wav"), b"AAAAAAAA")
+        self.assertTrue(self.free())
+
     def test_a_record_is_only_fetched_once_when_two_files_share_it(self):
         self.file("a2.wav", ZENODO.format("a2.wav"))  # same record 111 as `a.wav`
         _, archive = self.download(self.owner)
@@ -426,6 +442,39 @@ class DatasetZip(Base):
         report = archive.read("_errors.txt").decode()
         self.assertIn("a.wav: incomplete", report)
         self.assertIn("b c.wav: not added", report)
+
+
+class Places(Base):
+    """A place is given back once, by its own download, and also when the response is only closed."""
+
+    def test_a_late_second_call_does_not_free_the_place_of_another_download(self):
+        first, _ = views._take_dataset_zip_place(self.owner)
+        first()
+        second, _ = views._take_dataset_zip_place(self.other)  # takes the free slot
+        first()  # a late call of the first download
+        self.assertTrue(cache.get(f"dataset-zip:user:{self.other.pk}"))
+        self.assertTrue(cache.get("dataset-zip:slot:0"))
+        second()
+        self.assertFalse(cache.get("dataset-zip:slot:0"))
+
+    def test_a_response_that_is_closed_without_being_read_gives_the_place_back(self):
+        give_back, _ = views._take_dataset_zip_place(self.owner)
+        response = views._ZipResponse(
+            iter([b"x"]), give_back, content_type="application/zip"
+        )
+        self.assertTrue(cache.get(f"dataset-zip:user:{self.owner.pk}"))
+        # closing a response ends the request for Django, which closes the database connections
+        with mock.patch("django.core.signals.request_finished.send"):
+            response.close()
+        self.assertFalse(cache.get(f"dataset-zip:user:{self.owner.pk}"))
+        self.assertFalse(cache.get("dataset-zip:slot:0"))
+
+    def test_the_synchronous_stream_gives_the_place_back_when_the_visitor_leaves(self):
+        given = []
+        stream = views._sync_stream(iter([b"a", b"b", b"c"]), lambda: given.append(1))
+        next(stream)
+        stream.close()  # the server closes the iterator when the visitor leaves
+        self.assertEqual(given, [1])
 
 
 class Stream(TestCase):

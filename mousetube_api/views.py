@@ -14,7 +14,6 @@ import ntpath
 import os
 import shutil
 import uuid
-from functools import partial
 
 import django_filters
 from celery.result import AsyncResult
@@ -2196,15 +2195,32 @@ def _dataset_zip_entries(dataset, user):
 
 def _take_dataset_zip_place(user):
     """A place for one download: one per user and `DATASET_ZIP_PARALLEL` for the server. Returns
-    the function that gives it back, or `None` and the reason. The places expire by themselves."""
+    the function that gives it back, or `None` and the reason. The places expire by themselves.
+    A place holds the token of its download and only that download gives it back, once: a late
+    call cannot free the place of another download."""
     mine = f"dataset-zip:user:{user.pk}"
-    if not cache.add(mine, 1, DATASET_ZIP_LOCK_SECONDS):
+    owner = uuid.uuid4().hex
+    if not cache.add(mine, owner, DATASET_ZIP_LOCK_SECONDS):
         return None, "You already have a download running."
+
+    def release(keys):
+        done = []
+
+        def give_back():
+            if done:
+                return
+            done.append(1)
+            for key in keys:
+                if cache.get(key) == owner:
+                    cache.delete(key)
+
+        return give_back
+
     for number in range(settings.DATASET_ZIP_PARALLEL):
         slot = f"dataset-zip:slot:{number}"
-        if cache.add(slot, 1, DATASET_ZIP_LOCK_SECONDS):
-            return partial(cache.delete_many, [mine, slot]), ""
-    cache.delete(mine)
+        if cache.add(slot, owner, DATASET_ZIP_LOCK_SECONDS):
+            return release([mine, slot]), ""
+    release([mine])()
     return None, "The server is busy with other downloads, try again in a few minutes."
 
 
@@ -2225,6 +2241,31 @@ async def _stream(chunks, give_back):
             getattr(iterator, "close", lambda: None)()
         except ValueError:  # a chunk is still being read in its thread: it ends with it
             pass
+
+
+def _sync_stream(chunks, give_back):
+    """The same for a server that is not asynchronous (the development server, which would build the
+    whole zip in memory from an asynchronous stream): the chunks as they come, the place given back
+    when it ends or the visitor leaves."""
+    try:
+        yield from chunks
+    finally:
+        give_back()
+
+
+class _ZipResponse(StreamingHttpResponse):
+    """A zip that is sent while it is made. Django closes a response when it is done with it, read
+    or not (a visitor who leaves before the first byte): the place is given back then too."""
+
+    def __init__(self, stream, give_back, **kwargs):
+        super().__init__(stream, **kwargs)
+        self._give_back = give_back
+
+    def close(self):
+        try:
+            super().close()
+        finally:
+            self._give_back()
 
 
 class _SignedZipView(APIView):
@@ -2321,10 +2362,12 @@ class _SignedZipView(APIView):
                 status=status.HTTP_429_TOO_MANY_REQUESTS,
                 headers={"Retry-After": "120"},
             )
-        response = StreamingHttpResponse(
-            _stream(iter_zip(entries, settings.DATASET_ZIP_MAX_BYTES), give_back),
-            content_type="application/zip",
+        chunks = iter_zip(entries, settings.DATASET_ZIP_MAX_BYTES)
+        # a request of an asynchronous server has a scope; the development server does not
+        stream = (_stream if hasattr(request, "scope") else _sync_stream)(
+            chunks, give_back
         )
+        response = _ZipResponse(stream, give_back, content_type="application/zip")
         response["Content-Disposition"] = f'attachment; filename="{name}.zip"'
         response["Cache-Control"] = "no-store"
         # nginx would keep the answer in a file on the disk of the server to go faster than the visitor
