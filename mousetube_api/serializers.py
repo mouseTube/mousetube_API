@@ -32,6 +32,7 @@ from mousetube_api.utils.moderation import (
     public_session_data,
     sees_everything,
     session_pending_entries,
+    validate_entries,
 )
 from mousetube_api.utils.ontologies import (
     OntologyError,
@@ -89,6 +90,7 @@ class ModerationMixin:
 
     The owner moves it between draft and "waiting validation" (submit / withdraw);
     only an administrator validates. The administrator is told when something is submitted.
+    What an administrator creates is validated at once (unless he asks for another status).
     """
 
     def validate_status(self, value):
@@ -100,6 +102,14 @@ class ModerationMixin:
     def save(self, **kwargs):
         # save() rather than create()/update(): several serializers define their own
         before = self.instance.status if self.instance is not None else None
+        request = self.context.get("request")
+        if (
+            before is None
+            and request
+            and request.user.is_staff
+            and "status" not in getattr(self, "initial_data", {})
+        ):
+            kwargs.setdefault("status", VALIDATED)  # an administrator has nobody to ask
         instance = super().save(**kwargs)
         if instance.status == WAITING and before != WAITING:
             notify_admin_review(instance)
@@ -1206,12 +1216,16 @@ class RecordingSessionSerializer(serializers.ModelSerializer):
     def _final_status(self, instance, requested, is_staff):
         """The status once the session is saved and its entries are known.
 
-        An administrator sets what he wants. The owner asks for "shared" (or "waiting
-        validation"): the session is shared at once when everything it uses is validated,
-        otherwise it waits for a review of the new entries.
+        An administrator sets what he wants, and sharing is his validation of what the session
+        uses (as the action of the admin does): a shared session never uses a draft entry,
+        which could not be published. The owner asks for "shared" (or "waiting validation"):
+        the session is shared at once when everything it uses is validated, otherwise it
+        waits for a review of the new entries.
         """
         if requested is None:
             return instance.status
+        if is_staff and requested == "shared":
+            validate_entries(session_pending_entries(instance))
         if is_staff or requested == "draft":
             return requested
         return WAITING if session_pending_entries(instance) else "shared"

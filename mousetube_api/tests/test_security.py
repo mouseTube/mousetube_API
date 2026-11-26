@@ -1342,6 +1342,70 @@ class ModerationTests(FreshCache, TestCase):
         )
         self.assertEqual(session["status"], "shared")
 
+    def test_what_an_administrator_creates_is_validated_at_once(self):
+        from django.core import mail
+
+        payload = {"name": "L", "country": "FR"}
+        created = self.client_root.post("/api/laboratory/", payload, format="json")
+        self.assertEqual(created.json()["status"], "validated")
+        # he may still ask for a draft, and a user's entry starts as a draft
+        draft = self.client_root.post(
+            "/api/laboratory/", {**payload, "status": "draft"}, format="json"
+        )
+        self.assertEqual(draft.json()["status"], "draft")
+        user = self.client_a.post("/api/laboratory/", payload, format="json")
+        self.assertEqual(user.json()["status"], "draft")
+        self.assertEqual(len(mail.outbox), 0)  # nothing waits for a review
+
+    def test_an_administrator_sharing_a_session_validates_what_it_uses(self):
+        """He is the one who validates: a shared session never keeps a draft entry, or nobody
+        (he included) could deposit it in a repository."""
+        from unittest import mock
+
+        from mousetube_api.models import Hardware
+
+        hardware = self._hardware()  # a draft of alice
+        response = self.client_root.post(
+            "/api/recording-session/",
+            {
+                "name": "S",
+                "date": "2026-01-02T10:00:00Z",
+                "equipment_acquisition_hardware_microphone_ids": [hardware],
+                "status": "shared",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, 201, response.content)
+        self.assertEqual(response.json()["status"], "shared")
+        self.assertEqual(Hardware.objects.get(pk=hardware).status, "validated")
+        repository = Repository.objects.create(name="Zenodo")
+        with mock.patch("mousetube_api.views.publish_session_deposition") as task:
+            task.delay.return_value = SimpleNamespace(id="t1")
+            accepted = self.client_root.post(
+                "/api/file/publish_session/",
+                {
+                    "recording_session_id": response.json()["id"],
+                    "repository_id": repository.id,
+                },
+                format="json",
+            )
+        self.assertEqual(accepted.status_code, 202, accepted.content)
+
+    def test_an_administrator_keeping_a_session_draft_validates_nothing(self):
+        from mousetube_api.models import Hardware
+
+        hardware = self._hardware()
+        self.client_root.post(
+            "/api/recording-session/",
+            {
+                "name": "S",
+                "date": "2026-01-02T10:00:00Z",
+                "equipment_acquisition_hardware_microphone_ids": [hardware],
+            },
+            format="json",
+        )
+        self.assertEqual(Hardware.objects.get(pk=hardware).status, "draft")
+
     def test_a_session_using_new_entries_waits_for_a_review(self):
         from django.core import mail
 
