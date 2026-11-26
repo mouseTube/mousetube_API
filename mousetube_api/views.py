@@ -103,6 +103,7 @@ from mousetube_api.utils.repository import (
     get_repository_metadata_schema,
 )
 from mousetube_api.utils.session_rights import session_rights
+from mousetube_api.utils.sessions import revoke_sessions
 from mousetube_api.utils.zenodo_files import (
     ZenodoBusy,
     ZenodoUnavailable,
@@ -2453,6 +2454,18 @@ class FileRecordDownloadView(_SignedZipView):
         stem = os.path.splitext(file.name or "")[0]
         name = get_valid_filename(f"mouseTube_{stem}_record") or f"record_{record[1]}"
         return entries, 0, name
+
+
+class LogoutEverywhereView(APIView):
+    """Log out of all devices: every sign-in of the user made up to now ends, this one included
+    (the page signs in again if it wants to stay). Other users are not touched."""
+
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(exclude=True)
+    def post(self, request):
+        revoke_sessions(request.user)
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class FileFilterOptionsView(APIView):

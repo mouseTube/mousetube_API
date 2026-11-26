@@ -79,6 +79,7 @@ class UserProfile(models.Model):
         country (CountryField): Country of the user.
         orcid (CharField): ORCID researcher identifier.
         email_public (BooleanField): Whether the e-mail is shown to visitors (default: no).
+        sessions_revoked_at (DateTimeField): Sign-ins made up to this moment are no longer valid (log out of all devices, change of password).
         administrator (BooleanField): Whether the user has admin privileges.
         date_joined (DateTimeField): Timestamp when the profile was created.
         modified_at (DateTimeField): Last modification timestamp.
@@ -115,6 +116,12 @@ class UserProfile(models.Model):
     ]
     view_mode = models.CharField(
         max_length=10, choices=VIEW_MODE_CHOICES, default="cards"
+    )
+    sessions_revoked_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Sign-ins made up to this moment are no longer valid "
+        "(log out of all devices, change of password).",
     )
     email_public = models.BooleanField(
         default=False,

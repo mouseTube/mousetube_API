@@ -21,8 +21,25 @@ Le formulaire peut être lancé depuis ORCID. ORCID ne donne que ce qui est publ
   actuel pourrait y être deviné. L'API ne compare pas `re_new_password` à `new_password` : le formulaire du site le fait.
 - **Oublié :** `POST /auth/users/reset_password/` envoie un lien par mail (limité aussi), qui ouvre
   `password/reset/confirm/<uid>/<token>` sur le site.
-- Les jetons d'accès et de rafraîchissement déjà émis restent valables après un changement (ils ne sont pas révoqués) ;
-  le jeton d'accès dure une heure.
+- Un nouveau mot de passe met fin aux connexions faites avec l'ancien (voir plus bas) : la page reconnecte l'utilisateur.
+
+## Se déconnecter de partout
+
+`POST /auth/logout_all/` (connecté) met fin à **toutes** les connexions de l'utilisateur faites jusqu'à maintenant, celle
+qui le demande comprise ; les autres utilisateurs ne sont pas touchés. Un JWT ne peut pas être repris une fois émis : le
+serveur retient donc, par utilisateur, l'instant jusqu'auquel les connexions sont révoquées
+(`UserProfile.sessions_revoked_at`) et refuse un jeton d'accès ou de rafraîchissement fait pour une connexion jusqu'à
+cet instant (**401**, `session_revoked` ; le renouvellement sur `/auth/jwt/refresh/` aussi). Un jeton porte l'instant de
+sa connexion en millisecondes (`iat_ms`) : le `iat` standard est en secondes, trop grossier pour se reconnecter juste
+après la révocation. Un jeton fait avant cette fonction n'a pas de `iat_ms` et est lu avec son `iat`.
+
+- C'est aussi fait quand un **mot de passe change**, quel que soit celui qui le change (l'utilisateur, le mail d'un mot de
+  passe oublié, un administrateur) : chaque `save()` d'un utilisateur avec un nouveau mot de passe. Un `update()` en bloc
+  n'y passe pas.
+- Une connexion ne met à jour que la dernière connexion : elle ne met pas fin aux autres connexions de l'utilisateur, donc
+  un téléphone et un ordinateur vivent ensemble jusqu'à ce que l'un des deux le demande.
+- Rien n'est écrit pour un utilisateur qui n'a jamais révoqué : le champ est vide et la vérification coûte une requête par
+  appel.
 
 ## Supprimer un compte
 

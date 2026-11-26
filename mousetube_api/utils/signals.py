@@ -2,10 +2,11 @@
 
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ObjectDoesNotExist
-from django.db.models.signals import post_delete, post_save
+from django.db.models.signals import post_delete, post_save, pre_save
 from django.dispatch import receiver
 
 from mousetube_api.models import Software, SoftwareVersion, UserProfile, UsvDetection
+from mousetube_api.utils.sessions import revoke_sessions
 
 User = get_user_model()
 
@@ -16,6 +17,22 @@ def create_user_profile(sender, instance, created, **kwargs):
         exists = UserProfile.objects.filter(user=instance).exists()
         if not exists:
             UserProfile.objects.create(user=instance)
+
+
+@receiver(pre_save, sender=get_user_model())
+def revoke_sessions_on_new_password(sender, instance, update_fields=None, **kwargs):
+    """Whoever changes the password (the user, the e-mail of a forgotten one, an administrator), the
+    sign-ins made with the old one end. The user signs in again with the new one."""
+    if not instance.pk or (update_fields and "password" not in update_fields):
+        return
+    old = (
+        get_user_model()
+        .objects.filter(pk=instance.pk)
+        .values_list("password", flat=True)
+        .first()
+    )
+    if old is not None and old != instance.password:
+        revoke_sessions(instance)
 
 
 @receiver(post_save, sender=Software)

@@ -21,8 +21,22 @@ The form can be started from ORCID. ORCID only gives what is public on the recor
   there. The API does not compare `re_new_password` with `new_password`: the form of the site does.
 - **Forgotten:** `POST /auth/users/reset_password/` sends a link by e-mail (also limited), which opens
   `password/reset/confirm/<uid>/<token>` on the site.
-- The access and refresh tokens already issued stay valid after a change (they are not revoked); the access token
-  lasts an hour.
+- A new password ends the sign-ins made with the old one (see below): the page signs in again for the user.
+
+## Log out of all devices
+
+`POST /auth/logout_all/` (signed in) ends **every** sign-in of the user made up to now, the one that asks included; other
+users are not touched. A JWT cannot be taken back once it is issued, so the server remembers, by user, the moment up to
+which the sign-ins are revoked (`UserProfile.sessions_revoked_at`) and refuses an access or a refresh token made for a
+sign-in up to then (**401**, `session_revoked`; the renewal at `/auth/jwt/refresh/` too). A token carries the moment of
+its sign-in in milliseconds (`iat_ms`): the standard `iat` is in seconds, too coarse to sign in again right after the
+revocation. A token made before this existed has no `iat_ms` and is read with its `iat`.
+
+- It is also done when a **password changes**, whoever changes it (the user, the e-mail of a forgotten one, an
+  administrator): every `save()` of a user with a new password. A bulk `update()` does not go through it.
+- A sign-in only updates the last login: it does not end the other sign-ins of the user, so a phone and a laptop live
+  together until one of them asks.
+- Nothing is written for a user who never revoked: the field is empty and the check costs one query by call.
 
 ## Deleting an account
 

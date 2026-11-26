@@ -53,6 +53,7 @@ from .views import (
     HardwareDetailAPIView,
     LaboratoryAPIView,
     LinkOrcidView,
+    LogoutEverywhereView,
     OntologySearchView,
     ProtocolViewSet,
     PublishSessionView,
@@ -217,6 +218,7 @@ urlpatterns = [
         "swagger/", SpectacularSwaggerView.as_view(url_name="schema"), name="swagger-ui"
     ),
     path("auth/", include(auth_router.urls)),
+    path("auth/logout_all/", LogoutEverywhereView.as_view(), name="logout-everywhere"),
     path("auth/", include("djoser.urls.jwt")),
     path("accounts/", include("allauth.socialaccount.urls")),
     path("accounts/", include("allauth.urls")),

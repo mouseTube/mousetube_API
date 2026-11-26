@@ -181,6 +181,12 @@
      "bool",
      "",
      "Shows the e-mail next to the recordings of the person. False by default."
+    ],
+    [
+     "sessions_revoked_at",
+     "datetime",
+     "n",
+     "Sign-ins made up to this moment are no longer valid (log out of all devices, change of password)."
     ]
    ]
   },

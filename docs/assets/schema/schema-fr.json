@@ -181,6 +181,12 @@
      "bool",
      "",
      "Montre l’e-mail à côté des enregistrements de la personne. Faux par défaut."
+    ],
+    [
+     "sessions_revoked_at",
+     "datetime",
+     "n",
+     "Les connexions faites jusqu’à cet instant ne sont plus valables (déconnexion de partout, changement de mot de passe)."
     ]
    ]
   },

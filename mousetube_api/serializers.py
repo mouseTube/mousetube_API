@@ -44,6 +44,7 @@ from mousetube_api.utils.page_views import normalize_page_path
 from mousetube_api.utils.publication import reset_auto_publish, schedule_sync
 from mousetube_api.utils.registration import email_is_verified
 from mousetube_api.utils.session_rights import session_rights
+from mousetube_api.utils.sessions import IAT_MS, signed_in_at_ms
 from mousetube_api.utils.validators import (
     validate_doi,
     validate_doi_link_consistency,
@@ -153,6 +154,12 @@ class PendingAwareTokenObtainPairSerializer(TokenObtainPairSerializer):
     which usernames exist. Exactly one extra password hash is computed in every failing
     case, so the response time does not give it away either.
     """
+
+    @classmethod
+    def get_token(cls, user):
+        token = super().get_token(user)
+        token[IAT_MS] = signed_in_at_ms()  # see utils/sessions.py
+        return token
 
     def validate(self, attrs):
         try:
@@ -321,7 +328,13 @@ class UserProfileSerializer(serializers.ModelSerializer):
             "orcid",
             "created_by",
             "administrator",
-        )  # orcid: verified flow only; created_by, administrator: the server
+            "sessions_revoked_at",
+        )  # orcid: verified flow only; created_by, administrator, sessions_revoked_at: the server
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        data.pop("sessions_revoked_at", None)  # nobody reads when somebody logged out
+        return data
 
 
 class ContactSerializer(ModerationMixin, serializers.ModelSerializer):

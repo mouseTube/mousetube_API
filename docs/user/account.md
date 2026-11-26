@@ -22,6 +22,12 @@ the new one twice. The new password follows the rules of the registration form: 
 not a common password. It does not need an e-mail. If you **forgot** it, use *Forgot your password?* on the sign-in
 page: you receive a link by e-mail.
 
+## Log out of all devices
+
+In the **Preferences** tab, the section **Sessions** has a button **Log out of all devices**: every device where you
+are signed in, this one included, is signed out, and you sign in again. Use it if you lost a phone or used a shared
+computer. Changing your password does the same on your other devices.
+
 ## Delete your account
 
 In the **Preferences** tab, the section **Delete my account** opens an e-mail to `mousetube@igbmc.fr`, already written
