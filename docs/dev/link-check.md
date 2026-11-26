@@ -34,3 +34,12 @@ The pause is only taken after a link that was really looked at: a check takes at
 
 `python manage.py check_dead_links` does the same, with the same code, and `--fill_name` also takes the name
 of the file from the answer when it has none.
+
+## Links to a whole Zenodo record
+
+A link `.../api/records/<id>/files-archive` is the zip of **every** file of a record (the tables of the detection tools
+too), and Zenodo no longer gives it to programs (403): the check marks the file as invalid and the button of the site
+fails. `python manage.py fix_zenodo_archive_links` shows the rows concerned and the link of the file that would replace
+each one; `--apply` writes them. The name is read in the record, because Zenodo tells capitals apart (`cage` in the row,
+`Cage` in the record); a row whose file is not in the record is left as it is. Run `check_dead_links` afterwards. The DOI
+of the row is the one of the whole record and is not changed.

@@ -36,3 +36,13 @@ tel lien (plus d'une demi-heure pour 1600 liens).
 
 `python manage.py check_dead_links` fait la même chose, avec le même code, et `--fill_name` prend aussi le nom du
 fichier dans la réponse quand il n'en a pas.
+
+## Liens vers un enregistrement Zenodo entier
+
+Un lien `.../api/records/<id>/files-archive` est le zip de **tous** les fichiers d'un enregistrement (les tableaux des
+outils de détection aussi), et Zenodo ne le donne plus aux programmes (403) : la vérification marque le fichier invalide
+et le bouton du site échoue. `python manage.py fix_zenodo_archive_links` montre les lignes concernées et le lien du
+fichier qui remplacerait chacun ; `--apply` l'écrit. Le nom est lu dans l'enregistrement, parce que Zenodo distingue les
+majuscules (`cage` dans la ligne, `Cage` dans l'enregistrement) ; une ligne dont le fichier n'est pas dans
+l'enregistrement est laissée telle quelle. Lancez ensuite `check_dead_links`. Le DOI de la ligne est celui de
+l'enregistrement entier et n'est pas modifié.

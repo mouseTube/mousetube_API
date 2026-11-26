@@ -433,3 +433,73 @@ class Stream(TestCase):
         with self.assertRaises(RuntimeError):
             asyncio.run(go())
         self.assertEqual(given, [1])
+
+
+class FixArchiveLinks(Base):
+    """The command that replaces the links to a whole record by the link of the file."""
+
+    ARCHIVE = "https://zenodo.org/api/records/222/files-archive"
+    TARGET = "mousetube_api.management.commands.fix_zenodo_archive_links.record_files"
+
+    def run_command(self, *args, names=("b c.wav", "Rat 3.wav")):
+        from django.core.management import call_command
+
+        out = io.StringIO()
+        files = [{"name": n, "size": 1, "url": ""} for n in names]
+        with mock.patch(self.TARGET, return_value=files):
+            call_command("fix_zenodo_archive_links", *args, stdout=out)
+        return out.getvalue()
+
+    def test_nothing_changes_without_apply(self):
+        row = self.file("b c.wav", self.ARCHIVE)
+        report = self.run_command()
+        row.refresh_from_db()
+        self.assertEqual(row.link, self.ARCHIVE)
+        self.assertIn("1 to change", report)
+
+    def test_apply_gives_the_link_of_the_file_and_leaves_the_others(self):
+        archive = self.file("b c.wav", self.ARCHIVE)
+        direct = self.file("a.wav", ZENODO.format("a.wav"))
+        elsewhere = self.file("e.wav", "https://genetics.wustl.edu/e.wav")
+        unnamed = self.file("", "https://zenodo.org/api/records/333/files-archive")
+        self.run_command("--apply")
+        for row in (archive, direct, elsewhere, unnamed):
+            row.refresh_from_db()
+        self.assertEqual(
+            archive.link, "https://zenodo.org/records/222/files/b%20c.wav?download=1"
+        )
+        self.assertEqual(direct.link, ZENODO.format("a.wav"))
+        self.assertEqual(elsewhere.link, "https://genetics.wustl.edu/e.wav")
+        self.assertEqual(
+            unnamed.link, "https://zenodo.org/api/records/333/files-archive"
+        )
+        # a second run finds nothing more to do
+        self.assertIn("0 changed", self.run_command("--apply"))
+
+    def test_the_case_of_the_name_is_the_one_of_the_record(self):
+        """Zenodo tells capitals apart: `cage` in the row, `Cage` in the record."""
+        row = self.file("rat 3 cage.wav", self.ARCHIVE)
+        self.run_command("--apply", names=("Rat 3 Cage.wav",))
+        row.refresh_from_db()
+        self.assertEqual(
+            row.link,
+            "https://zenodo.org/records/222/files/Rat%203%20Cage.wav?download=1",
+        )
+
+    def test_a_file_that_is_not_in_the_record_is_left_alone(self):
+        row = self.file("missing.wav", self.ARCHIVE)
+        report = self.run_command("--apply", names=("other.wav",))
+        row.refresh_from_db()
+        self.assertEqual(row.link, self.ARCHIVE)
+        self.assertIn("no such file in the record", report)
+
+    def test_zenodo_not_answering_changes_nothing(self):
+        from django.core.management import call_command
+
+        row = self.file("b c.wav", self.ARCHIVE)
+        out = io.StringIO()
+        with mock.patch(self.TARGET, side_effect=zenodo_files.ZenodoUnavailable()):
+            call_command("fix_zenodo_archive_links", "--apply", stdout=out)
+        row.refresh_from_db()
+        self.assertEqual(row.link, self.ARCHIVE)
+        self.assertIn("Zenodo does not answer", out.getvalue())
