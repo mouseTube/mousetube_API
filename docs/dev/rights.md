@@ -184,6 +184,9 @@ update waits for the validation (`zenodo_state` = `blocked`) and then runs by it
 | **Spectrogram and plot** | no | no | <span class="no">no (403)</span> | <span class="yes">yes</span> |
 | **Add detection results** (USV) | no | no | <span class="yes">yes</span>, on their own file | <span class="yes">yes</span> |
 | **Count a download** | <span class="yes">yes</span>, once per visitor, file and hour | same | same | same |
+| **See the files of the Zenodo record** (`GET /api/file/<id>/zenodo-files/`) | <span class="yes">if its session is shared or published</span> | same | <span class="yes">always</span> | <span class="yes">always</span> |
+| **Zip of a record** (`POST /api/file/<id>/record-download/`) | <span class="no">401</span> | <span class="yes">of the files they may see</span> | <span class="yes">yes</span> | <span class="yes">yes</span> |
+| **Zip of a dataset** (`POST /api/dataset/<id>/download/`) | <span class="no">401</span> | <span class="yes">what the page shows them</span> | same | <span class="yes">yes</span>, drafts too |
 
 A file of a draft or of a session under review answers **404** to everybody but its author and the
 administrators.

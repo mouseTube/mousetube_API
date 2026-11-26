@@ -22,6 +22,21 @@ Chaque carte vous donne, d'un coup d'œil :
     Les enregistrements vivent dans un dépôt comme Zenodo. **Download** ou le DOI vous y mène. mouseTube garde la
     description, le contexte et les liens.
 
+## Télécharger un fichier, un enregistrement ou un jeu de données
+
+- Le bouton **Download** en face du nom d'un fichier télécharge **seulement ce fichier** (son texte au survol le dit).
+- Sur la page **Dataset**, dépliez un fichier : la liste de **tous les fichiers de son enregistrement Zenodo**
+  apparaît (l'enregistrement, les tableaux des outils de détection, les images) avec leur taille. Le nom ouvre un
+  aperçu sur Zenodo et la flèche télécharge ce fichier. Tout le monde peut le faire.
+- **Connecté**, vous avez aussi **Download all (zip)** sur l'enregistrement, et sur le jeu de données un menu avec
+  **Sound files only** ou **All files** (enregistrements, images et analyses, un dossier par enregistrement). Le zip
+  est fabriqué pendant qu'il est envoyé ; un fichier qui n'a pas pu être lu est listé dans `_errors.txt` à l'intérieur.
+
+!!! note "Pourquoi se connecter pour un zip ?"
+    Zenodo ne donne plus le zip d'un enregistrement entier aux programmes : mouseTube le fabrique. Il est réservé
+    aux utilisateurs connectés pour que les robots ne prennent pas des jeux de données entiers. Les très gros jeux
+    de données sont refusés (500 fichiers ou 20 Gio par défaut) : téléchargez leurs fichiers un par un.
+
 ## Chercher
 
 Tapez dans la zone de recherche : elle regarde dans les noms des fichiers, des sessions et des animaux, le

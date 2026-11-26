@@ -21,6 +21,12 @@ and an access token that now lasts one hour and is renewed by the new frontend).
 7. Rebuild the image when a dependency is added (`defusedxml` reads the tables of the detection tools); `--build` does it. The Celery worker must know the tasks of the new version (the check of the links is one).
 8. The tables that authors chose to send to Zenodo are kept in `media/usv_results/` until they are published: include `media/` in the backups.
 9. The version of the API is the one of `pyproject.toml` (the documentation and `GET /api/version/` give it); the one of the website is in its `package.json`. The footer of the site shows both.
+10. A zip of a dataset is sent while it is made: nothing is written on the server and nothing has to be cleaned. The
+    proxies must not keep it (the API tells nginx not to, with `X-Accel-Buffering: no`) and must wait between two
+    chunks (nginx `proxy_read_timeout`, 420 s). Rows that still link to a whole Zenodo record (`.../files-archive`,
+    which Zenodo no longer gives to programs) are fixed with `python manage.py fix_zenodo_archive_links`, see the
+    [link check](link-check.md): preview, then `--apply`, then `check_dead_links`. Restart the web container (the API
+    does not reload its code).
 
 ## Pre-production: a local HAProxy in front of nginx
 

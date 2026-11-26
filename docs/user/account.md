@@ -15,6 +15,26 @@ Open the person icon in the top bar to reach your account.
 | **My hardware**, **My software** | The equipment and software you created, with their state (draft, waiting, validated). |
 | **API token** | A personal key for scripts. See below. |
 
+## Change your password
+
+On your account page, in the **Preferences** tab, the **Password** section changes it: type your **current password**, then
+the new one twice. The new password follows the rules of the registration form: at least 8 characters, not only digits,
+not a common password; a bar shows how strong it is. It does not need an e-mail. If you **forgot** it, use *Forgot your password?* on the sign-in
+page: you receive a link by e-mail.
+
+## Log out of all devices
+
+In the **Preferences** tab, the section **Sessions** has a button **Log out of all devices**: every device where you
+are signed in, this one included, is signed out, and you sign in again. Use it if you lost a phone or used a shared
+computer. Changing your password does the same on your other devices.
+
+## Delete your account
+
+In the **Preferences** tab, the section **Delete my account** opens an e-mail to `mousetube@igbmc.fr`, already written
+with your username and the address of your account. Send it from that address. An administrator deletes the account
+and answers within one month. Your profile and your sign-in are removed; the recordings and descriptions you added
+stay on mouseTube, no longer linked to your account, and what was published on Zenodo stays public there.
+
 ## Favorites
 
 Mark protocols, hardware, software, animal profiles, strains, laboratories, references or contacts as

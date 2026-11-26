@@ -53,7 +53,7 @@ flowchart LR
 - **API**: the models, the serializers, the views and the Django admin. Reads are open; writes need a JWT.
 - **Celery worker**: everything slow or external: reading and uploading files, depositing in Zenodo, updating a
   published record, checking the download links. It does not reload its code: **restart it after a deployment**.
-- **Redis**: the cache (rate limits, progress, download counter) and the queue of the worker.
+- **Redis**: the cache (rate limits, progress, download counter, the files of the Zenodo records, the places of the zip downloads) and the queue of the worker.
 - **MariaDB**: the data. The files themselves live in a repository (Zenodo); the API keeps their description.
 - **Vocabularies**: a term of an ontology is checked at its source (EBI OLS, ROR) before it is stored.
 

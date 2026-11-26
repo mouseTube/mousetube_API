@@ -7,6 +7,10 @@ _THROTTLED = (
     ("auth", "/auth/users/reset_password"),
     ("auth", "/auth/users/resend_activation"),
     ("auth", "/auth/users/activation"),
+    (
+        "auth",
+        "/auth/users/set_password",
+    ),  # the current password is asked: not to be guessed
     ("register", "/auth/users/"),
 )
 

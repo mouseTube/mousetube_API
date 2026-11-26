@@ -11,3 +11,46 @@
 ## S'inscrire avec ORCID
 
 Le formulaire peut être lancé depuis ORCID. ORCID ne donne que ce qui est public sur la fiche de la personne : le prénom et le nom remplissent le formulaire, et une adresse institutionnelle aussi si elle est publique (une adresse personnelle n'est pas proposée, elle serait refusée). Un nom ou une adresse privés sont laissés à saisir, et le formulaire le dit. L'adresse est confirmée par le lien qui lui est envoyé, comme toute autre : elle n'est jamais tenue pour vérifiée parce qu'ORCID l'a donnée.
+
+## Changer un mot de passe
+
+- **Connecté :** `POST /auth/users/set_password/` avec `current_password`, `new_password` et `re_new_password` (page
+  *Mon compte*, onglet *Preferences*, section *Password*). Le mot de passe actuel est demandé, donc une session volée ne
+  suffit pas, et aucun mail n'est nécessaire. Le nouveau mot de passe passe par les mêmes validateurs que
+  l'inscription. Les essais sont limités comme la connexion (10 par minute et par adresse), parce que le mot de passe
+  actuel pourrait y être deviné. L'API ne compare pas `re_new_password` à `new_password` : le formulaire du site le fait.
+- **Oublié :** `POST /auth/users/reset_password/` envoie un lien par mail (limité aussi), qui ouvre
+  `password/reset/confirm/<uid>/<token>` sur le site.
+- Un nouveau mot de passe met fin aux connexions faites avec l'ancien (voir plus bas) : la page reconnecte l'utilisateur.
+
+## Se déconnecter de partout
+
+`POST /auth/logout_all/` (connecté) met fin à **toutes** les connexions de l'utilisateur faites jusqu'à maintenant, celle
+qui le demande comprise ; les autres utilisateurs ne sont pas touchés. Un JWT ne peut pas être repris une fois émis : le
+serveur retient donc, par utilisateur, l'instant jusqu'auquel les connexions sont révoquées
+(`UserProfile.sessions_revoked_at`) et refuse un jeton d'accès ou de rafraîchissement fait pour une connexion jusqu'à
+cet instant (**401**, `session_revoked` ; le renouvellement sur `/auth/jwt/refresh/` aussi). Un jeton porte l'instant de
+sa connexion en millisecondes (`iat_ms`) : le `iat` standard est en secondes, trop grossier pour se reconnecter juste
+après la révocation. Un jeton fait avant cette fonction n'a pas de `iat_ms` et est lu avec son `iat`.
+
+- C'est aussi fait quand un **mot de passe change**, quel que soit celui qui le change (l'utilisateur, le mail d'un mot de
+  passe oublié, un administrateur) : chaque `save()` d'un utilisateur avec un nouveau mot de passe. Un `update()` en bloc
+  n'y passe pas.
+- Une connexion ne met à jour que la dernière connexion : elle ne met pas fin aux autres connexions de l'utilisateur, donc
+  un téléphone et un ordinateur vivent ensemble jusqu'à ce que l'un des deux le demande.
+- Rien n'est écrit pour un utilisateur qui n'a jamais révoqué : le champ est vide et la vérification coûte une requête par
+  appel.
+
+## Supprimer un compte
+
+Un utilisateur le demande par mail à `mousetube@igbmc.fr` (la section *Delete my account* de la page *Mon compte* l'écrit).
+Le droit à l'effacement du RGPD demande une réponse **dans un mois**.
+
+1. **Vérifier qui écrit :** le mail doit venir de l'adresse du compte. Sinon, demandez une confirmation depuis celle-ci.
+2. **Supprimer le compte** dans l'administration, *Users* : cochez-le, puis *Delete selected users*. Ne supprimez pas le
+   dernier administrateur.
+3. **Ce qui reste :** le profil est supprimé avec le compte. Les sessions, fichiers et entrées que l'utilisateur a créés
+   sont gardés, avec `created_by` vidé : ils restent, sans lien avec la personne. Les noms saisis en texte (un contact,
+   un auteur dans une description) ne sont pas liés au compte et restent ; retirez-les à la main si la personne le demande.
+4. **Ce qui n'est pas à nous :** un enregistrement déjà publié sur Zenodo y reste public, selon ses propres règles.
+5. **Répondre** à la personne, et garder une trace de la demande et de sa date (pour montrer que le délai a été tenu).

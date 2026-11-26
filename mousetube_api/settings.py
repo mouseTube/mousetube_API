@@ -254,7 +254,7 @@ REST_FRAMEWORK = {
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
     "DEFAULT_AUTHENTICATION_CLASSES": [
         # "rest_framework.authentication.TokenAuthentication",
-        "rest_framework_simplejwt.authentication.JWTAuthentication",
+        "mousetube_api.utils.sessions.RevocableJWTAuthentication",
     ],
     # Only brute-forceable auth endpoints are throttled (see mousetube_api/throttles.py).
     "DEFAULT_THROTTLE_CLASSES": ["mousetube_api.throttles.AuthEndpointsThrottle"],
@@ -358,6 +358,7 @@ DJOSER = {
 SIMPLE_JWT = {
     "TOKEN_OBTAIN_SERIALIZER": "mousetube_api.serializers.PendingAwareTokenObtainPairSerializer",  # nosec B105 - dotted path of a class, not a secret
     # Short-lived: the frontend renews it with the refresh token (plugins/axios-refresh.ts).
+    "TOKEN_REFRESH_SERIALIZER": "mousetube_api.utils.sessions.RevocableTokenRefreshSerializer",  # nosec B105
     "ACCESS_TOKEN_LIFETIME": timedelta(hours=1),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
 }

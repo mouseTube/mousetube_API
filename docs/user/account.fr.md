@@ -15,6 +15,26 @@ Ouvrez l'icône de personne dans la barre du haut pour accéder à votre compte.
 | **My hardware**, **My software** | Le matériel et les logiciels que vous avez créés, avec leur état (brouillon, en attente, validé). |
 | **API token** | Une clé personnelle pour des scripts. Voir ci-dessous. |
 
+## Changer son mot de passe
+
+Sur la page de votre compte, dans l'onglet **Preferences**, la section **Password** le change : saisissez votre **mot de passe
+actuel**, puis le nouveau deux fois. Le nouveau mot de passe suit les règles du formulaire d'inscription : au moins 8
+caractères, pas uniquement des chiffres, pas un mot de passe courant ; une barre indique sa force. Il ne demande pas de mail. Si vous l'avez
+**oublié**, utilisez *Forgot your password?* sur la page de connexion : vous recevez un lien par e-mail.
+
+## Se déconnecter de tous les appareils
+
+Dans l'onglet **Preferences**, la section **Sessions** a un bouton **Log out of all devices** : tous les appareils où vous
+êtes connecté, celui-ci compris, sont déconnectés, et vous vous reconnectez. Utilisez-le si vous avez perdu un téléphone
+ou utilisé un ordinateur partagé. Changer votre mot de passe fait la même chose sur vos autres appareils.
+
+## Supprimer votre compte
+
+Dans l'onglet **Preferences**, la section **Delete my account** ouvre un mail vers `mousetube@igbmc.fr`, déjà rédigé
+avec votre identifiant et l'adresse de votre compte. Envoyez-le depuis cette adresse. Un administrateur supprime le
+compte et répond sous un mois. Votre profil et votre connexion sont supprimés ; les enregistrements et descriptions que
+vous avez ajoutés restent sur mouseTube, sans lien avec votre compte, et ce qui a été publié sur Zenodo y reste public.
+
 ## Favoris
 
 Marquez des protocoles, du matériel, des logiciels, des profils d'animaux, des souches, des laboratoires, des

@@ -55,7 +55,7 @@ flowchart LR
 - **Worker Celery** : tout ce qui est lent ou externe : lire et envoyer des fichiers, déposer dans Zenodo, mettre à
   jour une notice publiée, vérifier les liens de téléchargement. Il ne recharge pas son code : **redémarrez-le
   après un déploiement**.
-- **Redis** : le cache (limites de débit, progression, compteur de téléchargements) et la file du worker.
+- **Redis** : le cache (limites de débit, progression, compteur de téléchargements, fichiers des enregistrements Zenodo, places des téléchargements de zip) et la file du worker.
 - **MariaDB** : les données. Les fichiers eux-mêmes vivent dans un dépôt (Zenodo) ; l'API garde leur description.
 - **Vocabulaires** : un terme d'ontologie est vérifié à sa source (EBI OLS, ROR) avant d'être stocké.
 

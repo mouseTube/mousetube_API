@@ -3,7 +3,20 @@
 ## Questions
 
 ??? question "Faut-il un compte pour télécharger des enregistrements ?"
-    Non. Parcourir, chercher et télécharger est ouvert à tous. Il faut un compte pour ajouter des données.
+    Pas pour télécharger un fichier : parcourir, chercher et télécharger un fichier (ou n'importe quel fichier de
+    son enregistrement Zenodo, un par un) est ouvert à tous. Il faut un compte pour télécharger **tout un
+    enregistrement ou tout un jeu de données dans un seul zip**, et pour ajouter des données.
+
+??? question "Comment télécharger tout un jeu de données ?"
+    Connectez-vous, ouvrez la page **Dataset** et utilisez le bouton de téléchargement du jeu de données : choisissez
+    **Sound files only** (les enregistrements) ou **All files** (avec les images et les analyses). Pour obtenir tous
+    les fichiers d'un seul enregistrement, dépliez un fichier et utilisez **Download all (zip)**. Un jeu de données
+    très gros est refusé : téléchargez ses fichiers un par un.
+
+??? question "Comment changer mon mot de passe ?"
+    Sur la page de votre compte, onglet **Preferences**, section **Password** : saisissez votre mot de passe actuel et le
+    nouveau deux fois. Si vous l'avez oublié, utilisez *Forgot your password?* sur la page de connexion (un lien est
+    envoyé par e-mail).
 
 ??? question "Pourquoi ne puis-je pas m'inscrire avec mon adresse Gmail ?"
     mouseTube demande une adresse e-mail **institutionnelle** (université, institut de recherche, hôpital) parce

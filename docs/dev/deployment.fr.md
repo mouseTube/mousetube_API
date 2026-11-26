@@ -27,6 +27,12 @@ statuts, et un jeton d'accès qui dure maintenant une heure et est renouvelé pa
    publication : incluez `media/` dans les sauvegardes.
 9. La version de l'API est celle de `pyproject.toml` (la documentation et `GET /api/version/` la donnent) ; celle du
    site est dans son `package.json`. Le pied de page du site affiche les deux.
+10. Un zip de jeu de données est envoyé pendant qu'il est fabriqué : rien n'est écrit sur le serveur et rien n'est à
+    nettoyer. Les proxys ne doivent pas le garder (l'API le dit à nginx avec `X-Accel-Buffering: no`) et doivent attendre
+    entre deux morceaux (nginx `proxy_read_timeout`, 420 s). Les lignes qui renvoient encore vers un enregistrement Zenodo
+    entier (`.../files-archive`, que Zenodo ne donne plus aux programmes) se corrigent avec
+    `python manage.py fix_zenodo_archive_links`, voir la [vérification des liens](link-check.md) : aperçu, puis
+    `--apply`, puis `check_dead_links`. Redémarrez le conteneur web (l'API ne recharge pas son code).
 
 ## Préproduction : un HAProxy local devant nginx
 
