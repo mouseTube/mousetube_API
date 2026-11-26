@@ -242,29 +242,40 @@ class ZenodoFilesList(Base):
 
 
 class DatasetZip(Base):
+    """The zip of a dataset: every file of the Zenodo records of its files, one folder per record."""
+
     def setUp(self):
         super().setUp()
-        self.a = self.file("a.wav", ZENODO.format("a.wav"), size=8)
+        # record 111 holds a recording and a table; record 222 too (its row links to the whole record)
+        self.records = {
+            "111": [("a.wav", b"AAAAAAAA"), ("a_usvseg.csv", b"CC")],
+            "222": [("b c.wav", b"BBBB"), ("b c_ratrec.csv", b"DDD")],
+        }
+        self.a = self.file("a.wav", ZENODO.format("a.wav"))
         self.b = self.file(
-            "b c.wav", "https://zenodo.org/api/records/222/files-archive", size=4
+            "b c.wav", "https://zenodo.org/api/records/222/files-archive"
         )
         self.elsewhere = self.file("e.wav", "https://genetics.wustl.edu/e.wav")
-        self.bodies = {
-            "https://zenodo.org/records/111/files/a.wav?download=1": FakeAnswer(
-                b"AAAAAAAA"
-            ),
-            "https://zenodo.org/records/222/files/b%20c.wav?download=1": FakeAnswer(
-                b"BBBB"
-            ),
-        }
+        self.bodies = {}  # address of a file -> what is answered instead of its content
         patcher = mock.patch(
             "mousetube_api.utils.zenodo_files.requests.get", side_effect=self._get
         )
         self.get = patcher.start()
         self.addCleanup(patcher.stop)
 
+    def address(self, record, name):
+        return zenodo_files.file_url("zenodo.org", record, name)
+
     def _get(self, url, **kwargs):
-        return self.bodies[url]
+        for record, files in self.records.items():
+            if url == f"https://zenodo.org/api/records/{record}":
+                return FakeAnswer(
+                    {"files": [{"key": n, "size": len(b)} for n, b in files]}
+                )
+            for name, body in files:
+                if url == self.address(record, name):
+                    return self.bodies.get(url) or FakeAnswer(body)
+        raise AssertionError(f"unexpected request: {url}")
 
     def free(self):
         """True when no place is taken any more."""
@@ -287,11 +298,13 @@ class DatasetZip(Base):
         self.assertEqual(response.status_code, 403)
         self.get.assert_not_called()
 
-    def test_a_signed_in_user_gets_the_files_that_zenodo_holds(self):
+    def test_a_signed_in_user_gets_every_file_of_the_records(self):
         answer = self.post(self.owner)
         self.assertEqual(answer.status_code, 200)
-        self.assertEqual(answer.data["files"], 2)
-        self.assertEqual(answer.data["bytes"], 12)
+        self.assertEqual(
+            answer.data["files"], 4
+        )  # the tables too, not only the recordings
+        self.assertEqual(answer.data["bytes"], 8 + 2 + 4 + 3)
         self.assertEqual(answer.data["left_out"], 1)
         self.client.force_authenticate(None)
         response, archive = self.download(token=answer.data["token"])
@@ -300,17 +313,28 @@ class DatasetZip(Base):
         self.assertEqual(response["X-Accel-Buffering"], "no")
         self.assertIn("attachment", response["Content-Disposition"])
         self.assertEqual(archive.testzip(), None)
-        self.assertEqual(sorted(archive.namelist()), ["a.wav", "b c.wav"])
-        self.assertEqual(archive.read("a.wav"), b"AAAAAAAA")
-        self.assertEqual(archive.read("b c.wav"), b"BBBB")
+        self.assertEqual(
+            sorted(archive.namelist()),
+            ["a/a.wav", "a/a_usvseg.csv", "b c/b c.wav", "b c/b c_ratrec.csv"],
+        )
+        self.assertEqual(archive.read("a/a.wav"), b"AAAAAAAA")
+        self.assertEqual(archive.read("b c/b c_ratrec.csv"), b"DDD")
         self.assertTrue(self.free())
 
-    def test_the_file_of_a_whole_record_link_is_fetched_by_its_name(self):
+    def test_a_record_is_only_fetched_once_when_two_files_share_it(self):
+        self.file("a2.wav", ZENODO.format("a2.wav"))  # same record 111 as `a.wav`
+        _, archive = self.download(self.owner)
+        self.assertEqual(
+            sorted(n for n in archive.namelist() if n.startswith("a")),
+            ["a/a.wav", "a/a_usvseg.csv"],
+        )
+
+    def test_a_row_that_links_the_whole_record_is_fetched_by_the_files_of_the_record(
+        self,
+    ):
         self.download(self.owner)
         asked = [call.args[0] for call in self.get.call_args_list]
-        self.assertIn(
-            "https://zenodo.org/records/222/files/b%20c.wav?download=1", asked
-        )
+        self.assertIn(self.address("222", "b c.wav"), asked)
         self.assertNotIn("https://zenodo.org/api/records/222/files-archive", asked)
 
     def test_the_token_is_for_one_dataset_one_use_and_two_minutes(self):
@@ -329,30 +353,32 @@ class DatasetZip(Base):
         """A draft put in a dataset is shown to the administrators only, its author included."""
         hidden = self.session_of("draft", "S2")
         self.dataset.recording_session_list.add(hidden)
-        self.file("secret.wav", ZENODO.format("secret.wav"), session=hidden)
-        self.bodies[ZENODO.format("secret.wav")] = FakeAnswer(b"SECRET")
+        self.records["444"] = [("secret.wav", b"SECRET")]
+        self.file(
+            "secret.wav",
+            "https://zenodo.org/records/444/files/secret.wav",
+            session=hidden,
+        )
         admin = get_user_model().objects.create_user(
             "adm", "adm@igbmc.fr", "x", is_staff=True
         )
         for user in (self.other, self.owner):
             _, archive = self.download(user)
-            self.assertNotIn("secret.wav", archive.namelist())
+            self.assertNotIn("secret/secret.wav", archive.namelist())
         _, archive = self.download(admin)
-        self.assertIn("secret.wav", archive.namelist())
+        self.assertIn("secret/secret.wav", archive.namelist())
 
     def test_a_file_that_fails_is_listed_and_does_not_stop_the_others(self):
-        self.bodies["https://zenodo.org/records/111/files/a.wav?download=1"] = (
-            FakeAnswer(fail=True)
-        )
+        self.bodies[self.address("111", "a.wav")] = FakeAnswer(fail=True)
         _, archive = self.download(self.owner)
-        self.assertEqual(sorted(archive.namelist()), ["_errors.txt", "b c.wav"])
-        self.assertIn("a.wav", archive.read("_errors.txt").decode())
+        self.assertNotIn("a/a.wav", archive.namelist())
+        self.assertIn("a/a_usvseg.csv", archive.namelist())
+        self.assertIn("b c/b c.wav", archive.namelist())
+        self.assertIn("a/a.wav", archive.read("_errors.txt").decode())
         self.assertTrue(self.free())
 
     def test_a_file_cut_short_is_listed(self):
-        self.bodies["https://zenodo.org/records/111/files/a.wav?download=1"] = (
-            FakeAnswer(b"AAAAAAAA", cut_after=4)
-        )
+        self.bodies[self.address("111", "a.wav")] = FakeAnswer(b"AAAAAAAA", cut_after=4)
         _, archive = self.download(self.owner)
         self.assertIn("incomplete", archive.read("_errors.txt").decode())
 
@@ -361,7 +387,6 @@ class DatasetZip(Base):
         response, _ = self.download(self.owner)
         self.assertEqual(response.status_code, 429)
         self.assertEqual(response["Retry-After"], "120")
-        self.get.assert_not_called()
 
     @override_settings(DATASET_ZIP_PARALLEL=1)
     def test_the_server_makes_a_limited_number_of_zips_at_once(self):
@@ -371,13 +396,21 @@ class DatasetZip(Base):
         # the place of the user is given back, so the next try is not blocked by itself
         self.assertFalse(cache.get(f"dataset-zip:user:{self.owner.pk}"))
 
-    @override_settings(DATASET_ZIP_MAX_FILES=1)
+    @override_settings(DATASET_ZIP_MAX_FILES=3)
     def test_too_many_files_are_refused_before_anything_starts(self):
         self.assertEqual(self.post(self.owner).status_code, 413)
 
     @override_settings(DATASET_ZIP_MAX_BYTES=10)
     def test_a_dataset_too_heavy_is_refused_before_anything_starts(self):
+        """The sizes come from Zenodo, so the limit works when the rows have no size."""
         self.assertEqual(self.post(self.owner).status_code, 413)
+
+    def test_zenodo_not_answering_is_said_not_crashed(self):
+        self.client.force_authenticate(self.owner)
+        with mock.patch.object(
+            views, "record_files", side_effect=zenodo_files.ZenodoUnavailable()
+        ):
+            self.assertEqual(self.client.post(self.url()).status_code, 502)
 
     def test_a_dataset_without_file_on_zenodo_is_a_404(self):
         File.objects.exclude(pk=self.elsewhere.pk).delete()
@@ -385,8 +418,8 @@ class DatasetZip(Base):
 
     def test_the_size_limit_stops_the_zip_and_says_so(self):
         entries = [
-            ("a.wav", "https://zenodo.org/records/111/files/a.wav?download=1", 8),
-            ("b c.wav", "https://zenodo.org/records/222/files/b%20c.wav?download=1", 4),
+            ("a.wav", self.address("111", "a.wav"), 8),
+            ("b c.wav", self.address("222", "b c.wav"), 4),
         ]
         body = b"".join(zenodo_files.iter_zip(entries, max_bytes=4))
         archive = zipfile.ZipFile(io.BytesIO(body))

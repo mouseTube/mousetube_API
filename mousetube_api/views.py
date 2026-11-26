@@ -107,9 +107,7 @@ from mousetube_api.utils.session_rights import session_rights
 from mousetube_api.utils.zenodo_files import (
     ZenodoBusy,
     ZenodoUnavailable,
-    file_url,
     iter_zip,
-    name_in,
     record_files,
     record_of,
 )
@@ -2173,22 +2171,26 @@ DATASET_ZIP_LOCK_SECONDS = (
 
 
 def _dataset_zip_entries(dataset, user):
-    """What the zip of `dataset` holds for `user`: the files of the sessions the user may see that
-    Zenodo holds, as ((name in the zip, address, size)), and how many were left out."""
+    """What the zip of `dataset` holds for `user`: every file of the Zenodo records of the files of
+    the sessions the user may see (the recordings, but also the tables of the detection tools and
+    the images that go with them), one folder per record, as ((name in the zip, address, size)),
+    and how many files of the dataset Zenodo does not hold (left out)."""
     files = File.objects.filter(recording_session__in=visible_sessions(dataset, user))
-    entries, left_out, names = [], 0, set()
+    records, left_out = {}, 0
     for file in files.order_by("name", "id"):
         record = record_of(file.link)
         if not record:
             left_out += 1
-            continue
-        name = file.name
-        if name in names:  # two sessions can have a file of the same name
-            name = f"{file.pk}_{name}"
-        names.add(name)
-        entries.append(
-            (name, file_url(*record, name_in(file.link, file.name)), file.size)
-        )
+        else:  # the first file of a record names its folder; two files can share a record
+            records.setdefault(record, file)
+    entries, folders = [], set()
+    for record, file in records.items():
+        folder = os.path.splitext(file.name or "")[0] or f"record_{record[1]}"
+        if folder in folders:  # two records can have a file of the same name
+            folder = f"{folder}_{record[1]}"
+        folders.add(folder)
+        for item in record_files(*record):
+            entries.append((f"{folder}/{item['name']}", item["url"], item["size"]))
     return entries, left_out
 
 
