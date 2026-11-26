@@ -5,6 +5,10 @@
 ??? question "Do I need an account to download recordings?"
     No. Browsing, searching and downloading are open to everybody. You need an account to add data.
 
+??? question "How do I change my password?"
+    On your account page, **Preferences** tab, section **Password**: type your current password and the new one twice. If
+    you forgot it, use *Forgot your password?* on the sign-in page (a link is sent by e-mail).
+
 ??? question "Why can't I register with my Gmail address?"
     mouseTube asks for an **institutional** e-mail address (university, research institute, hospital) because
     an administrator checks that the data come from researchers. Use your work address.

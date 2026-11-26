@@ -5,6 +5,11 @@
 ??? question "Faut-il un compte pour télécharger des enregistrements ?"
     Non. Parcourir, chercher et télécharger est ouvert à tous. Il faut un compte pour ajouter des données.
 
+??? question "Comment changer mon mot de passe ?"
+    Sur la page de votre compte, onglet **Preferences**, section **Password** : saisissez votre mot de passe actuel et le
+    nouveau deux fois. Si vous l'avez oublié, utilisez *Forgot your password?* sur la page de connexion (un lien est
+    envoyé par e-mail).
+
 ??? question "Pourquoi ne puis-je pas m'inscrire avec mon adresse Gmail ?"
     mouseTube demande une adresse e-mail **institutionnelle** (université, institut de recherche, hôpital) parce
     qu'un administrateur vérifie que les données viennent de chercheurs. Utilisez votre adresse professionnelle.

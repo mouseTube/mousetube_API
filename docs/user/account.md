@@ -15,6 +15,13 @@ Open the person icon in the top bar to reach your account.
 | **My hardware**, **My software** | The equipment and software you created, with their state (draft, waiting, validated). |
 | **API token** | A personal key for scripts. See below. |
 
+## Change your password
+
+On your account page, in the **Preferences** tab, the **Password** section changes it: type your **current password**, then
+the new one twice. The new password follows the rules of the registration form: at least 8 characters, not only digits,
+not a common password. It does not need an e-mail. If you **forgot** it, use *Forgot your password?* on the sign-in
+page: you receive a link by e-mail.
+
 ## Favorites
 
 Mark protocols, hardware, software, animal profiles, strains, laboratories, references or contacts as

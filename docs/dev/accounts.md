@@ -11,3 +11,15 @@
 ## Registering with ORCID
 
 The form can be started from ORCID. ORCID only gives what is public on the record of the person: the first and last name fill the form, and so does an institutional address if one is public (a personal one is not offered, it would be refused). A name or an address that is private is left to type, and the form says so. The address is confirmed by the link that is sent to it, like any other: it is never taken as verified because ORCID gave it.
+
+## Changing a password
+
+- **Signed in:** `POST /auth/users/set_password/` with `current_password`, `new_password` and `re_new_password`
+  (page *My account*, tab *Preferences*, section *Password*). The current password is asked, so a stolen session is not
+  enough, and it needs no e-mail. The new password goes through the same validators as the registration. The
+  attempts are limited like the login (10 a minute per address), because the current password could be guessed
+  there. The API does not compare `re_new_password` with `new_password`: the form of the site does.
+- **Forgotten:** `POST /auth/users/reset_password/` sends a link by e-mail (also limited), which opens
+  `password/reset/confirm/<uid>/<token>` on the site.
+- The access and refresh tokens already issued stay valid after a change (they are not revoked); the access token
+  lasts an hour.

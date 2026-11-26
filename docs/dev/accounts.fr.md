@@ -11,3 +11,15 @@
 ## S'inscrire avec ORCID
 
 Le formulaire peut être lancé depuis ORCID. ORCID ne donne que ce qui est public sur la fiche de la personne : le prénom et le nom remplissent le formulaire, et une adresse institutionnelle aussi si elle est publique (une adresse personnelle n'est pas proposée, elle serait refusée). Un nom ou une adresse privés sont laissés à saisir, et le formulaire le dit. L'adresse est confirmée par le lien qui lui est envoyé, comme toute autre : elle n'est jamais tenue pour vérifiée parce qu'ORCID l'a donnée.
+
+## Changer un mot de passe
+
+- **Connecté :** `POST /auth/users/set_password/` avec `current_password`, `new_password` et `re_new_password` (page
+  *Mon compte*, onglet *Preferences*, section *Password*). Le mot de passe actuel est demandé, donc une session volée ne
+  suffit pas, et aucun mail n'est nécessaire. Le nouveau mot de passe passe par les mêmes validateurs que
+  l'inscription. Les essais sont limités comme la connexion (10 par minute et par adresse), parce que le mot de passe
+  actuel pourrait y être deviné. L'API ne compare pas `re_new_password` à `new_password` : le formulaire du site le fait.
+- **Oublié :** `POST /auth/users/reset_password/` envoie un lien par mail (limité aussi), qui ouvre
+  `password/reset/confirm/<uid>/<token>` sur le site.
+- Les jetons d'accès et de rafraîchissement déjà émis restent valables après un changement (ils ne sont pas révoqués) ;
+  le jeton d'accès dure une heure.
