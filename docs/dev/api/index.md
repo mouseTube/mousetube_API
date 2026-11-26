@@ -53,6 +53,9 @@ Authorization: Bearer <access token>
   **401** with `account_status`: `awaiting_email_confirmation` or `awaiting_review`.
 - Registration is `POST /auth/users/` (an **institutional** e-mail is required), then the user confirms the
   e-mail and an administrator activates the account. See [Account requests](../accounts.md).
+- A sign-in can be **revoked**: `POST /auth/logout_all/` ends every sign-in of the user, and a new password does too.
+  The access and the refresh token of a revoked sign-in answer **401**; sign in again. See
+  [Log out of all devices](../accounts.md#log-out-of-all-devices).
 
 !!! warning "Token = you"
     Whoever has your token acts as you. Keep it out of code others can read.

@@ -19,7 +19,7 @@ Ouvrez l'icône de personne dans la barre du haut pour accéder à votre compte.
 
 Sur la page de votre compte, dans l'onglet **Preferences**, la section **Password** le change : saisissez votre **mot de passe
 actuel**, puis le nouveau deux fois. Le nouveau mot de passe suit les règles du formulaire d'inscription : au moins 8
-caractères, pas uniquement des chiffres, pas un mot de passe courant. Il ne demande pas de mail. Si vous l'avez
+caractères, pas uniquement des chiffres, pas un mot de passe courant ; une barre indique sa force. Il ne demande pas de mail. Si vous l'avez
 **oublié**, utilisez *Forgot your password?* sur la page de connexion : vous recevez un lien par e-mail.
 
 ## Se déconnecter de tous les appareils

@@ -19,7 +19,7 @@ Open the person icon in the top bar to reach your account.
 
 On your account page, in the **Preferences** tab, the **Password** section changes it: type your **current password**, then
 the new one twice. The new password follows the rules of the registration form: at least 8 characters, not only digits,
-not a common password. It does not need an e-mail. If you **forgot** it, use *Forgot your password?* on the sign-in
+not a common password; a bar shows how strong it is. It does not need an e-mail. If you **forgot** it, use *Forgot your password?* on the sign-in
 page: you receive a link by e-mail.
 
 ## Log out of all devices
