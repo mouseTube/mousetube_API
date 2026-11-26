@@ -61,4 +61,16 @@ You can ask for a review (**waiting validation**) to make it available to everyb
 validates it. Two exceptions: a **protocol** is validated automatically (it has no free text), and a **study**
 is never reviewed (it is private to you).
 
-The exact rights, state by state, are in the [developer documentation](../dev/rights.md).
+## If a session cannot be published
+
+**Publish in a repository** needs everything the session uses to be validated. If something is not, the message
+names each entry, its state and what to do:
+
+| State of the entry | What to do |
+|---|---|
+| **draft**, yours | Open it (in the form of the entry, or in the *Hardware* and *Software* lists, or in your profile for the laboratory) and use **Submit for review**. |
+| **waiting validation** | Nothing: an administrator has to validate it. You are told by e-mail. |
+| **draft**, created by someone else | You cannot submit it: ask an administrator (this happens when an administrator sent a validated entry back to draft). |
+
+An **administrator** validates the entry in the *Review* page or in the Django admin; what an administrator creates is
+validated at once. When the entries are validated, publish again.

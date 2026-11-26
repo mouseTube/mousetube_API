@@ -173,7 +173,7 @@ update waits for the validation (`zenodo_state` = `blocked`) and then runs by it
 | `GET /api/recording-session/` | The **author's own** sessions (this route is the author's workspace; public sessions are read through the files and datasets). |
 | `PATCH` a session under review | 403 with the reason, unless the request only sets `status: "draft"` (withdraw). |
 | `DELETE` a session that is not a draft | 403. |
-| `POST /api/file/publish_session/` | The author (or an administrator); 409 if the session uses unvalidated entries, or is not shared, or has nothing new. |
+| `POST /api/file/publish_session/` | The author (or an administrator); 409 if the session uses unvalidated entries (the answer names each one, its state and what to do, in `detail` and in `entries`), or is not shared, or has nothing new. |
 | `POST /api/recording-session/<id>/auto-publish/` | The author, while the session waits for review: approves the preview so it is published when validated. |
 
 ## Files

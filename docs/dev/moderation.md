@@ -5,8 +5,9 @@ strain, animal profile) goes through the same states:
 
 `draft` -> `waiting validation` -> `validated`
 
-- The owner submits (or withdraws) an entry from the website; only an administrator
-  validates. A validated entry cannot be changed by its owner any more.
+- The owner submits (or withdraws) an entry from the website (the **Submit for review** button of
+  `ReviewStatus`, in the form of the entry, in the hardware and software lists and in the profile for the
+  laboratory); only an administrator validates. A validated entry cannot be changed by its owner any more.
 - Only validated entries are visible to everybody; drafts and entries waiting for review
   are visible to their owner only.
 - **Studies are not reviewed.** A study is private to the person who made it: each user lists,
@@ -26,7 +27,11 @@ strain, animal profile) goes through the same states:
   and nobody validated yet (a new microphone, an animal profile...) is **not shown to the
   others** (lists of files, datasets, exports, search) until an administrator validates it; the
   author and the administrators see everything. A session cannot be deposited in a repository
-  while it uses such entries. See `UnvalidatedIsNotPublicTests`, which reads every public route.
+  while it uses such entries: the 409 of `POST /api/file/publish_session/` names each entry, its state and what
+  to do (`detail` and `entries`). Every kind a session needs validated can be submitted from the website by its
+  owner (a protocol is validated by itself), so a session is never stuck: the way out is to submit the entry, or
+  for an administrator to validate it (what an administrator creates, and what he shares, is validated at once).
+  See `UnvalidatedIsNotPublicTests`, which reads every public route.
 
 ## Administrator's interface (Django admin)
 
@@ -34,6 +39,9 @@ strain, animal profile) goes through the same states:
 - Each type has a status filter and the actions *Validate the selected entries* and
   *Send back to draft (with a reason)*. The owner is told by e-mail (when we have an
   address), and the administrator is told when something is submitted.
+- Sending back entries that **shared or published sessions use** warns the administrator, with the names of the
+  sessions: they stay public but cannot be deposited in a repository until the entries are validated again (the
+  review page shows the same warning, `warning` in the answer of the decision).
 - A session shows the entries it still needs validated.
 
 ## Review page (website, administrators only)

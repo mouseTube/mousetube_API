@@ -173,7 +173,7 @@ mise à jour attend la validation (`zenodo_state` = `blocked`) puis s'exécute t
 | `GET /api/recording-session/` | Les sessions **de l'auteur** (cette route est l'espace de travail de l'auteur ; les sessions publiques se lisent par les fichiers et les jeux de données). |
 | `PATCH` d'une session en relecture | 403 avec la raison, sauf si la requête met seulement `status: "draft"` (retirer). |
 | `DELETE` d'une session qui n'est pas un brouillon | 403. |
-| `POST /api/file/publish_session/` | L'auteur (ou un administrateur) ; 409 si la session utilise des fiches non validées, n'est pas partagée, ou n'a rien de nouveau. |
+| `POST /api/file/publish_session/` | L'auteur (ou un administrateur) ; 409 si la session utilise des fiches non validées (la réponse nomme chacune, son état et quoi faire, dans `detail` et `entries`), n'est pas partagée, ou n'a rien de nouveau. |
 | `POST /api/recording-session/<id>/auto-publish/` | L'auteur, pendant que la session attend la relecture : approuve l'aperçu pour qu'elle soit publiée une fois validée. |
 
 ## Fichiers

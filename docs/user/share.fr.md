@@ -62,4 +62,16 @@ Vous pouvez demander une relecture (**waiting validation**) pour le rendre dispo
 administrateur l'a validé. Deux exceptions : un **protocole** est validé automatiquement (il n'a pas de texte libre),
 et une **étude** n'est jamais relue (elle vous est privée).
 
-Les droits exacts, état par état, sont dans la [documentation développeur](../dev/rights.md).
+## Si une session ne peut pas être publiée
+
+**Publish in a repository** demande que tout ce que la session utilise soit validé. Si ce n'est pas le cas, le message
+nomme chaque fiche, son état et quoi faire :
+
+| État de la fiche | Que faire |
+|---|---|
+| **draft**, à vous | Ouvrez-la (dans le formulaire de la fiche, dans les listes *Hardware* et *Software*, ou dans votre profil pour le laboratoire) et utilisez **Submit for review**. |
+| **waiting validation** | Rien : un administrateur doit la valider. Vous êtes prévenu par e-mail. |
+| **draft**, créée par quelqu'un d'autre | Vous ne pouvez pas la soumettre : demandez à un administrateur (cela arrive quand un administrateur a renvoyé en brouillon une fiche validée). |
+
+Un **administrateur** valide la fiche dans la page *Review* ou dans l'admin Django ; ce qu'un administrateur crée est
+validé tout de suite. Quand les fiches sont validées, publiez à nouveau.
