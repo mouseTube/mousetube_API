@@ -86,7 +86,7 @@ More precisely:
 | **Create** | Any signed-in user. The entry starts as `draft`. A visitor gets 401. |
 | **Change** | The author while the entry is `draft` or `waiting validation`; an administrator always. Nobody else. |
 | **Delete** | The author while it is a `draft` (not once submitted: withdraw it first); an administrator always. |
-| **Change the status** | The author moves it between `draft` and `waiting validation`. Only an administrator sets `validated` (anyone else gets 400 "Only administrators can validate"). |
+| **Change the status** | The author moves it between `draft` and `waiting validation`. Only an administrator sets `validated` (anyone else gets 400 "Only administrators can validate"). An entry **created by an administrator** is `validated` at once, unless the request asks for another status. |
 | **Use it in a session** | Any user may attach a `validated` entry or one of their own. The API refuses another user's draft. |
 
 ### What differs from the rule
@@ -143,6 +143,9 @@ When the author asks to share a draft:
   `shared` when an administrator validates it **with** what it uses, or as soon as the last missing entry is
   validated one by one. The author is told by e-mail. An administrator may also send it back to draft with a
   reason.
+- when an **administrator** shares a session (the status `shared` in the request), the entries it uses are validated
+  in the same step, as the admin action does: a shared session never keeps a draft entry, which would block its
+  deposit in a repository.
 
 The author can withdraw a session that waits for review, then edit it. A shared session cannot be taken back
 to a draft by its author.

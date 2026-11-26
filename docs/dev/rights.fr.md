@@ -86,7 +86,7 @@ Plus précisément :
 | **Créer** | Tout utilisateur connecté. La fiche commence en `draft`. Un visiteur reçoit 401. |
 | **Modifier** | L'auteur tant que la fiche est `draft` ou `waiting validation` ; un administrateur toujours. Personne d'autre. |
 | **Supprimer** | L'auteur tant que c'est un `draft` (pas une fois soumise : retirez-la d'abord) ; un administrateur toujours. |
-| **Changer le statut** | L'auteur la fait passer entre `draft` et `waiting validation`. Seul un administrateur met `validated` (tout autre reçoit 400 « Only administrators can validate »). |
+| **Changer le statut** | L'auteur la fait passer entre `draft` et `waiting validation`. Seul un administrateur met `validated` (tout autre reçoit 400 « Only administrators can validate »). Une fiche **créée par un administrateur** est `validated` tout de suite, sauf si la requête demande un autre statut. |
 | **L'utiliser dans une session** | Tout utilisateur peut attacher une fiche `validated` ou une des siennes. L'API refuse le brouillon d'un autre. |
 
 ### Ce qui diffère de la règle
@@ -143,6 +143,9 @@ Quand l'auteur demande à partager un brouillon :
   devient `shared` quand un administrateur la valide **avec** ce qu'elle utilise, ou dès que la dernière fiche
   manquante est validée une par une. L'auteur est prévenu par e-mail. Un administrateur peut aussi la renvoyer en
   draft avec une raison.
+- quand un **administrateur** partage une session (le statut `shared` dans la requête), les fiches qu'elle utilise sont
+  validées dans le même geste, comme le fait l'action de l'admin : une session partagée ne garde jamais une fiche en
+  brouillon, ce qui bloquerait son dépôt dans un dépôt de données.
 
 L'auteur peut retirer une session qui attend la relecture, puis la modifier. Une session partagée ne peut pas être
 remise en brouillon par son auteur.
