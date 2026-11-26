@@ -412,6 +412,12 @@ MAX_UPLOAD_SIZE = env.int("MAX_UPLOAD_SIZE", default=5 * 1024**3)
 # MAX_UPLOAD_SIZE and what the disk can hold right now minus this reserve.
 UPLOAD_FREE_SPACE_RESERVE = env.int("UPLOAD_FREE_SPACE_RESERVE", default=1024**3)
 
+# The zip of a dataset is sent while it is made (nothing is written on the server): what one zip may
+# hold (files, bytes) and how many are made at the same time on the whole server.
+DATASET_ZIP_MAX_FILES = env.int("DATASET_ZIP_MAX_FILES", default=500)
+DATASET_ZIP_MAX_BYTES = env.int("DATASET_ZIP_MAX_BYTES", default=20 * 1024**3)
+DATASET_ZIP_PARALLEL = env.int("DATASET_ZIP_PARALLEL", default=2)
+
 LOGS_DIR = Path(BASE_DIR) / "logs"
 LOGS_DIR.mkdir(exist_ok=True)
 

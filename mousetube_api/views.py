@@ -7,6 +7,7 @@ PHENOMIN, CNRS UMR7104, INSERM U964, Université de Strasbourg
 Code under GPL v3.0 licence
 """
 
+import asyncio
 import hashlib
 import json
 import ntpath
@@ -18,6 +19,7 @@ import django_filters
 from celery.result import AsyncResult
 from django.apps import apps
 from django.conf import settings
+from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
 from django.core import signing
 from django.core.cache import cache
@@ -38,7 +40,7 @@ from django.db.models import (
     When,
 )
 from django.db.models.functions import Cast
-from django.http import Http404
+from django.http import Http404, StreamingHttpResponse
 from django.shortcuts import get_object_or_404, render
 from django.utils.text import get_valid_filename
 from django.utils.timezone import now
@@ -71,7 +73,10 @@ from mousetube_api.tasks import (
     publish_session_deposition,
 )
 from mousetube_api.utils import link_check, ontologies, usv
-from mousetube_api.utils.dataset_metadata import build_dataset_metadata
+from mousetube_api.utils.dataset_metadata import (
+    build_dataset_metadata,
+    visible_sessions,
+)
 from mousetube_api.utils.email_domains import PERSONAL_EMAIL_DOMAINS
 from mousetube_api.utils.file_handler import (
     UploadError,
@@ -98,6 +103,16 @@ from mousetube_api.utils.repository import (
     get_repository_metadata_schema,
 )
 from mousetube_api.utils.session_rights import session_rights
+from mousetube_api.utils.zenodo_files import (
+    ZenodoBusy,
+    ZenodoUnavailable,
+    file_url,
+    iter_zip,
+    match_name,
+    name_in,
+    record_files,
+    record_of,
+)
 
 from .celery import app
 from .models import (
@@ -2114,6 +2129,330 @@ class FileDownloadView(APIView):
             File.objects.filter(pk=file.pk).update(downloads=F("downloads") + 1)
             file.refresh_from_db(fields=["downloads"])
         return Response({"downloads": file.downloads, "counted": counted})
+
+
+class FileZenodoFilesView(APIView):
+    """The files of the Zenodo record a file belongs to, with their size and download address,
+    for the visitors: they pick what they want instead of the whole archive (which Zenodo no longer
+    gives to programs). Public, like the page; the list is kept an hour."""
+
+    permission_classes = [AllowAny]
+    authentication_classes = []  # a stale token must not turn a visitor into a 401
+
+    @extend_schema(exclude=True)
+    def get(self, request, pk):
+        file = get_object_or_404(visible_files(request.user), pk=pk)
+        record = record_of(file.link)
+        if not record:
+            raise Http404
+        try:
+            files = record_files(*record)
+        except ZenodoBusy:
+            return Response(
+                {"detail": "Too many requests, try again in a minute."},
+                status=status.HTTP_429_TOO_MANY_REQUESTS,
+                headers={"Retry-After": "60"},
+            )
+        except ZenodoUnavailable:
+            return Response(
+                {"detail": "Zenodo does not answer."},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+        host, record_id = record
+        return Response(
+            {"record": f"https://{host}/records/{record_id}", "files": files}
+        )
+
+
+DATASET_ZIP_SALT = "dataset-zip"
+RECORD_ZIP_SALT = "record-zip"
+DATASET_ZIP_TOKEN_SECONDS = 120  # the address of the download is used right away, once
+DATASET_ZIP_LOCK_SECONDS = (
+    6 * 3600
+)  # a worker that died frees its place after this long
+
+
+def _dataset_zip_entries(dataset, user, scope="all"):
+    """What the zip of `dataset` holds for `user`, as ((name in the zip, address, size)), and how many
+    files of the dataset it does not hold (not on Zenodo, or not in their record).
+
+    `scope` is "sound": the file of each row, the recordings; or "all": every file of the Zenodo
+    record of each row (the tables of the detection tools and the images too), one folder per record."""
+    files = File.objects.filter(recording_session__in=visible_sessions(dataset, user))
+    if scope == "sound":
+        return _sound_entries(files)
+    records, left_out = {}, 0
+    for file in files.order_by("name", "id"):
+        record = record_of(file.link)
+        if not record:
+            left_out += 1
+        else:  # the first file of a record names its folder; two files can share a record
+            records.setdefault(record, file)
+    entries, folders = [], set()
+    for record, file in records.items():
+        folder = os.path.splitext(file.name or "")[0] or f"record_{record[1]}"
+        if folder in folders:  # two records can have a file of the same name
+            folder = f"{folder}_{record[1]}"
+        folders.add(folder)
+        for item in record_files(*record):
+            entries.append((f"{folder}/{item['name']}", item["url"], item["size"]))
+    return entries, left_out
+
+
+def _sound_entries(files):
+    """The file of each row that Zenodo holds. A link to the file gives its name; a link to the whole
+    record does not, so the name is read in the record (capitals as it spells them)."""
+    entries, left_out, names = [], 0, set()
+    for file in files.order_by("name", "id"):
+        record = record_of(file.link)
+        if not record:
+            left_out += 1
+            continue
+        size = file.size
+        if "/files/" in (file.link or ""):
+            name = name_in(file.link, file.name)
+        else:
+            listed = {item["name"]: item["size"] for item in record_files(*record)}
+            name = match_name(list(listed), file.name)
+            if name is None:
+                left_out += 1
+                continue
+            size = listed[name]
+        arcname = file.name
+        if arcname in names:  # two sessions can have a file of the same name
+            arcname = f"{file.pk}_{arcname}"
+        names.add(arcname)
+        entries.append((arcname, file_url(*record, name), size))
+    return entries, left_out
+
+
+def _take_dataset_zip_place(user):
+    """A place for one download: one per user and `DATASET_ZIP_PARALLEL` for the server. Returns
+    the function that gives it back, or `None` and the reason. The places expire by themselves.
+    A place holds the token of its download and only that download gives it back, once: a late
+    call cannot free the place of another download."""
+    mine = f"dataset-zip:user:{user.pk}"
+    owner = uuid.uuid4().hex
+    if not cache.add(mine, owner, DATASET_ZIP_LOCK_SECONDS):
+        return None, "You already have a download running."
+
+    def release(keys):
+        done = []
+
+        def give_back():
+            if done:
+                return
+            done.append(1)
+            for key in keys:
+                if cache.get(key) == owner:
+                    cache.delete(key)
+
+        return give_back
+
+    for number in range(settings.DATASET_ZIP_PARALLEL):
+        slot = f"dataset-zip:slot:{number}"
+        if cache.add(slot, owner, DATASET_ZIP_LOCK_SECONDS):
+            return release([mine, slot]), ""
+    release([mine])()
+    return None, "The server is busy with other downloads, try again in a few minutes."
+
+
+async def _stream(chunks, give_back):
+    """The chunks of the zip for the response. The zip is made in a thread (the files come from
+    Zenodo, one request after the other); whatever ends the download, the place is given back."""
+    iterator, end = iter(chunks), object()
+    try:
+        while True:
+            chunk = await asyncio.to_thread(next, iterator, end)
+            if chunk is end:
+                break
+            if chunk:
+                yield chunk
+    finally:
+        give_back()
+        try:
+            getattr(iterator, "close", lambda: None)()
+        except ValueError:  # a chunk is still being read in its thread: it ends with it
+            pass
+
+
+def _sync_stream(chunks, give_back):
+    """The same for a server that is not asynchronous (the development server, which would build the
+    whole zip in memory from an asynchronous stream): the chunks as they come, the place given back
+    when it ends or the visitor leaves."""
+    try:
+        yield from chunks
+    finally:
+        give_back()
+
+
+class _ZipResponse(StreamingHttpResponse):
+    """A zip that is sent while it is made. Django closes a response when it is done with it, read
+    or not (a visitor who leaves before the first byte): the place is given back then too."""
+
+    def __init__(self, stream, give_back, **kwargs):
+        super().__init__(stream, **kwargs)
+        self._give_back = give_back
+
+    def close(self):
+        try:
+            super().close()
+        finally:
+            self._give_back()
+
+
+class _SignedZipView(APIView):
+    """A zip of Zenodo files for the signed-in users only (robots would take everything). POST
+    (signed in): checks what is asked and gives a token. GET with that token, valid two minutes
+    and once: the zip, made while it is sent, nothing written on the server. A browser cannot send
+    the JWT of a link, hence the token. A subclass says what the zip holds (`plan`)."""
+
+    permission_classes = [AllowAny]
+    salt = ""  # one per kind of zip: the token of a dataset does not open the zip of a record
+    what = ""  # said in the messages
+    scopes = ("all",)  # the kinds that can be asked for; the last one is the default
+
+    def get_permissions(self):
+        return [IsAuthenticated()] if self.request.method == "POST" else [AllowAny()]
+
+    def plan(self, pk, user, scope):
+        """((name in the zip, address, size)), how many files were left out, name of the zip."""
+        raise NotImplementedError
+
+    def _plan_or_error(self, pk, user, scope):
+        try:
+            return self.plan(pk, user, scope), None
+        except ZenodoBusy:
+            return None, Response(
+                {"detail": "Too many requests to Zenodo, try again in a minute."},
+                status=status.HTTP_429_TOO_MANY_REQUESTS,
+                headers={"Retry-After": "60"},
+            )
+        except ZenodoUnavailable:
+            return None, Response(
+                {"detail": "Zenodo does not answer."},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+
+    @extend_schema(exclude=True)
+    def post(self, request, pk):
+        scope = request.data.get("scope", self.scopes[-1])
+        if scope not in self.scopes:
+            return Response(
+                {"detail": f"scope must be one of: {', '.join(self.scopes)}."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        planned, error = self._plan_or_error(pk, request.user, scope)
+        if error:
+            return error
+        entries, left_out, _ = planned
+        if not entries:
+            return Response(
+                {"detail": f"No file of this {self.what} is held by Zenodo."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        known = sum(size or 0 for _, _, size in entries)
+        if len(entries) > settings.DATASET_ZIP_MAX_FILES or (
+            known > settings.DATASET_ZIP_MAX_BYTES
+        ):
+            return Response(
+                {
+                    "detail": f"This {self.what} is too big to download in one go ({len(entries)} files, "
+                    f"{known // 1024**2} MB). Download its files one by one."
+                },
+                status=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            )
+        token = signing.dumps(
+            {"u": request.user.pk, "k": pk, "s": scope}, salt=self.salt
+        )
+        return Response(
+            {
+                "token": token,
+                "files": len(entries),
+                "bytes": known,
+                "left_out": left_out,
+            }
+        )
+
+    @extend_schema(exclude=True)
+    def get(self, request, pk):
+        token = request.query_params.get("token", "")
+        try:
+            data = signing.loads(
+                token, salt=self.salt, max_age=DATASET_ZIP_TOKEN_SECONDS
+            )
+        except signing.BadSignature:
+            data = {}
+        # a token is used once: it cannot be passed around
+        once = f"{self.salt}:token:" + hashlib.sha256(token.encode()).hexdigest()
+        if data.get("k") != pk or not cache.add(once, 1, DATASET_ZIP_TOKEN_SECONDS * 2):
+            return Response(
+                {"detail": "This download link is not valid any more."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        user = get_object_or_404(get_user_model(), pk=data["u"], is_active=True)
+        scope = data.get("s", self.scopes[-1])
+        if scope not in self.scopes:
+            raise Http404
+        planned, error = self._plan_or_error(pk, user, scope)
+        if error:
+            return error
+        entries, _, name = planned
+        if not entries:
+            raise Http404
+        give_back, reason = _take_dataset_zip_place(user)
+        if give_back is None:
+            return Response(
+                {"detail": reason},
+                status=status.HTTP_429_TOO_MANY_REQUESTS,
+                headers={"Retry-After": "120"},
+            )
+        chunks = iter_zip(entries, settings.DATASET_ZIP_MAX_BYTES)
+        # a request of an asynchronous server has a scope; the development server does not
+        stream = (_stream if hasattr(request, "scope") else _sync_stream)(
+            chunks, give_back
+        )
+        response = _ZipResponse(stream, give_back, content_type="application/zip")
+        response["Content-Disposition"] = f'attachment; filename="{name}.zip"'
+        response["Cache-Control"] = "no-store"
+        # nginx would keep the answer in a file on the disk of the server to go faster than the visitor
+        response["X-Accel-Buffering"] = "no"
+        return response
+
+
+class DatasetDownloadView(_SignedZipView):
+    """The files of a dataset that Zenodo holds, in one zip: "sound", the recordings only, or "all",
+    every file of their records (images and analyses too)."""
+
+    salt = DATASET_ZIP_SALT
+    what = "dataset"
+    scopes = ("sound", "all")
+
+    def plan(self, pk, user, scope):
+        dataset = get_object_or_404(Dataset, pk=pk)
+        entries, left_out = _dataset_zip_entries(dataset, user, scope)
+        base = (
+            get_valid_filename(f"mouseTube_{dataset.name}") or f"dataset_{dataset.pk}"
+        )
+        return entries, left_out, f"{base}_{scope}"
+
+
+class FileRecordDownloadView(_SignedZipView):
+    """Every file of the Zenodo record a file belongs to, in one zip: what the old link to the
+    whole record (`files-archive`) gave, which Zenodo no longer gives to programs."""
+
+    salt = RECORD_ZIP_SALT
+    what = "record"
+
+    def plan(self, pk, user, scope):
+        file = get_object_or_404(visible_files(user), pk=pk)
+        record = record_of(file.link)
+        if not record:
+            raise Http404
+        entries = [(f["name"], f["url"], f["size"]) for f in record_files(*record)]
+        stem = os.path.splitext(file.name or "")[0]
+        name = get_valid_filename(f"mouseTube_{stem}_record") or f"record_{record[1]}"
+        return entries, 0, name
 
 
 class FileFilterOptionsView(APIView):
