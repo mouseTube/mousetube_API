@@ -23,6 +23,46 @@ The form can be started from ORCID. ORCID only gives what is public on the recor
   `password/reset/confirm/<uid>/<token>` on the site.
 - A new password ends the sign-ins made with the old one (see below): the page signs in again for the user.
 
+## Changing the e-mail address
+
+The address recovers a forgotten password, so changing it is as sensitive as the password. `email` is read-only on
+`/auth/users/me/`; the change goes through two calls (`utils/email_change.py`), both for a signed-in user and limited
+like the login (10 a minute per address):
+
+1. `POST /auth/users/change_email/` with `new_email` and `current_password` (wrong password: **400**). The new address
+   follows the rules of the registration (institutional, not the current one). It answers **202** and sends a link to
+   the **new** address; the old address gets a notice with the new one partly hidden. The answer is the same when the
+   address belongs to another account (case does not matter), or when a limit is hit (5 requests an hour per user, one
+   mail per address every 10 minutes): nothing is sent and the answer does not tell. If the mail cannot be sent: **503**.
+2. `POST /auth/users/confirm_email_change/` with the `token` of the link (page `/account/confirm-email?token=…` of the
+   site; a visitor who is not signed in is sent to the login, then back). It changes `User.email` and replaces the
+   `EmailAddress` of the user by the new one, verified. The old address is told.
+
+The token is signed (`django.core.signing`, 24 hours) and holds the user, the old and the new address and a
+fingerprint of the password hash. So it works **once** (the address changes, so the old address no longer matches), dies
+when the **password changes**, and the confirmation checks again that the address is free (inside a transaction, the
+row of the user locked). It must be used **signed in as the user it was made for**: otherwise the owner of an address
+typed by mistake could take the account, then reset its password. The link is built from `FRONT_URL`, never from the
+`Host` header.
+
+## The account page: ORCID, figures, e-mails, export
+
+All for the signed-in user (`mousetube_api/profile_views.py`):
+
+- `POST /api/unlink-orcid/` with `current_password` empties `UserProfile.orcid` (and the allauth `SocialAccount`, if any).
+  Wrong password: **400**; limited like the login. The iD is then free for another account.
+- `GET /api/my-stats/` answers `date_joined`, `last_login`, `files` and `downloads` (the sum of `File.downloads` of the
+  files the user created). `last_login` is updated at each password sign-in (`SIMPLE_JWT["UPDATE_LAST_LOGIN"]`) and at
+  each ORCID sign-in; a renewal of the token does not count.
+- Notifications: `UserProfile.notify_validation` (decisions of the administrators on what the user submitted) and
+  `notify_publication` (end of a publication), both on by default, written with `PATCH /api/user_profile/<id>/`.
+  `notify_creator(obj, subject, text, kind=...)` checks them; the e-mails about the account (password, address, account
+  request) do not go through it and cannot be turned off.
+- `GET /api/my-data/` sends a JSON file (right of access, GDPR): the account, the profile, and every row the user
+  created (`created_by`) or marked as favorite, by model (`mousetube_api.File`...). The password hash, the revocation date
+  of the sign-ins and other users are not in it. Once a minute per user (**429**). Adding a model with a `created_by` to
+  the user adds it to the export, nothing to do.
+
 ## Log out of all devices
 
 `POST /auth/logout_all/` (signed in) ends **every** sign-in of the user made up to now, the one that asks included; other

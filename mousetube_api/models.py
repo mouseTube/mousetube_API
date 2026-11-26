@@ -79,6 +79,7 @@ class UserProfile(models.Model):
         country (CountryField): Country of the user.
         orcid (CharField): ORCID researcher identifier.
         email_public (BooleanField): Whether the e-mail is shown to visitors (default: no).
+        notify_validation, notify_publication (BooleanField): the optional e-mails the user receives.
         sessions_revoked_at (DateTimeField): Sign-ins made up to this moment are no longer valid (log out of all devices, change of password).
         administrator (BooleanField): Whether the user has admin privileges.
         date_joined (DateTimeField): Timestamp when the profile was created.
@@ -127,6 +128,14 @@ class UserProfile(models.Model):
         default=False,
         help_text="Show the e-mail address next to the recordings of this user "
         "(hidden from everybody else by default).",
+    )
+    notify_validation = models.BooleanField(
+        default=True,
+        help_text="E-mail when an administrator validates, or sends back, what the user submitted.",
+    )
+    notify_publication = models.BooleanField(
+        default=True,
+        help_text="E-mail when the publication of a session on the repository is done or fails.",
     )
 
     def __str__(self):

@@ -187,6 +187,18 @@
      "datetime",
      "n",
      "Les connexions faites jusqu’à cet instant ne sont plus valables (déconnexion de partout, changement de mot de passe)."
+    ],
+    [
+     "notify_validation",
+     "bool",
+     "",
+     "E-mail quand un administrateur valide, ou renvoie, ce que l'utilisateur a soumis."
+    ],
+    [
+     "notify_publication",
+     "bool",
+     "",
+     "E-mail quand la publication d'une session sur le dépôt est terminée ou échoue."
     ]
    ]
   },

@@ -356,6 +356,7 @@ DJOSER = {
 }
 
 SIMPLE_JWT = {
+    "UPDATE_LAST_LOGIN": True,  # the account page shows the last sign-in
     "TOKEN_OBTAIN_SERIALIZER": "mousetube_api.serializers.PendingAwareTokenObtainPairSerializer",  # nosec B105 - dotted path of a class, not a secret
     # Short-lived: the frontend renews it with the refresh token (plugins/axios-refresh.ts).
     "TOKEN_REFRESH_SERIALIZER": "mousetube_api.utils.sessions.RevocableTokenRefreshSerializer",  # nosec B105

@@ -122,7 +122,7 @@ def reset_auto_publish(session):
 def _tell_author(session, subject, text):
     from mousetube_api.utils.moderation import notify_creator
 
-    notify_creator(session, f"[mouseTube] {subject}", text)
+    notify_creator(session, f"[mouseTube] {subject}", text, kind="publication")
 
 
 def schedule_auto_publish(session):
