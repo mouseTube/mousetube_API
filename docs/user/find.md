@@ -22,6 +22,21 @@ Each card gives you, at a glance:
     The recordings live in a repository such as Zenodo. **Download** or the DOI takes you there. mouseTube
     keeps the description, the context and the links.
 
+## Download a file, a record or a dataset
+
+- The **Download** button in front of the name of a file downloads **only that file** (its hover text says so).
+- On the page **Dataset**, unfold a file: the list of **every file of its Zenodo record** appears (the recording, the
+  tables of the detection tools, the images) with their sizes. The name opens a preview on Zenodo and the arrow
+  downloads that file. Anyone can do this.
+- **Signed in**, you also get **Download all (zip)** on the record, and on the dataset a menu with **Sound files
+  only** or **All files** (recordings, images and analyses, one folder per record). The zip is made while it is
+  sent; a file that could not be read is listed in `_errors.txt` inside it.
+
+!!! note "Why sign in for a zip?"
+    Zenodo no longer gives the zip of a whole record to programs, so mouseTube makes it. It is kept for signed-in
+    users so that robots do not take whole datasets. Very large datasets are refused (500 files or 20 GiB by
+    default): download their files one by one.
+
 ## Search
 
 Type in the search box: it looks in the names of the files, sessions and animals, the protocol, the laboratory,

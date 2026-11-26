@@ -95,6 +95,37 @@ curl -s -X POST "$API/file/55/download/"
 
 It is open to everybody and counts **once per visitor, file and hour**, so a retry does not inflate it.
 
+### Files of a record, and zips
+
+The files of the Zenodo record of a file (the recording, the tables of the detection tools, the images), for
+everybody:
+
+```bash
+curl -s "$API/file/55/zenodo-files/"
+# {"record": "https://zenodo.org/records/20622419",
+#  "files": [{"name": "090916_S2-2-22_P06_2min.wav", "size": 72100000,
+#             "url": "https://zenodo.org/records/20622419/files/090916_S2-2-22_P06_2min.wav?download=1"}, ...]}
+```
+
+The list is kept an hour. It answers **404** for a file that Zenodo does not hold, **429** when too many records
+were read in the minute and **502** when Zenodo does not answer.
+
+The zip of a dataset or of a record is for **signed-in users** only. A link cannot carry your login, so ask for a
+token first (valid **two minutes, once**), then download with it:
+
+```bash
+TOKEN=$(curl -s -X POST "$API/dataset/7/download/" \
+  -H "Authorization: Bearer $ACCESS" -H "Content-Type: application/json" \
+  -d '{"scope": "sound"}' | python3 -c "import sys, json; print(json.load(sys.stdin)['token'])")
+curl -s -o dataset.zip "$API/dataset/7/download/?token=$TOKEN"
+```
+
+`scope` is `sound` (the recordings of the dataset) or `all` (the default: every file of their Zenodo records, one
+folder per record). For one record, `POST $API/file/<id>/record-download/`. The answer of the `POST` also gives
+`files`, `bytes` and `left_out` (the files of the dataset that Zenodo does not hold, not in the zip). It answers
+**413** when the zip is too big, **429** when you already have a download running or the server is busy. A file
+that could not be read is listed in `_errors.txt` inside the zip.
+
 ### Results of the detection tools
 
 A file lists its `usv_detections` (tool, number of calls, rate, frequencies). The calls themselves are read on

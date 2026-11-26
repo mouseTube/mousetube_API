@@ -95,6 +95,37 @@ curl -s -X POST "$API/file/55/download/"
 
 C'est ouvert à tous et compté **une fois par visiteur, fichier et heure**, donc un nouvel essai ne le gonfle pas.
 
+### Fichiers d'un enregistrement, et zips
+
+Les fichiers de l'enregistrement Zenodo d'un fichier (l'enregistrement, les tableaux des outils de détection, les
+images), pour tout le monde :
+
+```bash
+curl -s "$API/file/55/zenodo-files/"
+# {"record": "https://zenodo.org/records/20622419",
+#  "files": [{"name": "090916_S2-2-22_P06_2min.wav", "size": 72100000,
+#             "url": "https://zenodo.org/records/20622419/files/090916_S2-2-22_P06_2min.wav?download=1"}, ...]}
+```
+
+La liste est gardée une heure. Elle répond **404** pour un fichier que Zenodo n'héberge pas, **429** quand trop
+d'enregistrements ont été lus dans la minute et **502** quand Zenodo ne répond pas.
+
+Le zip d'un jeu de données ou d'un enregistrement est réservé aux **utilisateurs connectés**. Un lien ne peut pas
+porter votre connexion : demandez d'abord un jeton (valable **deux minutes, une seule fois**), puis téléchargez avec :
+
+```bash
+TOKEN=$(curl -s -X POST "$API/dataset/7/download/" \
+  -H "Authorization: Bearer $ACCESS" -H "Content-Type: application/json" \
+  -d '{"scope": "sound"}' | python3 -c "import sys, json; print(json.load(sys.stdin)['token'])")
+curl -s -o dataset.zip "$API/dataset/7/download/?token=$TOKEN"
+```
+
+`scope` vaut `sound` (les enregistrements du jeu de données) ou `all` (par défaut : tous les fichiers de leurs
+enregistrements Zenodo, un dossier par enregistrement). Pour un seul enregistrement, `POST $API/file/<id>/record-download/`.
+La réponse du `POST` donne aussi `files`, `bytes` et `left_out` (les fichiers du jeu de données que Zenodo n'héberge
+pas, absents du zip). Elle répond **413** quand le zip est trop gros, **429** quand vous avez déjà un téléchargement
+en cours ou que le serveur est occupé. Un fichier illisible est listé dans `_errors.txt` dans le zip.
+
 ### Résultats des outils de détection
 
 Un fichier liste ses `usv_detections` (outil, nombre d'appels, cadence, fréquences). Les appels eux-mêmes se lisent

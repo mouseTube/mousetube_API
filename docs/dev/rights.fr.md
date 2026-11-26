@@ -184,6 +184,9 @@ mise à jour attend la validation (`zenodo_state` = `blocked`) puis s'exécute t
 | **Spectrogramme et courbe** | non | non | <span class="no">non (403)</span> | <span class="yes">oui</span> |
 | **Ajouter des résultats de détection** (USV) | non | non | <span class="yes">oui</span>, sur son fichier | <span class="yes">oui</span> |
 | **Compter un téléchargement** | <span class="yes">oui</span>, une fois par visiteur, fichier et heure | pareil | pareil | pareil |
+| **Voir les fichiers de l'enregistrement Zenodo** (`GET /api/file/<id>/zenodo-files/`) | <span class="yes">si sa session est partagée ou publiée</span> | pareil | <span class="yes">toujours</span> | <span class="yes">toujours</span> |
+| **Zip d'un enregistrement** (`POST /api/file/<id>/record-download/`) | <span class="no">401</span> | <span class="yes">des fichiers qu'ils peuvent voir</span> | <span class="yes">oui</span> | <span class="yes">oui</span> |
+| **Zip d'un jeu de données** (`POST /api/dataset/<id>/download/`) | <span class="no">401</span> | <span class="yes">ce que la page leur montre</span> | pareil | <span class="yes">oui</span>, les brouillons aussi |
 
 Le fichier d'un brouillon ou d'une session en relecture répond **404** à tout le monde sauf à son auteur et aux
 administrateurs.

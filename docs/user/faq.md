@@ -3,7 +3,14 @@
 ## Questions
 
 ??? question "Do I need an account to download recordings?"
-    No. Browsing, searching and downloading are open to everybody. You need an account to add data.
+    Not to download a file: browsing, searching and downloading a file (or any file of its Zenodo record, one by
+    one) are open to everybody. You need an account to download a **whole record or a whole dataset in one zip**,
+    and to add data.
+
+??? question "How do I download a whole dataset?"
+    Sign in, open the page **Dataset** and use the download button of the dataset: choose **Sound files only**
+    (the recordings) or **All files** (with the images and the analyses). To get every file of one record, unfold
+    a file and use **Download all (zip)**. A very large dataset is refused: download its files one by one.
 
 ??? question "How do I change my password?"
     On your account page, **Preferences** tab, section **Password**: type your current password and the new one twice. If
