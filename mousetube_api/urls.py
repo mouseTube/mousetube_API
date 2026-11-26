@@ -39,6 +39,7 @@ from .views import (
     AnimalProfileViewSet,
     ContactViewSet,
     CountryAPIView,
+    DatasetDownloadView,
     DatasetViewSet,
     FavoriteViewSet,
     FileAPIView,
@@ -46,6 +47,7 @@ from .views import (
     FileDownloadView,
     FileFilterOptionsView,
     FileUploadAsyncView,
+    FileZenodoFilesView,
     HardwareAPIView,
     HardwareDetailAPIView,
     LaboratoryAPIView,
@@ -188,6 +190,16 @@ urlpatterns = [
     path("api/file/filters/", FileFilterOptionsView.as_view(), name="file-filters"),
     path(
         "api/file/<int:pk>/download/", FileDownloadView.as_view(), name="file-download"
+    ),
+    path(
+        "api/file/<int:pk>/zenodo-files/",
+        FileZenodoFilesView.as_view(),
+        name="file-zenodo-files",
+    ),
+    path(
+        "api/dataset/<int:pk>/download/",
+        DatasetDownloadView.as_view(),
+        name="dataset-download",
     ),
     path("api/file/<int:pk>/", FileDetailAPIView.as_view(), name="file-detail"),
     path("api/track-page/", TrackPageView.as_view(), name="track-page"),
