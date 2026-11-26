@@ -23,6 +23,29 @@ Le formulaire peut être lancé depuis ORCID. ORCID ne donne que ce qui est publ
   `password/reset/confirm/<uid>/<token>` sur le site.
 - Un nouveau mot de passe met fin aux connexions faites avec l'ancien (voir plus bas) : la page reconnecte l'utilisateur.
 
+## Changer l'adresse e-mail
+
+L'adresse sert à retrouver un mot de passe oublié : la changer est aussi sensible que le mot de passe. `email` est en
+lecture seule sur `/auth/users/me/` ; le changement passe par deux appels (`utils/email_change.py`), tous deux pour un
+utilisateur connecté et limités comme la connexion (10 par minute et par adresse) :
+
+1. `POST /auth/users/change_email/` avec `new_email` et `current_password` (mauvais mot de passe : **400**). La nouvelle
+   adresse suit les règles de l'inscription (institutionnelle, différente de l'actuelle). Réponse **202** et un lien
+   est envoyé à la **nouvelle** adresse ; l'ancienne reçoit un avis où la nouvelle est en partie masquée. La réponse est
+   la même quand l'adresse appartient à un autre compte (la casse ne compte pas) ou quand une limite est atteinte
+   (5 demandes par heure et par utilisateur, un mail par adresse toutes les 10 minutes) : rien n'est envoyé et la
+   réponse ne le dit pas. Si le mail ne peut pas partir : **503**.
+2. `POST /auth/users/confirm_email_change/` avec le `token` du lien (page `/account/confirm-email?token=…` du site ;
+   un visiteur non connecté est envoyé à la connexion, puis ramené). Il change `User.email` et remplace l'`EmailAddress`
+   de l'utilisateur par la nouvelle, vérifiée. L'ancienne adresse est prévenue.
+
+Le jeton est signé (`django.core.signing`, 24 heures) et contient l'utilisateur, l'ancienne et la nouvelle adresse et une
+empreinte du hash du mot de passe. Il ne marche donc qu'**une fois** (l'adresse change, l'ancienne ne correspond plus),
+meurt quand le **mot de passe change**, et la confirmation revérifie que l'adresse est libre (dans une transaction, la
+ligne de l'utilisateur verrouillée). Il doit être utilisé **connecté en tant que l'utilisateur pour lequel il a été
+fait** : sinon le propriétaire d'une adresse saisie par erreur pourrait prendre le compte, puis changer son mot de passe.
+Le lien est construit avec `FRONT_URL`, jamais avec l'en-tête `Host`.
+
 ## Se déconnecter de partout
 
 `POST /auth/logout_all/` (connecté) met fin à **toutes** les connexions de l'utilisateur faites jusqu'à maintenant, celle

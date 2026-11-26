@@ -54,6 +54,8 @@ Authorization: Bearer <jeton d'accès>
   avec `account_status` : `awaiting_email_confirmation` ou `awaiting_review`.
 - L'inscription est `POST /auth/users/` (une adresse e-mail **institutionnelle** est exigée), puis l'utilisateur
   confirme l'e-mail et un administrateur active le compte. Voir [Demandes de compte](../accounts.md).
+- L'adresse e-mail change en deux temps, `POST /auth/users/change_email/` puis `POST /auth/users/confirm_email_change/`
+  (un lien envoyé à la nouvelle adresse). Voir [Changer l'adresse e-mail](../accounts.md#changer-ladresse-e-mail).
 - Une connexion peut être **révoquée** : `POST /auth/logout_all/` met fin à toutes les connexions de l'utilisateur, et un
   nouveau mot de passe aussi. Le jeton d'accès et celui de rafraîchissement d'une connexion révoquée répondent **401** ;
   reconnectez-vous. Voir [Se déconnecter de partout](../accounts.md#se-deconnecter-de-partout).

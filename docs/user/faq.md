@@ -12,6 +12,10 @@
     (the recordings) or **All files** (with the images and the analyses). To get every file of one record, unfold
     a file and use **Download all (zip)**. A very large dataset is refused: download its files one by one.
 
+??? question "How do I change my e-mail address?"
+    On your account page, **Profile** tab, **Change e-mail**: type the new institutional address and your current
+    password. A link is sent to the new address; open it while signed in and the address changes.
+
 ??? question "How do I change my password?"
     On your account page, **Preferences** tab, section **Password**: type your current password and the new one twice. If
     you forgot it, use *Forgot your password?* on the sign-in page (a link is sent by e-mail).

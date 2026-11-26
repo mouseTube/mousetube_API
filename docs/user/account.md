@@ -22,6 +22,15 @@ the new one twice. The new password follows the rules of the registration form: 
 not a common password; a bar shows how strong it is. It does not need an e-mail. If you **forgot** it, use *Forgot your password?* on the sign-in
 page: you receive a link by e-mail.
 
+## Change your e-mail address
+
+On your account page, in the **Profile** tab, **Change e-mail** next to your address opens a form: type the new
+address (an **institutional** one, like at the registration) and your **current password**. A link is sent to the **new**
+address, valid 24 hours. Open it **while signed in** to mouseTube with your account: the address changes then, and
+not before. Your old address receives a message when you ask and when it changes, so you know if someone else did.
+The site never says whether an address is already used by another account: if you receive nothing, check the spelling
+and the spam folder, or use another address. A new password cancels a link not yet used.
+
 ## Log out of all devices
 
 In the **Preferences** tab, the section **Sessions** has a button **Log out of all devices**: every device where you

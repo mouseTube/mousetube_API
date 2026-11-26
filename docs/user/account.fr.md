@@ -22,6 +22,16 @@ actuel**, puis le nouveau deux fois. Le nouveau mot de passe suit les règles du
 caractères, pas uniquement des chiffres, pas un mot de passe courant ; une barre indique sa force. Il ne demande pas de mail. Si vous l'avez
 **oublié**, utilisez *Forgot your password?* sur la page de connexion : vous recevez un lien par e-mail.
 
+## Changer son adresse e-mail
+
+Sur la page de votre compte, dans l'onglet **Profile**, **Change e-mail** à côté de votre adresse ouvre un formulaire :
+saisissez la nouvelle adresse (une adresse **institutionnelle**, comme à l'inscription) et votre **mot de passe
+actuel**. Un lien est envoyé à la **nouvelle** adresse, valable 24 heures. Ouvrez-le **en étant connecté** à mouseTube
+avec votre compte : l'adresse change alors, et pas avant. Votre ancienne adresse reçoit un message quand vous le
+demandez et quand elle change, pour que vous sachiez si quelqu'un d'autre l'a fait. Le site ne dit jamais si une adresse
+est déjà utilisée par un autre compte : si vous ne recevez rien, vérifiez l'orthographe et les courriers indésirables,
+ou utilisez une autre adresse. Un nouveau mot de passe annule un lien pas encore utilisé.
+
 ## Se déconnecter de tous les appareils
 
 Dans l'onglet **Preferences**, la section **Sessions** a un bouton **Log out of all devices** : tous les appareils où vous
