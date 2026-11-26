@@ -106,7 +106,10 @@ from mousetube_api.utils.session_rights import session_rights
 from mousetube_api.utils.zenodo_files import (
     ZenodoBusy,
     ZenodoUnavailable,
+    file_url,
     iter_zip,
+    match_name,
+    name_in,
     record_files,
     record_of,
 )
@@ -2169,12 +2172,15 @@ DATASET_ZIP_LOCK_SECONDS = (
 )  # a worker that died frees its place after this long
 
 
-def _dataset_zip_entries(dataset, user):
-    """What the zip of `dataset` holds for `user`: every file of the Zenodo records of the files of
-    the sessions the user may see (the recordings, but also the tables of the detection tools and
-    the images that go with them), one folder per record, as ((name in the zip, address, size)),
-    and how many files of the dataset Zenodo does not hold (left out)."""
+def _dataset_zip_entries(dataset, user, scope="all"):
+    """What the zip of `dataset` holds for `user`, as ((name in the zip, address, size)), and how many
+    files of the dataset it does not hold (not on Zenodo, or not in their record).
+
+    `scope` is "sound": the file of each row, the recordings; or "all": every file of the Zenodo
+    record of each row (the tables of the detection tools and the images too), one folder per record."""
     files = File.objects.filter(recording_session__in=visible_sessions(dataset, user))
+    if scope == "sound":
+        return _sound_entries(files)
     records, left_out = {}, 0
     for file in files.order_by("name", "id"):
         record = record_of(file.link)
@@ -2190,6 +2196,33 @@ def _dataset_zip_entries(dataset, user):
         folders.add(folder)
         for item in record_files(*record):
             entries.append((f"{folder}/{item['name']}", item["url"], item["size"]))
+    return entries, left_out
+
+
+def _sound_entries(files):
+    """The file of each row that Zenodo holds. A link to the file gives its name; a link to the whole
+    record does not, so the name is read in the record (capitals as it spells them)."""
+    entries, left_out, names = [], 0, set()
+    for file in files.order_by("name", "id"):
+        record = record_of(file.link)
+        if not record:
+            left_out += 1
+            continue
+        size = file.size
+        if "/files/" in (file.link or ""):
+            name = name_in(file.link, file.name)
+        else:
+            listed = {item["name"]: item["size"] for item in record_files(*record)}
+            name = match_name(list(listed), file.name)
+            if name is None:
+                left_out += 1
+                continue
+            size = listed[name]
+        arcname = file.name
+        if arcname in names:  # two sessions can have a file of the same name
+            arcname = f"{file.pk}_{arcname}"
+        names.add(arcname)
+        entries.append((arcname, file_url(*record, name), size))
     return entries, left_out
 
 
@@ -2277,17 +2310,18 @@ class _SignedZipView(APIView):
     permission_classes = [AllowAny]
     salt = ""  # one per kind of zip: the token of a dataset does not open the zip of a record
     what = ""  # said in the messages
+    scopes = ("all",)  # the kinds that can be asked for; the last one is the default
 
     def get_permissions(self):
         return [IsAuthenticated()] if self.request.method == "POST" else [AllowAny()]
 
-    def plan(self, pk, user):
+    def plan(self, pk, user, scope):
         """((name in the zip, address, size)), how many files were left out, name of the zip."""
         raise NotImplementedError
 
-    def _plan_or_error(self, pk, user):
+    def _plan_or_error(self, pk, user, scope):
         try:
-            return self.plan(pk, user), None
+            return self.plan(pk, user, scope), None
         except ZenodoBusy:
             return None, Response(
                 {"detail": "Too many requests to Zenodo, try again in a minute."},
@@ -2302,7 +2336,13 @@ class _SignedZipView(APIView):
 
     @extend_schema(exclude=True)
     def post(self, request, pk):
-        planned, error = self._plan_or_error(pk, request.user)
+        scope = request.data.get("scope", self.scopes[-1])
+        if scope not in self.scopes:
+            return Response(
+                {"detail": f"scope must be one of: {', '.join(self.scopes)}."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        planned, error = self._plan_or_error(pk, request.user, scope)
         if error:
             return error
         entries, left_out, _ = planned
@@ -2322,7 +2362,9 @@ class _SignedZipView(APIView):
                 },
                 status=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
             )
-        token = signing.dumps({"u": request.user.pk, "k": pk}, salt=self.salt)
+        token = signing.dumps(
+            {"u": request.user.pk, "k": pk, "s": scope}, salt=self.salt
+        )
         return Response(
             {
                 "token": token,
@@ -2349,7 +2391,10 @@ class _SignedZipView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
         user = get_object_or_404(get_user_model(), pk=data["u"], is_active=True)
-        planned, error = self._plan_or_error(pk, user)
+        scope = data.get("s", self.scopes[-1])
+        if scope not in self.scopes:
+            raise Http404
+        planned, error = self._plan_or_error(pk, user, scope)
         if error:
             return error
         entries, _, name = planned
@@ -2376,18 +2421,20 @@ class _SignedZipView(APIView):
 
 
 class DatasetDownloadView(_SignedZipView):
-    """The files of a dataset that Zenodo holds, in one zip."""
+    """The files of a dataset that Zenodo holds, in one zip: "sound", the recordings only, or "all",
+    every file of their records (images and analyses too)."""
 
     salt = DATASET_ZIP_SALT
     what = "dataset"
+    scopes = ("sound", "all")
 
-    def plan(self, pk, user):
+    def plan(self, pk, user, scope):
         dataset = get_object_or_404(Dataset, pk=pk)
-        entries, left_out = _dataset_zip_entries(dataset, user)
-        name = (
+        entries, left_out = _dataset_zip_entries(dataset, user, scope)
+        base = (
             get_valid_filename(f"mouseTube_{dataset.name}") or f"dataset_{dataset.pk}"
         )
-        return entries, left_out, name
+        return entries, left_out, f"{base}_{scope}"
 
 
 class FileRecordDownloadView(_SignedZipView):
@@ -2397,7 +2444,7 @@ class FileRecordDownloadView(_SignedZipView):
     salt = RECORD_ZIP_SALT
     what = "record"
 
-    def plan(self, pk, user):
+    def plan(self, pk, user, scope):
         file = get_object_or_404(visible_files(user), pk=pk)
         record = record_of(file.link)
         if not record:

@@ -337,6 +337,76 @@ class DatasetZip(Base):
         self.assertEqual(archive.read("a/a.wav"), b"AAAAAAAA")
         self.assertTrue(self.free())
 
+    def ask(self, scope=None, user=None):
+        self.client.force_authenticate(user or self.owner)
+        data = {"scope": scope} if scope else {}
+        answer = self.client.post(self.url(), data, format="json")
+        self.client.force_authenticate(None)
+        return answer
+
+    def test_the_sound_scope_holds_the_recordings_only(self):
+        answer = self.ask("sound")
+        self.assertEqual(answer.status_code, 200)
+        self.assertEqual(answer.data["files"], 2)  # the recordings, not the tables
+        response, archive = self.download(token=answer.data["token"])
+        self.assertEqual(sorted(archive.namelist()), ["a.wav", "b c.wav"])
+        self.assertEqual(archive.read("a.wav"), b"AAAAAAAA")
+        self.assertEqual(archive.read("b c.wav"), b"BBBB")
+        self.assertIn("_sound.zip", response["Content-Disposition"])
+
+    def test_the_all_scope_is_the_default_and_says_so_in_the_name(self):
+        response, archive = self.download(token=self.ask().data["token"])
+        self.assertIn("_all.zip", response["Content-Disposition"])
+        self.assertIn("a/a_usvseg.csv", archive.namelist())
+
+    def test_the_all_scope_can_be_asked_for(self):
+        response, archive = self.download(token=self.ask("all").data["token"])
+        self.assertIn("_all.zip", response["Content-Disposition"])
+        self.assertIn("b c/b c_ratrec.csv", archive.namelist())
+
+    def test_the_scope_is_in_the_token_and_cannot_be_changed(self):
+        token = signing.dumps(
+            {"u": self.owner.pk, "k": self.dataset.pk, "s": "sound"},
+            salt=views.DATASET_ZIP_SALT,
+        )
+        _, archive = self.download(token=token)
+        self.assertEqual(sorted(archive.namelist()), ["a.wav", "b c.wav"])
+        forged = signing.dumps(
+            {"u": self.owner.pk, "k": self.dataset.pk, "s": "everything"},
+            salt=views.DATASET_ZIP_SALT,
+        )
+        self.assertEqual(self.download(token=forged)[0].status_code, 404)
+
+    def test_an_unknown_scope_is_refused(self):
+        self.assertEqual(self.ask("images").status_code, 400)
+
+    def test_the_sound_scope_does_not_ask_zenodo_for_a_link_to_the_file(self):
+        self.download(token=self.ask("sound").data["token"])
+        asked = [call.args[0] for call in self.get.call_args_list]
+        self.assertNotIn(
+            "https://zenodo.org/api/records/111", asked
+        )  # `a.wav` links to its file
+        self.assertIn(
+            "https://zenodo.org/api/records/222", asked
+        )  # `b c.wav` links to the record
+
+    def test_the_sound_scope_reads_the_name_with_the_capitals_of_the_record(self):
+        self.records["222"] = [("B C.wav", b"BBBB")]  # the row says `b c.wav`
+        _, archive = self.download(token=self.ask("sound").data["token"])
+        self.assertEqual(
+            archive.read("b c.wav"), b"BBBB"
+        )  # named as the row in the zip
+        asked = [call.args[0] for call in self.get.call_args_list]
+        self.assertIn(self.address("222", "B C.wav"), asked)
+
+    def test_a_row_whose_file_is_not_in_its_record_is_left_out(self):
+        self.records["222"] = [("other.wav", b"X")]
+        answer = self.ask("sound")
+        self.assertEqual(answer.data["files"], 1)
+        self.assertEqual(
+            answer.data["left_out"], 2
+        )  # `e.wav` is elsewhere, `b c.wav` is not there
+
     def test_a_record_is_only_fetched_once_when_two_files_share_it(self):
         self.file("a2.wav", ZENODO.format("a2.wav"))  # same record 111 as `a.wav`
         _, archive = self.download(self.owner)

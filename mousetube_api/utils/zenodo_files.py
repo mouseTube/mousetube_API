@@ -55,6 +55,15 @@ def name_in(link, fallback):
     return fallback
 
 
+def match_name(names, name):
+    """The one of `names` that is `name`, or that only differs by its capitals (Zenodo tells them
+    apart: a row can say `cage` where the record says `Cage`); `None` when no name, or several."""
+    same = [n for n in names if n == name] or [
+        n for n in names if n.lower() == (name or "").lower()
+    ]
+    return same[0] if len(same) == 1 else None
+
+
 def _room():
     """False once `LOOKUPS_PER_MINUTE` lookups were made in the current minute."""
     key = f"zenodo-lookups:{int(time.time() // 60)}"

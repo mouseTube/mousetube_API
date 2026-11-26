@@ -5,6 +5,7 @@ from mousetube_api.utils.zenodo_files import (
     ZenodoBusy,
     ZenodoUnavailable,
     file_url,
+    match_name,
     record_files,
     record_of,
 )
@@ -57,12 +58,7 @@ class Command(BaseCommand):
         except ZenodoUnavailable:
             self.why = "Zenodo does not answer"
             return None
-        same = [n for n in names if n == name] or [
-            n for n in names if n.lower() == name.lower()
-        ]
-        if len(same) != 1:
-            self.why = (
-                "no such file in the record" if not same else "several files match"
-            )
-            return None
-        return same[0]
+        found = match_name(names, name)
+        if not found:
+            self.why = "no such file in the record"
+        return found
