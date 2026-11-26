@@ -105,7 +105,7 @@ class Base(TestCase):
 
     def token(self, user=None, dataset=None):
         return signing.dumps(
-            {"u": (user or self.owner).pk, "d": (dataset or self.dataset).pk},
+            {"u": (user or self.owner).pk, "k": (dataset or self.dataset).pk},
             salt=views.DATASET_ZIP_SALT,
         )
 
@@ -433,6 +433,106 @@ class Stream(TestCase):
         with self.assertRaises(RuntimeError):
             asyncio.run(go())
         self.assertEqual(given, [1])
+
+
+class RecordZip(Base):
+    """The zip of every file of the Zenodo record a file belongs to."""
+
+    API = "https://zenodo.org/api/records/111"
+    NAMES = {"a b.wav": b"AAAAAAAA", "a b_usvseg.csv": b"CCCC"}
+
+    def setUp(self):
+        super().setUp()
+        self.row = self.file("a b.wav", ZENODO.format("a%20b.wav"))
+        self.record = {
+            "files": [{"key": n, "size": len(b)} for n, b in self.NAMES.items()]
+        }
+        patcher = mock.patch(
+            "mousetube_api.utils.zenodo_files.requests.get", side_effect=self._get
+        )
+        self.get = patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def _get(self, url, **kwargs):
+        if url == self.API:
+            return FakeAnswer(self.record)
+        for name, body in self.NAMES.items():
+            if url == zenodo_files.file_url("zenodo.org", "111", name):
+                return FakeAnswer(body)
+        raise AssertionError(f"unexpected request: {url}")
+
+    def url(self, file=None):
+        return f"/api/file/{(file or self.row).pk}/record-download/"
+
+    def token(self, user=None, file=None, salt="record-zip"):
+        return signing.dumps(
+            {"u": (user or self.owner).pk, "k": (file or self.row).pk}, salt=salt
+        )
+
+    def zip_of(self, token, file=None):
+        response = self.client.get(self.url(file), {"token": token})
+        if response.status_code != 200:
+            return response, None
+        return response, zipfile.ZipFile(io.BytesIO(b"".join(response)))
+
+    def test_a_visitor_cannot_ask_for_it(self):
+        self.assertEqual(self.client.post(self.url()).status_code, 401)
+        self.assertEqual(self.client.get(self.url()).status_code, 403)
+
+    def test_a_signed_in_user_gets_every_file_of_the_record(self):
+        self.client.force_authenticate(self.owner)
+        answer = self.client.post(self.url())
+        self.assertEqual(answer.status_code, 200)
+        self.assertEqual((answer.data["files"], answer.data["bytes"]), (2, 12))
+        self.client.force_authenticate(None)
+        response, archive = self.zip_of(answer.data["token"])
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "application/zip")
+        self.assertEqual(response["X-Accel-Buffering"], "no")
+        self.assertIn("_record.zip", response["Content-Disposition"])
+        self.assertEqual(archive.testzip(), None)
+        self.assertEqual(sorted(archive.namelist()), sorted(self.NAMES))
+        self.assertEqual(archive.read("a b_usvseg.csv"), b"CCCC")
+        self.assertFalse(cache.get(f"dataset-zip:user:{self.owner.pk}"))
+
+    def test_the_token_of_a_dataset_does_not_open_a_record(self):
+        response, _ = self.zip_of(self.token(salt=views.DATASET_ZIP_SALT))
+        self.assertEqual(response.status_code, 403)
+
+    def test_the_token_is_for_one_file_and_one_use(self):
+        other = self.file("z.wav", ZENODO.format("z.wav"))
+        self.assertEqual(self.zip_of(self.token(file=other))[0].status_code, 403)
+        token = self.token()
+        self.assertEqual(self.zip_of(token)[0].status_code, 200)
+        self.assertEqual(self.zip_of(token)[0].status_code, 403)
+
+    def test_a_file_nobody_may_see_has_no_zip(self):
+        hidden = self.file(
+            "d.wav", ZENODO.format("d.wav"), session=self.session_of("draft", "S2")
+        )
+        self.client.force_authenticate(self.other)
+        self.assertEqual(self.client.post(self.url(hidden)).status_code, 404)
+
+    def test_a_file_that_zenodo_does_not_hold_has_no_zip(self):
+        elsewhere = self.file("e.wav", "https://genetics.wustl.edu/e.wav")
+        self.client.force_authenticate(self.owner)
+        self.assertEqual(self.client.post(self.url(elsewhere)).status_code, 404)
+
+    def test_zenodo_down_or_busy_is_said_not_crashed(self):
+        self.client.force_authenticate(self.owner)
+        with mock.patch.object(
+            views, "record_files", side_effect=zenodo_files.ZenodoUnavailable()
+        ):
+            self.assertEqual(self.client.post(self.url()).status_code, 502)
+        with mock.patch.object(
+            views, "record_files", side_effect=zenodo_files.ZenodoBusy()
+        ):
+            self.assertEqual(self.client.post(self.url()).status_code, 429)
+
+    @override_settings(DATASET_ZIP_MAX_BYTES=10)
+    def test_a_record_too_heavy_is_refused_before_anything_starts(self):
+        self.client.force_authenticate(self.owner)
+        self.assertEqual(self.client.post(self.url()).status_code, 413)
 
 
 class FixArchiveLinks(Base):

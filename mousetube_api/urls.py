@@ -46,6 +46,7 @@ from .views import (
     FileDetailAPIView,
     FileDownloadView,
     FileFilterOptionsView,
+    FileRecordDownloadView,
     FileUploadAsyncView,
     FileZenodoFilesView,
     HardwareAPIView,
@@ -195,6 +196,11 @@ urlpatterns = [
         "api/file/<int:pk>/zenodo-files/",
         FileZenodoFilesView.as_view(),
         name="file-zenodo-files",
+    ),
+    path(
+        "api/file/<int:pk>/record-download/",
+        FileRecordDownloadView.as_view(),
+        name="file-record-download",
     ),
     path(
         "api/dataset/<int:pk>/download/",

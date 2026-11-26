@@ -2165,6 +2165,7 @@ class FileZenodoFilesView(APIView):
 
 
 DATASET_ZIP_SALT = "dataset-zip"
+RECORD_ZIP_SALT = "record-zip"
 DATASET_ZIP_TOKEN_SECONDS = 120  # the address of the download is used right away, once
 DATASET_ZIP_LOCK_SECONDS = (
     6 * 3600
@@ -2224,24 +2225,47 @@ async def _stream(chunks, give_back):
             pass
 
 
-class DatasetDownloadView(APIView):
-    """The files of a dataset that Zenodo holds, in one zip, for the signed-in users only (robots
-    would take the whole dataset). POST (signed in): checks the dataset and gives a token. GET with
-    that token, valid two minutes and once: the zip, made while it is sent, nothing written on the
-    server. A browser cannot send the JWT of a link, hence the token."""
+class _SignedZipView(APIView):
+    """A zip of Zenodo files for the signed-in users only (robots would take everything). POST
+    (signed in): checks what is asked and gives a token. GET with that token, valid two minutes
+    and once: the zip, made while it is sent, nothing written on the server. A browser cannot send
+    the JWT of a link, hence the token. A subclass says what the zip holds (`plan`)."""
 
     permission_classes = [AllowAny]
+    salt = ""  # one per kind of zip: the token of a dataset does not open the zip of a record
+    what = ""  # said in the messages
 
     def get_permissions(self):
         return [IsAuthenticated()] if self.request.method == "POST" else [AllowAny()]
 
+    def plan(self, pk, user):
+        """((name in the zip, address, size)), how many files were left out, name of the zip."""
+        raise NotImplementedError
+
+    def _plan_or_error(self, pk, user):
+        try:
+            return self.plan(pk, user), None
+        except ZenodoBusy:
+            return None, Response(
+                {"detail": "Too many requests to Zenodo, try again in a minute."},
+                status=status.HTTP_429_TOO_MANY_REQUESTS,
+                headers={"Retry-After": "60"},
+            )
+        except ZenodoUnavailable:
+            return None, Response(
+                {"detail": "Zenodo does not answer."},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+
     @extend_schema(exclude=True)
     def post(self, request, pk):
-        dataset = get_object_or_404(Dataset, pk=pk)
-        entries, left_out = _dataset_zip_entries(dataset, request.user)
+        planned, error = self._plan_or_error(pk, request.user)
+        if error:
+            return error
+        entries, left_out, _ = planned
         if not entries:
             return Response(
-                {"detail": "No file of this dataset is held by Zenodo."},
+                {"detail": f"No file of this {self.what} is held by Zenodo."},
                 status=status.HTTP_404_NOT_FOUND,
             )
         known = sum(size or 0 for _, _, size in entries)
@@ -2250,14 +2274,12 @@ class DatasetDownloadView(APIView):
         ):
             return Response(
                 {
-                    "detail": f"This dataset is too big to download in one go ({len(entries)} files, "
+                    "detail": f"This {self.what} is too big to download in one go ({len(entries)} files, "
                     f"{known // 1024**2} MB). Download its files one by one."
                 },
                 status=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
             )
-        token = signing.dumps(
-            {"u": request.user.pk, "d": dataset.pk}, salt=DATASET_ZIP_SALT
-        )
+        token = signing.dumps({"u": request.user.pk, "k": pk}, salt=self.salt)
         return Response(
             {
                 "token": token,
@@ -2272,20 +2294,22 @@ class DatasetDownloadView(APIView):
         token = request.query_params.get("token", "")
         try:
             data = signing.loads(
-                token, salt=DATASET_ZIP_SALT, max_age=DATASET_ZIP_TOKEN_SECONDS
+                token, salt=self.salt, max_age=DATASET_ZIP_TOKEN_SECONDS
             )
         except signing.BadSignature:
             data = {}
         # a token is used once: it cannot be passed around
-        once = "dataset-zip:token:" + hashlib.sha256(token.encode()).hexdigest()
-        if data.get("d") != pk or not cache.add(once, 1, DATASET_ZIP_TOKEN_SECONDS * 2):
+        once = f"{self.salt}:token:" + hashlib.sha256(token.encode()).hexdigest()
+        if data.get("k") != pk or not cache.add(once, 1, DATASET_ZIP_TOKEN_SECONDS * 2):
             return Response(
                 {"detail": "This download link is not valid any more."},
                 status=status.HTTP_403_FORBIDDEN,
             )
         user = get_object_or_404(get_user_model(), pk=data["u"], is_active=True)
-        dataset = get_object_or_404(Dataset, pk=pk)
-        entries, _ = _dataset_zip_entries(dataset, user)
+        planned, error = self._plan_or_error(pk, user)
+        if error:
+            return error
+        entries, _, name = planned
         if not entries:
             raise Http404
         give_back, reason = _take_dataset_zip_place(user)
@@ -2295,9 +2319,6 @@ class DatasetDownloadView(APIView):
                 status=status.HTTP_429_TOO_MANY_REQUESTS,
                 headers={"Retry-After": "120"},
             )
-        name = (
-            get_valid_filename(f"mouseTube_{dataset.name}") or f"dataset_{dataset.pk}"
-        )
         response = StreamingHttpResponse(
             _stream(iter_zip(entries, settings.DATASET_ZIP_MAX_BYTES), give_back),
             content_type="application/zip",
@@ -2307,6 +2328,39 @@ class DatasetDownloadView(APIView):
         # nginx would keep the answer in a file on the disk of the server to go faster than the visitor
         response["X-Accel-Buffering"] = "no"
         return response
+
+
+class DatasetDownloadView(_SignedZipView):
+    """The files of a dataset that Zenodo holds, in one zip."""
+
+    salt = DATASET_ZIP_SALT
+    what = "dataset"
+
+    def plan(self, pk, user):
+        dataset = get_object_or_404(Dataset, pk=pk)
+        entries, left_out = _dataset_zip_entries(dataset, user)
+        name = (
+            get_valid_filename(f"mouseTube_{dataset.name}") or f"dataset_{dataset.pk}"
+        )
+        return entries, left_out, name
+
+
+class FileRecordDownloadView(_SignedZipView):
+    """Every file of the Zenodo record a file belongs to, in one zip: what the old link to the
+    whole record (`files-archive`) gave, which Zenodo no longer gives to programs."""
+
+    salt = RECORD_ZIP_SALT
+    what = "record"
+
+    def plan(self, pk, user):
+        file = get_object_or_404(visible_files(user), pk=pk)
+        record = record_of(file.link)
+        if not record:
+            raise Http404
+        entries = [(f["name"], f["url"], f["size"]) for f in record_files(*record)]
+        stem = os.path.splitext(file.name or "")[0]
+        name = get_valid_filename(f"mouseTube_{stem}_record") or f"record_{record[1]}"
+        return entries, 0, name
 
 
 class FileFilterOptionsView(APIView):
