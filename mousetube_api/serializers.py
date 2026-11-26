@@ -288,7 +288,8 @@ class CustomUserSerializer(serializers.ModelSerializer):
         fields = ["id", "username", "first_name", "last_name", "email", "is_staff"]
         # This serializer also answers PATCH /auth/users/me/: a user changes his own
         # name, nothing else. The role above all: it used to be writable, so anybody could
-        # make himself an administrator. The e-mail needs a confirmation (not built yet).
+        # make himself an administrator. The e-mail changes only through the confirmation of the
+        # new address (/auth/users/change_email/, see utils/email_change.py).
         read_only_fields = ["id", "username", "email", "is_staff"]
 
     def to_representation(self, instance):
