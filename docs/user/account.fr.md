@@ -22,6 +22,13 @@ actuel**, puis le nouveau deux fois. Le nouveau mot de passe suit les règles du
 caractères, pas uniquement des chiffres, pas un mot de passe courant. Il ne demande pas de mail. Si vous l'avez
 **oublié**, utilisez *Forgot your password?* sur la page de connexion : vous recevez un lien par e-mail.
 
+## Supprimer votre compte
+
+Dans l'onglet **Preferences**, la section **Delete my account** ouvre un mail vers `mousetube@igbmc.fr`, déjà rédigé
+avec votre identifiant et l'adresse de votre compte. Envoyez-le depuis cette adresse. Un administrateur supprime le
+compte et répond sous un mois. Votre profil et votre connexion sont supprimés ; les enregistrements et descriptions que
+vous avez ajoutés restent sur mouseTube, sans lien avec votre compte, et ce qui a été publié sur Zenodo y reste public.
+
 ## Favoris
 
 Marquez des protocoles, du matériel, des logiciels, des profils d'animaux, des souches, des laboratoires, des

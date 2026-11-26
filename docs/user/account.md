@@ -22,6 +22,13 @@ the new one twice. The new password follows the rules of the registration form: 
 not a common password. It does not need an e-mail. If you **forgot** it, use *Forgot your password?* on the sign-in
 page: you receive a link by e-mail.
 
+## Delete your account
+
+In the **Preferences** tab, the section **Delete my account** opens an e-mail to `mousetube@igbmc.fr`, already written
+with your username and the address of your account. Send it from that address. An administrator deletes the account
+and answers within one month. Your profile and your sign-in are removed; the recordings and descriptions you added
+stay on mouseTube, no longer linked to your account, and what was published on Zenodo stays public there.
+
 ## Favorites
 
 Mark protocols, hardware, software, animal profiles, strains, laboratories, references or contacts as

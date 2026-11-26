@@ -23,3 +23,17 @@ Le formulaire peut être lancé depuis ORCID. ORCID ne donne que ce qui est publ
   `password/reset/confirm/<uid>/<token>` sur le site.
 - Les jetons d'accès et de rafraîchissement déjà émis restent valables après un changement (ils ne sont pas révoqués) ;
   le jeton d'accès dure une heure.
+
+## Supprimer un compte
+
+Un utilisateur le demande par mail à `mousetube@igbmc.fr` (la section *Delete my account* de la page *Mon compte* l'écrit).
+Le droit à l'effacement du RGPD demande une réponse **dans un mois**.
+
+1. **Vérifier qui écrit :** le mail doit venir de l'adresse du compte. Sinon, demandez une confirmation depuis celle-ci.
+2. **Supprimer le compte** dans l'administration, *Users* : cochez-le, puis *Delete selected users*. Ne supprimez pas le
+   dernier administrateur.
+3. **Ce qui reste :** le profil est supprimé avec le compte. Les sessions, fichiers et entrées que l'utilisateur a créés
+   sont gardés, avec `created_by` vidé : ils restent, sans lien avec la personne. Les noms saisis en texte (un contact,
+   un auteur dans une description) ne sont pas liés au compte et restent ; retirez-les à la main si la personne le demande.
+4. **Ce qui n'est pas à nous :** un enregistrement déjà publié sur Zenodo y reste public, selon ses propres règles.
+5. **Répondre** à la personne, et garder une trace de la demande et de sa date (pour montrer que le délai a été tenu).
