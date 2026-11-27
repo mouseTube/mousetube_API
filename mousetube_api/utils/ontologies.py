@@ -15,7 +15,10 @@ from django.core.cache import cache
 
 OLS = "https://www.ebi.ac.uk/ols4/api"
 ROR = "https://api.ror.org/v2/organizations"
-TIMEOUT = 5  # seconds
+TIMEOUT = 5  # seconds, to check a term when something is saved
+# The search while typing waits longer: the OLS often answers in 5 to 25 seconds (and in less than
+# one when it is well), and a search that fails is worse than one that is slow.
+SEARCH_TIMEOUT = 20
 CACHE_SECONDS = 24 * 3600
 
 # The fields that have a vocabulary, and where it comes from.
@@ -106,18 +109,20 @@ class OntologyError(Exception):
     """The vocabulary could not answer, or the term does not exist."""
 
 
-def _get(url, **params):
+def _get(url, _timeout=0, **params):
     key = (
         "onto:" + hashlib.sha256(f"{url}|{sorted(params.items())}".encode()).hexdigest()
     )
     cached = cache.get(key)
     if cached is not None:
         return cached
+    # never less than TIMEOUT, which the batch commands raise (link_ontology_terms)
+    timeout = max(_timeout, TIMEOUT)
     try:
         response = requests.get(
             url,
             params=params,
-            timeout=TIMEOUT,
+            timeout=timeout,
             headers={"User-Agent": "mouseTube", "Accept": "application/json"},
         )
         response.raise_for_status()
@@ -153,7 +158,7 @@ def search(field, text, rows=10, ontology=None):
     if len(text) < 2:
         return []
     if spec["source"] == "ror":
-        data = _get(ROR, query=text)
+        data = _get(ROR, _timeout=SEARCH_TIMEOUT, query=text)
         return [
             {
                 "curie": "ROR:" + item["id"].rsplit("/", 1)[-1],
@@ -175,6 +180,7 @@ def search(field, text, rows=10, ontology=None):
     for question in questions:
         data = _get(
             f"{OLS}/search",
+            _timeout=SEARCH_TIMEOUT,
             q=question,
             ontology=",".join(chosen),
             type="class",
