@@ -116,12 +116,6 @@
      "Présentation libre."
     ],
     [
-     "phone",
-     "char(255)",
-     "n",
-     "Téléphone."
-    ],
-    [
      "laboratory",
      "fk → Laboratory",
      "fn",
@@ -598,16 +592,16 @@
      "Dates de création et de dernière modification, remplies automatiquement."
     ],
     [
-     "fingerprint",
-     "char(64)",
-     "",
-     "Empreinte (hachage) de tous les champs du profil. Les mêmes champs donnent le même profil : un profil validé est réutilisé, jamais copié."
-    ],
-    [
      "created_by",
      "fk → User",
      "n",
      "Auteur de la fiche. Reste vide si son compte est supprimé (SET NULL)."
+    ],
+    [
+     "fingerprint",
+     "char(64)",
+     "",
+     "Empreinte (hachage) de tous les champs du profil. Les mêmes champs donnent le même profil : un profil validé est réutilisé, jamais copié."
     ]
    ]
   },

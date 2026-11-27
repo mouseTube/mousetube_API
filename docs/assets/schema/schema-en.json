@@ -116,12 +116,6 @@
      "Free presentation."
     ],
     [
-     "phone",
-     "char(255)",
-     "n",
-     "Phone number."
-    ],
-    [
      "laboratory",
      "fk → Laboratory",
      "fn",
@@ -598,16 +592,16 @@
      "Creation and last modification dates, filled in automatically."
     ],
     [
-     "fingerprint",
-     "char(64)",
-     "",
-     "Hash of every field of the profile. The same fields give the same profile: a validated profile is reused, never copied."
-    ],
-    [
      "created_by",
      "fk → User",
      "n",
      "Author of the entry. Stays empty if their account is deleted (SET NULL)."
+    ],
+    [
+     "fingerprint",
+     "char(64)",
+     "",
+     "Hash of every field of the profile. The same fields give the same profile: a validated profile is reused, never copied."
     ]
    ]
   },

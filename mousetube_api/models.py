@@ -73,7 +73,6 @@ class UserProfile(models.Model):
     Fields:
         user (OneToOneField): Linked user account.
         description (TextField): Optional textual description of the user.
-        phone (CharField): Contact phone number.
         laboratory (ForeignKey): The laboratory or research unit the user belongs to.
         address (CharField): Physical address of the user.
         country (CountryField): Country of the user.
@@ -94,7 +93,6 @@ class UserProfile(models.Model):
         on_delete=models.CASCADE,
     )
     description = models.TextField(blank=True, null=True)
-    phone = models.CharField(max_length=255, blank=True, null=True)
     laboratory = models.ForeignKey(
         Laboratory, on_delete=models.CASCADE, null=True, blank=True
     )
@@ -405,6 +403,8 @@ class AnimalProfile(models.Model):
         null=True,
         related_name="animalprofile_created_by",
         on_delete=models.SET_NULL,
+    )
+
     def save(self, *args, **kwargs):
         from mousetube_api.utils import animal_profiles
 
@@ -414,8 +414,6 @@ class AnimalProfile(models.Model):
         if update_fields is not None:
             kwargs["update_fields"] = {*update_fields, "name", "fingerprint"}
         super().save(*args, **kwargs)
-
-    )
 
     def __str__(self):
         return self.name
