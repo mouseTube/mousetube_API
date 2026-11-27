@@ -116,12 +116,13 @@ def _get(url, _timeout=0, **params):
     cached = cache.get(key)
     if cached is not None:
         return cached
+    # never less than TIMEOUT, which the batch commands raise (link_ontology_terms)
+    timeout = max(_timeout, TIMEOUT)
     try:
         response = requests.get(
             url,
             params=params,
-            # never less than TIMEOUT, which the batch commands raise (link_ontology_terms)
-            timeout=max(_timeout, TIMEOUT),
+            timeout=timeout,
             headers={"User-Agent": "mouseTube", "Accept": "application/json"},
         )
         response.raise_for_status()
