@@ -55,6 +55,15 @@ server {
         proxy_set_header Authorization $http_authorization;
     }
 
+    # Page of the frontend where the ORCID sign-in ends: it is not an API route, although
+    # it is under /auth/ (must come before the /auth/ rule below)
+    location = /auth/callback {
+        proxy_pass http://frontend:3000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+
     # Django JWT auth
     location /auth/ {
         proxy_pass http://web:8000/auth/;
