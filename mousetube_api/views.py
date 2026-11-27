@@ -1612,7 +1612,19 @@ class FileAPIView(GenericAPIView):
             "recording_session__equipment_acquisition_hardware_amplifiers__references",
             "recording_session__equipment_acquisition_hardware_microphones__references",
         )
-        files = files.order_by(F("name").asc(nulls_last=True))
+        if search_query:
+            # the files whose own name matches come first (then the ones that match elsewhere:
+            # a session, a protocol...), each group by name
+            files = files.annotate(
+                name_match=Case(
+                    When(name__istartswith=search_query, then=Value(0)),
+                    When(name__icontains=search_query, then=Value(1)),
+                    default=Value(2),
+                    output_field=IntegerField(),
+                )
+            ).order_by("name_match", F("name").asc(nulls_last=True))
+        else:
+            files = files.order_by(F("name").asc(nulls_last=True))
         return files
 
     # -----------------------------
