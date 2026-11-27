@@ -4,14 +4,13 @@ from django.db import migrations
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('mousetube_api', '0015_animalprofile_fingerprint'),
+        ("mousetube_api", "0015_animalprofile_fingerprint"),
     ]
 
     operations = [
         migrations.RemoveField(
-            model_name='userprofile',
-            name='phone',
+            model_name="userprofile",
+            name="phone",
         ),
     ]
