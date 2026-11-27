@@ -2225,6 +2225,39 @@ class OntologyTests(FreshCache, TestCase):
         self.assertEqual(asked, ["C57BL/6J", "C57BL6J"])
         self.assertEqual([t["curie"] for t in found], ["EFO:0000606"])
 
+    def test_a_search_waits_longer_than_the_check_of_a_term(self):
+        """The service is slow: typing waits for it, saving does not wait as long."""
+        from unittest import mock
+
+        from django.core.cache import cache
+
+        from mousetube_api.utils import ontologies
+
+        cache.clear()
+        answer = mock.Mock(status_code=200)
+        answer.raise_for_status.return_value = None
+        answer.json.return_value = {
+            "response": {"docs": []},
+            "_embedded": {"terms": []},
+        }
+        # TIMEOUT is a module value that a batch command raises: fix it for this test
+        with (
+            mock.patch.object(ontologies, "TIMEOUT", 5),
+            mock.patch.object(ontologies, "SEARCH_TIMEOUT", 20),
+            mock.patch.object(ontologies.requests, "get", return_value=answer) as get,
+        ):
+            ontologies.search("sex", "male")
+            self.assertEqual(get.call_args.kwargs["timeout"], 20)
+            with self.assertRaises(ontologies.OntologyError):
+                ontologies.lookup("sex", "PATO:0000384")
+            self.assertEqual(get.call_args.kwargs["timeout"], 5)
+            # a batch command that raises TIMEOUT is waited for as long, search included
+            with mock.patch.object(ontologies, "TIMEOUT", 30):
+                cache.clear()
+                ontologies.search("sex", "female")
+                self.assertEqual(get.call_args.kwargs["timeout"], 30)
+        cache.clear()
+
     def test_the_vocabulary_can_be_chosen_for_the_search(self):
         from unittest import mock
 
