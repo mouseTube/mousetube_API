@@ -2,6 +2,7 @@ from django.core.management.base import BaseCommand
 
 from mousetube_api.models import AnimalProfile, Laboratory, Species, Strain
 from mousetube_api.utils import ontologies
+from mousetube_api.utils.animal_profiles import refresh_fingerprints
 from mousetube_api.utils.ontologies import (
     OntologyError,
     get_or_create_term,
@@ -80,6 +81,8 @@ class Command(BaseCommand):
                     continue
             linked += 1
 
+        if apply:
+            refresh_fingerprints()  # the terms are part of what tells an animal profile
         verb = "linked" if apply else "would be linked (run again with --apply)"
         self.stdout.write(self.style.SUCCESS(f"{linked} {verb}"))
 

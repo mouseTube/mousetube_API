@@ -188,11 +188,23 @@ def pending_summary(session, user, limit=5):
 
 def validate_entries(entries):
     """Mark the given (kind, object) pairs as validated; returns how many changed."""
+    from mousetube_api.models import AnimalProfile
+    from mousetube_api.utils.animal_profiles import merge_into, validated_twin
+
     changed = 0
     for _kind, obj in entries:
-        if obj.status != VALIDATED:
+        if obj.status == VALIDATED:
+            continue
+        twin = (
+            validated_twin(obj.fingerprint, exclude=obj.pk)
+            if isinstance(obj, AnimalProfile)
+            else None
+        )
+        if twin:  # the same profile is already validated: this one is merged into it
+            merge_into(twin, obj)
+        else:
             type(obj).objects.filter(pk=obj.pk).update(status=VALIDATED)
-            changed += 1
+        changed += 1
     return changed
 
 

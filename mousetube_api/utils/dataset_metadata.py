@@ -35,6 +35,7 @@ from mousetube_api.models import (
     Study,
     Subject,
 )
+from mousetube_api.utils import animal_profiles
 from mousetube_api.utils.moderation import (
     SESSION_PUBLIC,
     public_profile,
@@ -428,17 +429,25 @@ class DatasetImporter:
         if not _name(d) or not _name(d.get("strain")):
             return None
         strain = self.strain(d["strain"])
-        return self._get_or_create(
-            AnimalProfile,
-            {"name": _name(d), "strain": strain},
-            {
-                "sex": d.get("sex") or "male",
-                "genotype": d.get("genotype") or "",
-                **_clean(d, "age", "description", "treatment", "diet"),
-                "status": "validated",
-                "created_by": self.created_by,
-            },
+        fields = {
+            "sex": d.get("sex") or "male",
+            "genotype": d.get("genotype") or "",
+            **_clean(d, "age", "description", "treatment", "diet"),
+        }
+        # a profile is told by its fields (its name is made from them), not by a name
+        profile = AnimalProfile(strain=strain, **fields)
+        profile.fingerprint = animal_profiles.fingerprint(
+            animal_profiles.values_of(profile)
         )
+        existing = AnimalProfile.objects.filter(fingerprint=profile.fingerprint).first()
+        if existing:
+            self.stats.add("AnimalProfile", False)
+            return existing
+        self.stats.add("AnimalProfile", True)
+        profile.status = "validated"
+        profile.created_by = self.created_by
+        profile.save()
+        return profile
 
     def hardware(self, d):
         if not _name(d):

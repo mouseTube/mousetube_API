@@ -18,6 +18,16 @@ strain, animal profile) goes through the same states:
 - A strain chosen in the ontology is validated when it is created (see [vocabularies](ontologies.md)).
 - Protocols have no free text (a protocol *is* its attributes), so they are validated
   automatically.
+- An animal profile has free text (genotype, treatment, diet, description), so it is reviewed, but
+  nobody names it: its **fingerprint** is a hash of every field (the text without the stray spaces,
+  the case kept, the strain, the chosen age stage and the treatment and diet terms; the term of the
+  age class and of the sex follow the age and the sex, so they do not count) and its name is made
+  from the fields plus the start of the fingerprint (`utils/animal_profiles.py`). Creating a
+  profile with the fingerprint of a **validated** one gives that one back. Validating a profile
+  with the fingerprint of a validated one **merges** it into that one (subjects, sessions and
+  favorites follow). The slightest difference is another profile. Changing a profile to the
+  fields of a validated one is refused. `rekey_animal_profiles` (preview, then `--apply`) gives
+  the profiles that existed before their fingerprint and name and merges the validated copies.
 - A recording session goes `draft` -> `shared` -> `published` (deposited in a repository,
   which needs a shared session). Sharing a session that uses entries nobody validated yet
   puts it in `waiting validation`: it is private and locked until an administrator

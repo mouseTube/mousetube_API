@@ -511,8 +511,8 @@
     [
      "name",
      "char(255)",
-     "u",
-     "Name of the profile."
+     "",
+     "Made from the fields of the profile, never typed: the main ones, then the start of the fingerprint."
     ],
     [
      "description",
@@ -596,6 +596,12 @@
      "datetime ×2",
      "",
      "Creation and last modification dates, filled in automatically."
+    ],
+    [
+     "fingerprint",
+     "char(64)",
+     "",
+     "Hash of every field of the profile. The same fields give the same profile: a validated profile is reused, never copied."
     ],
     [
      "created_by",

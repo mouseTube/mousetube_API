@@ -61,6 +61,12 @@ reference vocabulary (an *ontology*: for example EFO for mouse strains, the Rat 
 the term to make your data understood by every database. A strain chosen in the ontology is **validated at
 once**, and there is only one entry per term.
 
+A profile has **no name to choose**: mouseTube makes it from the fields (for example `C57BL/6J · M · adult ·
+Fmr1 KO · #a3f9c1`). If a **validated** profile already says exactly the same, you get that one: there is no
+copy. The slightest difference, even one letter of the genotype or a word of the description, makes a profile
+of its own: nothing is merged and nothing is forbidden. Spaces at the ends of a text and doubled spaces do not
+count, the case does.
+
 ## 4. The files
 
 Add the recording files. The file selector comes first: mouseTube reads the **name, size, format and WAV header**

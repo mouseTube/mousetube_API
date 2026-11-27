@@ -21,6 +21,7 @@ from rest_framework import serializers
 from rest_framework.exceptions import AuthenticationFailed, PermissionDenied
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
+from mousetube_api.utils import animal_profiles as profile_key
 from mousetube_api.utils import usv
 from mousetube_api.utils.dataset_metadata import visible_sessions
 from mousetube_api.utils.email_domains import is_personal_email
@@ -704,6 +705,34 @@ class AnimalProfileSerializer(ModerationMixin, serializers.ModelSerializer):
             species = strain and strain.species
             data["age_term"] = age_term(age, species and species.name)
         return data
+
+    def create(self, validated_data):
+        # the same fields as a validated profile: that profile, not a copy of it
+        # (the model fills in what was not sent, like the age: the fingerprint is of that)
+        values = profile_key.values_of(AnimalProfile(**validated_data))
+        twin = profile_key.validated_twin(profile_key.fingerprint(values))
+        self.reused = twin is not None  # the view answers 200, not 201
+        return twin or super().create(validated_data)
+
+    def update(self, instance, validated_data):
+        values = profile_key.values_of(instance)
+        new_values = {
+            **values,
+            **{k: v for k, v in validated_data.items() if k in values},
+        }
+        if profile_key.fingerprint(new_values) != profile_key.fingerprint(values):
+            twin = profile_key.validated_twin(
+                profile_key.fingerprint(new_values), exclude=instance.pk
+            )
+            if twin:
+                raise serializers.ValidationError(
+                    {
+                        "detail": f"A validated profile already says the same: '{twin.name}'. "
+                        "Use it instead.",
+                        "profile": twin.pk,
+                    }
+                )
+        return super().update(instance, validated_data)
 
 
 # class AnimalProfileSerializer(serializers.ModelSerializer):

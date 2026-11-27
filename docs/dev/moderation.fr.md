@@ -18,6 +18,16 @@ souche, profil d'animaux) passe par les mêmes états :
 - Une souche choisie dans l'ontologie est validée à sa création (voir [vocabulaires](ontologies.md)).
 - Les protocoles n'ont pas de texte libre (un protocole *est* ses attributs), donc ils sont validés
   automatiquement.
+- Un profil d'animaux a du texte libre (génotype, traitement, régime, description) : il est relu, mais
+  personne ne le nomme. Son **empreinte** est un hachage de tous les champs (le texte sans les espaces
+  parasites, la casse conservée, la souche, le stade d'âge choisi et les termes du traitement et du régime ;
+  le terme de la classe d'âge et celui du sexe suivent l'âge et le sexe, ils ne comptent donc pas) et son nom
+  est fabriqué à partir des champs plus le début de l'empreinte (`utils/animal_profiles.py`). Créer un
+  profil qui a l'empreinte d'un profil **validé** renvoie celui-là. Valider un profil qui a l'empreinte d'un
+  profil validé le **fusionne** dans celui-ci (sujets, sessions et favoris suivent). La moindre différence
+  donne un autre profil. Modifier un profil pour qu'il ait les champs d'un profil validé est refusé.
+  `rekey_animal_profiles` (aperçu, puis `--apply`) donne leur empreinte et leur nom aux profils qui existaient
+  avant, et fusionne les copies validées.
 - Une session d'enregistrement passe de `draft` à `shared` puis `published` (déposée dans un dépôt, ce qui demande
   une session partagée). Partager une session qui utilise des fiches que personne n'a encore validées la met en
   `waiting validation` : elle est privée et verrouillée jusqu'à ce qu'un administrateur la valide **avec ce qu'elle

@@ -18,6 +18,7 @@ from mousetube_api.models import (
     Strain,
     UserProfile,
 )
+from mousetube_api.utils.animal_profiles import refresh_fingerprints
 from mousetube_api.utils.ontologies import (
     AGE_TERMS,
     GENERIC_AGE_TERMS,
@@ -75,6 +76,7 @@ def link_known_terms():
             .exclude(strain__species__name__iexact=MOUSE)
             .update(age_term=known_term(curie, label))
         )
+    refresh_fingerprints()  # the age term is part of what tells a profile
     return linked
 
 
