@@ -1107,6 +1107,17 @@ class AnimalProfileViewSet(viewsets.ModelViewSet):
     filter_backends = [DjangoFilterBackend, filters.SearchFilter]
     filterset_class = AnimalProfileFilter
     search_fields = ["name"]
+    # the columns of the table of choice that can sort it
+    ORDER_COLUMNS = {
+        "strain": "strain__name",
+        "sex": "sex",
+        "age": "age",
+        "genotype": "genotype",
+        "treatment": "treatment",
+        "diet": "diet",
+        "description": "description",
+        "status": "status",
+    }
 
     def get_queryset(self):
         qs = visible_to(super().get_queryset(), self.request.user)
@@ -1123,10 +1134,16 @@ class AnimalProfileViewSet(viewsets.ModelViewSet):
                     default=Value(0),
                     output_field=IntegerField(),
                 )
-            ).order_by("-is_favorite", "name")
+            )
+            default_order = ("-is_favorite", "name")
         else:
-            qs = qs.order_by("name")
-        return qs
+            default_order = ("name",)
+        # ?ordering=sex or ?ordering=-sex: the column the table is sorted on (then by name)
+        column = self.request.GET.get("ordering", "")
+        field = self.ORDER_COLUMNS.get(column.lstrip("-"))
+        if field:
+            return qs.order_by(f"-{field}" if column.startswith("-") else field, "name")
+        return qs.order_by(*default_order)
 
     def get_permissions(self):
         if self.action == "create":
@@ -1137,6 +1154,14 @@ class AnimalProfileViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
+        self._reused = getattr(serializer, "reused", False)
+
+    def create(self, request, *args, **kwargs):
+        # 201 when a profile was made, 200 when a validated one already said the same
+        answer = super().create(request, *args, **kwargs)
+        if getattr(self, "_reused", False):
+            answer.status_code = 200
+        return answer
 
 
 # ----------------------------
@@ -1587,7 +1612,19 @@ class FileAPIView(GenericAPIView):
             "recording_session__equipment_acquisition_hardware_amplifiers__references",
             "recording_session__equipment_acquisition_hardware_microphones__references",
         )
-        files = files.order_by(F("name").asc(nulls_last=True))
+        if search_query:
+            # the files whose own name matches come first (then the ones that match elsewhere:
+            # a session, a protocol...), each group by name
+            files = files.annotate(
+                name_match=Case(
+                    When(name__istartswith=search_query, then=Value(0)),
+                    When(name__icontains=search_query, then=Value(1)),
+                    default=Value(2),
+                    output_field=IntegerField(),
+                )
+            ).order_by("name_match", F("name").asc(nulls_last=True))
+        else:
+            files = files.order_by(F("name").asc(nulls_last=True))
         return files
 
     # -----------------------------

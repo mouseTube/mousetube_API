@@ -116,12 +116,6 @@
      "Présentation libre."
     ],
     [
-     "phone",
-     "char(255)",
-     "n",
-     "Téléphone."
-    ],
-    [
      "laboratory",
      "fk → Laboratory",
      "fn",
@@ -511,8 +505,8 @@
     [
      "name",
      "char(255)",
-     "u",
-     "Nom du profil."
+     "",
+     "Fabriqué à partir des champs du profil, jamais saisi : les principaux, puis le début de l'empreinte."
     ],
     [
      "description",
@@ -602,6 +596,12 @@
      "fk → User",
      "n",
      "Auteur de la fiche. Reste vide si son compte est supprimé (SET NULL)."
+    ],
+    [
+     "fingerprint",
+     "char(64)",
+     "",
+     "Empreinte (hachage) de tous les champs du profil. Les mêmes champs donnent le même profil : un profil validé est réutilisé, jamais copié."
     ]
    ]
   },

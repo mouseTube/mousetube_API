@@ -73,7 +73,6 @@ class UserProfile(models.Model):
     Fields:
         user (OneToOneField): Linked user account.
         description (TextField): Optional textual description of the user.
-        phone (CharField): Contact phone number.
         laboratory (ForeignKey): The laboratory or research unit the user belongs to.
         address (CharField): Physical address of the user.
         country (CountryField): Country of the user.
@@ -94,7 +93,6 @@ class UserProfile(models.Model):
         on_delete=models.CASCADE,
     )
     description = models.TextField(blank=True, null=True)
-    phone = models.CharField(max_length=255, blank=True, null=True)
     laboratory = models.ForeignKey(
         Laboratory, on_delete=models.CASCADE, null=True, blank=True
     )
@@ -318,7 +316,8 @@ class AnimalProfile(models.Model):
     Represents the profile of animal used in experiments.
 
     Attributes:
-        name (str): The name of the animal profil.
+        name (str): Made from the fields, never typed (see utils/animal_profiles.py).
+        fingerprint (str): Hash of every field: the same fields give the same profile.
         description (str, optional): A description of the animal profil.
         strain (Strain): The strain associated with the animal profil.
         sex (str, optional): The sex of the subject.
@@ -343,7 +342,12 @@ class AnimalProfile(models.Model):
         ("validated", "Validated"),
     ]
 
-    name = models.CharField(max_length=255, unique=True)
+    # made from the fields (see utils/animal_profiles.py): nobody names a profile
+    name = models.CharField(max_length=255, editable=False)
+    # the hash of every field: the same fields, the same profile
+    fingerprint = models.CharField(
+        max_length=64, blank=True, default="", db_index=True, editable=False
+    )
     description = models.TextField(blank=True, null=True)
     strain = models.ForeignKey(Strain, on_delete=models.CASCADE)
     sex = models.CharField(max_length=6, choices=SEX_CHOICES)
@@ -400,6 +404,16 @@ class AnimalProfile(models.Model):
         related_name="animalprofile_created_by",
         on_delete=models.SET_NULL,
     )
+
+    def save(self, *args, **kwargs):
+        from mousetube_api.utils import animal_profiles
+
+        self.fingerprint = animal_profiles.fingerprint(animal_profiles.values_of(self))
+        self.name = animal_profiles.display_name(self, self.fingerprint)
+        update_fields = kwargs.get("update_fields")
+        if update_fields is not None:
+            kwargs["update_fields"] = {*update_fields, "name", "fingerprint"}
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return self.name

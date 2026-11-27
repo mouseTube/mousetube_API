@@ -116,12 +116,6 @@
      "Free presentation."
     ],
     [
-     "phone",
-     "char(255)",
-     "n",
-     "Phone number."
-    ],
-    [
      "laboratory",
      "fk → Laboratory",
      "fn",
@@ -511,8 +505,8 @@
     [
      "name",
      "char(255)",
-     "u",
-     "Name of the profile."
+     "",
+     "Made from the fields of the profile, never typed: the main ones, then the start of the fingerprint."
     ],
     [
      "description",
@@ -602,6 +596,12 @@
      "fk → User",
      "n",
      "Author of the entry. Stays empty if their account is deleted (SET NULL)."
+    ],
+    [
+     "fingerprint",
+     "char(64)",
+     "",
+     "Hash of every field of the profile. The same fields give the same profile: a validated profile is reused, never copied."
     ]
    ]
   },

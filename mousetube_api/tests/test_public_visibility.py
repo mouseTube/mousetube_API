@@ -58,7 +58,10 @@ class UnvalidatedIsNotPublicTests(TestCase):
             name="LEAKSTRAIN", background="LEAKSTRAIN", species=species, **draft
         )
         self.profile = AnimalProfile.objects.create(
-            name="LEAKPROFILE", strain=strain, sex="male", genotype="wt", **draft
+            strain=strain,
+            sex="male",
+            genotype="LEAKPROFILE",
+            **draft,  # in its name too
         )
         self.mic = Hardware.objects.create(name="LEAKMIC", type="microphone", **draft)
         self.mic.references.add(Reference.objects.create(name="LEAKDOC", **draft))

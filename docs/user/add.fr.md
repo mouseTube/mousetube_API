@@ -65,6 +65,12 @@ terme d'un vocabulaire de référence (une *ontologie* : par exemple EFO pour le
 Ontology pour les rats). Choisissez le terme pour que vos données soient comprises par toutes les bases. Une souche
 choisie dans l'ontologie est **validée d'office**, et il n'y a qu'une fiche par terme.
 
+Un profil **n'a pas de nom à choisir** : mouseTube le fabrique à partir des champs (par exemple `C57BL/6J · M ·
+adult · Fmr1 KO · #a3f9c1`). Si un profil **validé** dit déjà exactement la même chose, c'est celui-là que vous
+obtenez : il n'y a pas de copie. La moindre différence, même une lettre du génotype ou un mot de la description,
+donne un profil à part : rien n'est fusionné et rien n'est interdit. Les espaces en début et en fin de texte et les
+espaces doublés ne comptent pas, la casse compte.
+
 ## 4. Les fichiers
 
 Ajoutez les fichiers d'enregistrement. Le sélecteur de fichier vient en premier : mouseTube lit le **nom, la
